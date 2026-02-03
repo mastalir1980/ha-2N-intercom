@@ -3,9 +3,6 @@
 DOMAIN = "two_n_intercom"
 
 # Configuration keys
-CONF_HOST = "host"
-CONF_USERNAME = "username"
-CONF_PASSWORD = "password"
 CONF_POLL_INTERVAL = "poll_interval"
 
 # Default values

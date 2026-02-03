@@ -16,8 +16,10 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .const import (
     API_CALL_STATUS,
+    API_CAMERA_SNAPSHOT,
     API_STATUS,
     API_SWITCH_CAPS,
+    API_SWITCH_CTRL,
     CONF_POLL_INTERVAL,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_TIMEOUT,
