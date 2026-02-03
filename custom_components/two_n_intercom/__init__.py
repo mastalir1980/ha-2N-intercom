@@ -22,6 +22,7 @@ PLATFORMS: list[Platform] = [
     Platform.CAMERA,
     Platform.BINARY_SENSOR,
     Platform.EVENT,
+    Platform.BUTTON,
 ]
 
 
@@ -61,8 +62,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     
     if unload_ok:
-        # Remove coordinator
-        hass.data[DOMAIN].pop(entry.entry_id)
+        # Close the coordinator session and remove coordinator
+        coordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        await coordinator.async_close()
         _LOGGER.info("2N Intercom integration successfully unloaded for %s", entry.title)
     
     return unload_ok

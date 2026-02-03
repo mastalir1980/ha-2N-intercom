@@ -8,12 +8,18 @@
           "host": "Host (IP address or hostname)",
           "username": "Username (optional)",
           "password": "Password (optional)",
+          "use_ssl": "Use HTTPS (SSL)",
+          "verify_ssl": "Verify SSL certificate",
           "poll_interval": "Polling interval (seconds)"
+        },
+        "data_description": {
+          "use_ssl": "Enable HTTPS connection (recommended for 2N devices)",
+          "verify_ssl": "Disable for self-signed certificates (common on 2N devices)"
         }
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to the device. Please check the host address.",
+      "cannot_connect": "Failed to connect to the device. Please check the host address and SSL settings.",
       "invalid_auth": "Invalid authentication credentials.",
       "unknown": "Unexpected error occurred."
     },

@@ -4,10 +4,19 @@ DOMAIN = "two_n_intercom"
 
 # Configuration keys
 CONF_POLL_INTERVAL = "poll_interval"
+CONF_USE_SSL = "use_ssl"
+CONF_VERIFY_SSL = "verify_ssl"
 
 # Default values
 DEFAULT_POLL_INTERVAL = 30  # seconds
 DEFAULT_TIMEOUT = 10  # seconds
+DEFAULT_USE_SSL = True
+DEFAULT_VERIFY_SSL = False
+
+# Snapshot defaults
+DEFAULT_SNAPSHOT_WIDTH = 640
+DEFAULT_SNAPSHOT_HEIGHT = 480
+DEFAULT_SNAPSHOT_SOURCE = "internal"
 
 # API endpoints (based on Homebridge plugin behavior)
 API_STATUS = "/api/system/status"
