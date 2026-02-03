@@ -1,0 +1,11 @@
+{
+  "domain": "two_n_intercom",
+  "name": "2N Intercom",
+  "codeowners": ["@mastalir1980"],
+  "config_flow": true,
+  "documentation": "https://github.com/mastalir1980/ha-2N-intercom",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/mastalir1980/ha-2N-intercom/issues",
+  "requirements": ["aiohttp>=3.9.0"],
+  "version": "0.1.0"
+}
