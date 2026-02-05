@@ -10,11 +10,13 @@
           "password": "Password (optional)",
           "use_ssl": "Use HTTPS (SSL)",
           "verify_ssl": "Verify SSL certificate",
-          "poll_interval": "Polling interval (seconds)"
+          "poll_interval": "Polling interval (seconds)",
+          "rtsp_port": "RTSP port"
         },
         "data_description": {
           "use_ssl": "Enable HTTPS connection (recommended for 2N devices)",
-          "verify_ssl": "Disable for self-signed certificates (common on 2N devices)"
+          "verify_ssl": "Disable for self-signed certificates (common on 2N devices)",
+          "rtsp_port": "RTSP streaming port (default: 554)"
         }
       }
     },

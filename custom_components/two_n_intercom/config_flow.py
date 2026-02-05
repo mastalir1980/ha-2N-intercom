@@ -17,9 +17,11 @@ from homeassistant.data_entry_flow import FlowResult
 from .const import (
     API_STATUS,
     CONF_POLL_INTERVAL,
+    CONF_RTSP_PORT,
     CONF_USE_SSL,
     CONF_VERIFY_SSL,
     DEFAULT_POLL_INTERVAL,
+    DEFAULT_RTSP_PORT,
     DEFAULT_TIMEOUT,
     DEFAULT_USE_SSL,
     DEFAULT_VERIFY_SSL,
@@ -37,6 +39,9 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL): bool,
         vol.Optional(CONF_POLL_INTERVAL, default=DEFAULT_POLL_INTERVAL): vol.All(
             vol.Coerce(int), vol.Range(min=10, max=300)
+        ),
+        vol.Optional(CONF_RTSP_PORT, default=DEFAULT_RTSP_PORT): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=65535)
         ),
     }
 )
