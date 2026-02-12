@@ -5,6 +5,10 @@
         "title": "2N Intercom Setup",
         "description": "Configure your 2N Intercom device",
         "data": {
+          "host": "IP Address",
+          "port": "Port",
+          "username": "Username",
+          "password": "Password",
           "name": "Name",
           "door_type": "Door Type"
         }

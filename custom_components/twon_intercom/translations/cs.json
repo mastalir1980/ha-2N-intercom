@@ -5,6 +5,10 @@
         "title": "Nastavení 2N Intercom",
         "description": "Nakonfigurujte své zařízení 2N Intercom",
         "data": {
+          "host": "IP adresa",
+          "port": "Port",
+          "username": "Uživatelské jméno",
+          "password": "Heslo",
           "name": "Název",
           "door_type": "Typ dveří"
         }
