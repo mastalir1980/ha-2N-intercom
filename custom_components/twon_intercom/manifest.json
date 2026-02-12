@@ -5,7 +5,7 @@
   "config_flow": true,
   "documentation": "https://github.com/mastalir1980/ha-2N-intercom",
   "requirements": [],
-  "version": "1.0.0",
+  "version": "0.1.1",
   "iot_class": "local_polling",
   "homekit": {}
 }
