@@ -3,10 +3,6 @@
 DOMAIN = "twon_intercom"
 
 # Configuration
-CONF_HOST = "host"
-CONF_PORT = "port"
-CONF_USERNAME = "username"
-CONF_PASSWORD = "password"
 CONF_DOOR_TYPE = "door_type"
 
 # Defaults
