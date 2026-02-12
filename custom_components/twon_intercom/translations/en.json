@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "2N Intercom Setup",
+        "description": "Configure your 2N Intercom device",
+        "data": {
+          "name": "Name",
+          "door_type": "Door Type"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "2N Intercom Options",
+        "data": {
+          "door_type": "Door Type"
+        }
+      }
+    }
+  },
+  "selector": {
+    "door_type": {
+      "options": {
+        "door": "Door",
+        "gate": "Gate"
+      }
+    }
+  }
+}
