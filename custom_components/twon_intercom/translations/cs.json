@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Nastavení 2N Intercom",
+        "description": "Nakonfigurujte své zařízení 2N Intercom",
+        "data": {
+          "name": "Název",
+          "door_type": "Typ dveří"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Možnosti 2N Intercom",
+        "data": {
+          "door_type": "Typ dveří"
+        }
+      }
+    }
+  },
+  "selector": {
+    "door_type": {
+      "options": {
+        "door": "Dveře",
+        "gate": "Vrata"
+      }
+    }
+  }
+}
