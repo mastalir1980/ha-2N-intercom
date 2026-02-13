@@ -6,14 +6,12 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.const import CONF_HOST, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 import homeassistant.helpers.config_validation as cv
 
 from .const import (
     CONF_DOOR_TYPE,
-    DEFAULT_PORT,
     DOMAIN,
     DOOR_TYPE_DOOR,
     DOOR_TYPES,
@@ -42,10 +40,6 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         data_schema = vol.Schema(
             {
-                vol.Required(CONF_HOST): cv.string,
-                vol.Required(CONF_PORT, default=DEFAULT_PORT): cv.port,
-                vol.Required(CONF_USERNAME): cv.string,
-                vol.Required(CONF_PASSWORD): cv.string,
                 vol.Optional("name", default="2N Intercom"): cv.string,
                 vol.Required(CONF_DOOR_TYPE, default=DOOR_TYPE_DOOR): vol.In(
                     DOOR_TYPES
