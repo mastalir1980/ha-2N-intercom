@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from typing import Any
+import json
+from pathlib import Path
 
 import voluptuous as vol
 
@@ -10,7 +12,6 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNA
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 import homeassistant.helpers.config_validation as cv
-from homeassistant.helpers.integration import async_get_integration
 
 from .api import TwoNIntercomAPI
 from .const import (
@@ -63,9 +64,15 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if self._integration_name is not None and self._integration_version is not None:
             return
 
-        integration = await async_get_integration(self.hass, DOMAIN)
-        self._integration_name = integration.name or "2N Intercom"
-        self._integration_version = integration.version or ""
+        manifest_path = Path(__file__).resolve().parent / "manifest.json"
+        try:
+            with open(manifest_path) as f:
+                manifest = json.load(f)
+            self._integration_name = manifest.get("name", "2N Intercom")
+            self._integration_version = manifest.get("version", "")
+        except (OSError, json.JSONDecodeError):
+            self._integration_name = "2N Intercom"
+            self._integration_version = ""
 
     def _name_with_version(self, name: str) -> str:
         """Append version to name if missing."""
