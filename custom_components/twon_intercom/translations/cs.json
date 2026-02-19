@@ -2,13 +2,41 @@
   "config": {
     "step": {
       "user": {
-        "title": "Nastavení 2N Intercom",
-        "description": "Nakonfigurujte své zařízení 2N Intercom",
+        "title": "Nastavení 2N Intercom - Připojení",
+        "description": "Nakonfigurujte připojení k vašemu zařízení 2N Intercom",
+        "data": {
+          "host": "IP adresa",
+          "port": "Port",
+          "protocol": "Protokol",
+          "username": "Uživatelské jméno",
+          "password": "Heslo",
+          "verify_ssl": "Ověřit SSL certifikát"
+        }
+      },
+      "device": {
+        "title": "Nastavení 2N Intercom - Zařízení",
+        "description": "Nakonfigurujte funkce zařízení",
         "data": {
           "name": "Název",
-          "door_type": "Typ dveří"
+          "enable_camera": "Povolit kameru",
+          "video_profile": "Video profil / název streamu",
+          "enable_doorbell": "Povolit zvonek",
+          "relay_count": "Počet relé"
+        }
+      },
+      "relay": {
+        "title": "Nastavení 2N Intercom - Relé {relay_number}",
+        "description": "Nakonfigurujte relé {relay_number}",
+        "data": {
+          "relay_name": "Název relé",
+          "relay_number": "Číslo relé",
+          "relay_device_type": "Typ zařízení",
+          "relay_pulse_duration": "Doba pulsu (milisekundy)"
         }
       }
+    },
+    "error": {
+      "cannot_connect": "Nepodařilo se připojit k zařízení. Zkontrolujte prosím IP adresu, port a přihlašovací údaje."
     }
   },
   "options": {
@@ -16,7 +44,10 @@
       "init": {
         "title": "Možnosti 2N Intercom",
         "data": {
-          "door_type": "Typ dveří"
+          "door_type": "Typ dveří (starší)",
+          "enable_camera": "Povolit kameru",
+          "video_profile": "Video profil / název streamu",
+          "enable_doorbell": "Povolit zvonek"
         }
       }
     }
@@ -26,6 +57,18 @@
       "options": {
         "door": "Dveře",
         "gate": "Vrata"
+      }
+    },
+    "protocol": {
+      "options": {
+        "http": "HTTP",
+        "https": "HTTPS"
+      }
+    },
+    "relay_device_type": {
+      "options": {
+        "door": "Dveře (momentální spínač)",
+        "gate": "Vrata (garážová vrata)"
       }
     }
   }
