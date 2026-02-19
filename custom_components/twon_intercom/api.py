@@ -20,11 +20,11 @@ class TwoNIntercomAPI:
     def __init__(
         self,
         host: str,
-        port: int,
         username: str,
         password: str,
-        protocol: str = "http",
-        verify_ssl: bool = True,
+        port: int = 443,
+        protocol: str = "https",
+        verify_ssl: bool = False,
     ) -> None:
         """Initialize the API client."""
         self.host = host
