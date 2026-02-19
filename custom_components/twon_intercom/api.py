@@ -235,10 +235,12 @@ class TwoNIntercomAPI:
             session = await self.async_get_session()
             url = f"{self._base_url}/api/camera/snapshot"
             params: dict[str, Any] = {"source": "internal"}
-            if width is not None:
-                params["width"] = width
-            if height is not None:
-                params["height"] = height
+            if width is None:
+                width = 640
+            if height is None:
+                height = 480
+            params["width"] = width
+            params["height"] = height
             
             async with async_timeout.timeout(API_TIMEOUT):
                 async with session.get(
