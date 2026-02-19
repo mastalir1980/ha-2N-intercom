@@ -20,6 +20,10 @@ _LOGGER = logging.getLogger(__name__)
 
 # Maximum number of retries before giving up
 MAX_RETRIES = 5
+# Maximum delay between retries (seconds)
+MAX_BACKOFF_DELAY = 60
+# Snapshot cache duration (seconds)
+SNAPSHOT_CACHE_DURATION = 1
 
 
 @dataclass
@@ -110,7 +114,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
             # Connection errors - implement exponential backoff
             if self._retry_count < MAX_RETRIES:
                 self._retry_count += 1
-                delay = min(2 ** self._retry_count, 60)  # Max 60 seconds
+                delay = min(2 ** self._retry_count, MAX_BACKOFF_DELAY)
                 _LOGGER.warning(
                     "Connection error (retry %s/%s, next attempt in %ss): %s",
                     self._retry_count,
@@ -188,7 +192,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
             return False
 
     async def async_get_snapshot(self) -> bytes | None:
-        """Get camera snapshot with 1-second caching."""
+        """Get camera snapshot with caching to reduce API load."""
         try:
             # Check cache to avoid excessive API calls
             current_time = datetime.now()
@@ -196,7 +200,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
             if (
                 self._snapshot_cache is not None
                 and self._snapshot_cache_time is not None
-                and (current_time - self._snapshot_cache_time).total_seconds() < 1
+                and (current_time - self._snapshot_cache_time).total_seconds() < SNAPSHOT_CACHE_DURATION
             ):
                 _LOGGER.debug("Returning cached snapshot")
                 return self._snapshot_cache
