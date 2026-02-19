@@ -49,6 +49,44 @@ class TwoNIntercomAPI:
         """Close the API session."""
         if self._session and not self._session.closed:
             await self._session.close()
+            self._session = None
+
+    async def async_connect(self) -> bool:
+        """
+        Establish and validate connection to the intercom.
+        
+        This method creates a new session and validates connectivity.
+        
+        Returns:
+            True if connection successful, False otherwise
+        """
+        try:
+            # Close any existing session first
+            await self.async_close()
+            
+            # Create new session
+            await self.async_get_session()
+            
+            # Test connection by getting call status
+            await self.async_get_call_status()
+            
+            _LOGGER.info("Successfully connected to 2N Intercom at %s", self._base_url)
+            return True
+            
+        except Exception as err:
+            _LOGGER.error("Failed to connect to 2N Intercom: %s", err)
+            await self.async_close()
+            return False
+
+    async def async_reconnect(self) -> bool:
+        """
+        Force reconnection after error.
+        
+        Returns:
+            True if reconnection successful, False otherwise
+        """
+        _LOGGER.info("Attempting to reconnect to 2N Intercom")
+        return await self.async_connect()
 
     async def async_test_connection(self) -> bool:
         """Test connection to the intercom."""
@@ -67,6 +105,12 @@ class TwoNIntercomAPI:
             
             async with async_timeout.timeout(API_TIMEOUT):
                 async with session.get(url) as response:
+                    # Check for authentication errors
+                    if response.status == 401:
+                        raise TwoNAuthenticationError(
+                            "Authentication failed - invalid credentials"
+                        )
+                    
                     response.raise_for_status()
                     data = await response.json()
                     
@@ -76,15 +120,18 @@ class TwoNIntercomAPI:
                 return data["result"]
             return []
             
+        except TwoNAuthenticationError:
+            # Re-raise authentication errors
+            raise
         except asyncio.TimeoutError as err:
             _LOGGER.error("Timeout getting directory: %s", err)
-            raise
+            raise TwoNConnectionError(f"Timeout: {err}") from err
         except aiohttp.ClientError as err:
             _LOGGER.error("Error getting directory: %s", err)
-            raise
+            raise TwoNConnectionError(f"Connection error: {err}") from err
         except Exception as err:
             _LOGGER.error("Unexpected error getting directory: %s", err)
-            raise
+            raise TwoNAPIError(f"API error: {err}") from err
 
     async def async_get_call_status(self) -> dict[str, Any]:
         """Get current call status from /api/call/status."""
@@ -94,6 +141,12 @@ class TwoNIntercomAPI:
             
             async with async_timeout.timeout(API_TIMEOUT):
                 async with session.get(url) as response:
+                    # Check for authentication errors
+                    if response.status == 401:
+                        raise TwoNAuthenticationError(
+                            "Authentication failed - invalid credentials"
+                        )
+                    
                     response.raise_for_status()
                     data = await response.json()
                     
@@ -102,15 +155,18 @@ class TwoNIntercomAPI:
                 return data.get("result", {})
             return {}
             
+        except TwoNAuthenticationError:
+            # Re-raise authentication errors
+            raise
         except asyncio.TimeoutError as err:
             _LOGGER.error("Timeout getting call status: %s", err)
-            raise
+            raise TwoNConnectionError(f"Timeout: {err}") from err
         except aiohttp.ClientError as err:
             _LOGGER.error("Error getting call status: %s", err)
-            raise
+            raise TwoNConnectionError(f"Connection error: {err}") from err
         except Exception as err:
             _LOGGER.error("Unexpected error getting call status: %s", err)
-            raise
+            raise TwoNAPIError(f"API error: {err}") from err
 
     async def async_switch_control(
         self, relay: int, action: str = "on", duration: int = 0
