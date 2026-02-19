@@ -103,7 +103,9 @@ class TwoNIntercomCamera(CoordinatorEntity[TwoNIntercomCoordinator], Camera):
             return self._last_snapshot
         
         # Fetch new snapshot
-        snapshot = await self.coordinator.async_get_snapshot()
+        snapshot = await self.coordinator.async_get_snapshot(
+            width=width, height=height
+        )
         
         if snapshot:
             self._last_snapshot = snapshot

@@ -214,15 +214,33 @@ class TwoNIntercomAPI:
             _LOGGER.error("Unexpected error controlling switch %s: %s", relay, err)
             return False
 
-    async def async_get_snapshot(self) -> bytes | None:
+    async def async_get_snapshot(
+        self, width: int | None = None, height: int | None = None
+    ) -> bytes | None:
         """Get camera snapshot from /api/camera/snapshot."""
         try:
             session = await self.async_get_session()
             url = f"{self._base_url}/api/camera/snapshot"
+            params: dict[str, Any] = {"source": "internal"}
+            if width is not None:
+                params["width"] = width
+            if height is not None:
+                params["height"] = height
             
             async with async_timeout.timeout(API_TIMEOUT):
-                async with session.get(url) as response:
+                async with session.get(
+                    url,
+                    params=params,
+                    headers={"Accept": "image/jpeg"},
+                ) as response:
                     response.raise_for_status()
+                    content_type = response.headers.get("Content-Type", "")
+                    if "image" not in content_type:
+                        _LOGGER.error(
+                            "Snapshot returned non-image content-type: %s",
+                            content_type,
+                        )
+                        return None
                     return await response.read()
                     
         except asyncio.TimeoutError as err:

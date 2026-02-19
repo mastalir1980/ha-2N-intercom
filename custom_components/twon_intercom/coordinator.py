@@ -62,6 +62,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
         self._retry_count = 0
         self._snapshot_cache: bytes | None = None
         self._snapshot_cache_time: datetime | None = None
+        self._snapshot_cache_size: tuple[int | None, int | None] | None = None
 
     async def _async_update_data(self) -> TwoNIntercomData:
         """Fetch data from API."""
@@ -197,26 +198,31 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
             _LOGGER.error("Error triggering relay %s: %s", relay, err)
             return False
 
-    async def async_get_snapshot(self) -> bytes | None:
+    async def async_get_snapshot(
+        self, width: int | None = None, height: int | None = None
+    ) -> bytes | None:
         """Get camera snapshot with caching to reduce API load."""
         try:
             # Check cache to avoid excessive API calls
             current_time = datetime.now()
+            requested_size = (width, height)
             
             if (
                 self._snapshot_cache is not None
                 and self._snapshot_cache_time is not None
+                and self._snapshot_cache_size == requested_size
                 and (current_time - self._snapshot_cache_time).total_seconds() < SNAPSHOT_CACHE_DURATION
             ):
                 _LOGGER.debug("Returning cached snapshot")
                 return self._snapshot_cache
             
             # Fetch new snapshot
-            snapshot = await self.api.async_get_snapshot()
+            snapshot = await self.api.async_get_snapshot(width=width, height=height)
             
             if snapshot:
                 self._snapshot_cache = snapshot
                 self._snapshot_cache_time = current_time
+                self._snapshot_cache_size = requested_size
                 _LOGGER.debug("Fetched new snapshot from API")
             
             return snapshot
