@@ -40,10 +40,13 @@ class TwoNIntercomAPI:
         """Get or create aiohttp session."""
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(
-                auth=aiohttp.BasicAuth(self.username, self.password),
                 connector=aiohttp.TCPConnector(ssl=self.verify_ssl),
             )
         return self._session
+
+    def _get_auth(self) -> aiohttp.BasicAuth:
+        """Return HTTP BasicAuth for all requests."""
+        return aiohttp.BasicAuth(self.username, self.password)
 
     async def async_close(self) -> None:
         """Close the API session."""
@@ -104,7 +107,10 @@ class TwoNIntercomAPI:
             url = f"{self._base_url}/api/dir/query"
             
             async with async_timeout.timeout(API_TIMEOUT):
-                async with session.get(url) as response:
+                async with session.get(
+                    url,
+                    auth=self._get_auth(),
+                ) as response:
                     # Check for authentication errors
                     if response.status == 401:
                         raise TwoNAuthenticationError(
@@ -140,7 +146,10 @@ class TwoNIntercomAPI:
             url = f"{self._base_url}/api/call/status"
             
             async with async_timeout.timeout(API_TIMEOUT):
-                async with session.get(url) as response:
+                async with session.get(
+                    url,
+                    auth=self._get_auth(),
+                ) as response:
                     # Check for authentication errors
                     if response.status == 401:
                         raise TwoNAuthenticationError(
@@ -195,7 +204,11 @@ class TwoNIntercomAPI:
                 params["duration"] = duration
             
             async with async_timeout.timeout(API_TIMEOUT):
-                async with session.get(url, params=params) as response:
+                async with session.get(
+                    url,
+                    params=params,
+                    auth=self._get_auth(),
+                ) as response:
                     response.raise_for_status()
                     data = await response.json()
                     
@@ -232,6 +245,7 @@ class TwoNIntercomAPI:
                     url,
                     params=params,
                     headers={"Accept": "image/jpeg"},
+                    auth=self._get_auth(),
                 ) as response:
                     response.raise_for_status()
                     content_type = response.headers.get("Content-Type", "")
