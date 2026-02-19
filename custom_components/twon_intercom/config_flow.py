@@ -177,13 +177,16 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._data[CONF_RELAYS] = self._relays
                 return await self._async_create_entry()
 
+        # relay_index is 0-based, but we show 1-based numbers to users
+        relay_display_number = relay_index + 1
+        
         data_schema = vol.Schema(
             {
                 vol.Required(
-                    CONF_RELAY_NAME, default=f"Relay {relay_index + 1}"
+                    CONF_RELAY_NAME, default=f"Relay {relay_display_number}"
                 ): cv.string,
                 vol.Required(
-                    CONF_RELAY_NUMBER, default=relay_index + 1
+                    CONF_RELAY_NUMBER, default=relay_display_number
                 ): vol.In([1, 2, 3, 4]),
                 vol.Required(
                     CONF_RELAY_DEVICE_TYPE, default=DEVICE_TYPE_DOOR
@@ -198,7 +201,7 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="relay",
             data_schema=data_schema,
             errors=errors,
-            description_placeholders={"relay_number": str(relay_index + 1)},
+            description_placeholders={"relay_number": str(relay_display_number)},
         )
 
     async def _async_create_entry(self) -> FlowResult:

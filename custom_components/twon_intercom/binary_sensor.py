@@ -41,7 +41,7 @@ class TwoNIntercomDoorbell(CoordinatorEntity[TwoNIntercomCoordinator], BinarySen
 
     _attr_has_entity_name = True
     _attr_name = "Doorbell"
-    _attr_device_class = BinarySensorDeviceClass.OCCUPANCY
+    _attr_device_class = BinarySensorDeviceClass.OCCUPANCY  # Fallback for older HA versions
 
     def __init__(
         self,

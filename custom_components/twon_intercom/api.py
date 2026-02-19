@@ -205,13 +205,13 @@ class TwoNIntercomAPI:
         return f"rtsp://{self.username}:{self.password}@{self.host}:{self.port}/{profile}"
 
 
-class AuthenticationError(Exception):
+class TwoNAuthenticationError(Exception):
     """Authentication failed."""
 
 
-class ConnectionError(Exception):
+class TwoNConnectionError(Exception):
     """Connection to intercom failed."""
 
 
-class APIError(Exception):
+class TwoNAPIError(Exception):
     """Generic API error."""

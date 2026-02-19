@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
+import time
 from typing import Any
 
 from homeassistant.components.camera import Camera, CameraEntityFeature
@@ -97,7 +98,6 @@ class TwoNIntercomCamera(CoordinatorEntity[TwoNIntercomCoordinator], Camera):
     ) -> bytes | None:
         """Return bytes of camera image."""
         # Check cache to avoid excessive API calls
-        import time
         current_time = time.time()
         
         if (
