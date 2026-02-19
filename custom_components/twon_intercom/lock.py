@@ -8,8 +8,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_DOOR_TYPE, DOMAIN, DOOR_TYPE_GATE
+from .coordinator import TwoNIntercomCoordinator
 
 
 async def async_setup_entry(
@@ -18,25 +20,36 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up 2N Intercom lock platform."""
+    coordinator: TwoNIntercomCoordinator = hass.data[DOMAIN][config_entry.entry_id][
+        "coordinator"
+    ]
+    
     door_type = config_entry.options.get(
         CONF_DOOR_TYPE, config_entry.data.get(CONF_DOOR_TYPE)
     )
 
     async_add_entities(
-        [TwoNIntercomLock(config_entry, door_type)],
+        [TwoNIntercomLock(coordinator, config_entry, door_type)],
         True,
     )
 
 
-class TwoNIntercomLock(LockEntity):
+class TwoNIntercomLock(CoordinatorEntity[TwoNIntercomCoordinator], LockEntity):
     """Representation of a 2N Intercom lock."""
 
     _attr_has_entity_name = True
     _attr_name = None
     _attr_supported_features = LockEntityFeature.OPEN
 
-    def __init__(self, config_entry: ConfigEntry, door_type: str) -> None:
+    def __init__(
+        self,
+        coordinator: TwoNIntercomCoordinator,
+        config_entry: ConfigEntry,
+        door_type: str | None,
+    ) -> None:
         """Initialize the lock."""
+        super().__init__(coordinator)
+        
         self._config_entry = config_entry
         self._door_type = door_type
         self._attr_unique_id = f"{config_entry.entry_id}_lock"
@@ -70,12 +83,19 @@ class TwoNIntercomLock(LockEntity):
 
     async def async_unlock(self, **kwargs: Any) -> None:
         """Unlock the lock."""
-        # In a real implementation, this would call the 2N API
-        self._attr_is_locked = False
-        self.async_write_ha_state()
+        # Trigger relay 1 (default relay for legacy lock)
+        success = await self.coordinator.async_trigger_relay(relay=1, duration=2000)
+        
+        if success:
+            self._attr_is_locked = False
+            self.async_write_ha_state()
 
     async def async_open(self, **kwargs: Any) -> None:
         """Open the door/gate."""
-        # In a real implementation, this would call the 2N API to open the door
-        # For now, we'll just unlock it
+        # Same as unlock
         await self.async_unlock(**kwargs)
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.last_update_success

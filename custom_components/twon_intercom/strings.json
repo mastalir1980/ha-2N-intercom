@@ -2,13 +2,41 @@
   "config": {
     "step": {
       "user": {
-        "title": "2N Intercom Setup",
-        "description": "Configure your 2N Intercom device",
+        "title": "2N Intercom Setup - Connection",
+        "description": "Configure connection to your 2N Intercom device",
+        "data": {
+          "host": "IP Address",
+          "port": "Port",
+          "protocol": "Protocol",
+          "username": "Username",
+          "password": "Password",
+          "verify_ssl": "Verify SSL Certificate"
+        }
+      },
+      "device": {
+        "title": "2N Intercom Setup - Device",
+        "description": "Configure device features",
         "data": {
           "name": "Name",
-          "door_type": "Door Type"
+          "enable_camera": "Enable Camera",
+          "video_profile": "Video Profile/Stream Name",
+          "enable_doorbell": "Enable Doorbell",
+          "relay_count": "Number of Relays"
+        }
+      },
+      "relay": {
+        "title": "2N Intercom Setup - Relay {relay_number}",
+        "description": "Configure relay {relay_number}",
+        "data": {
+          "relay_name": "Relay Name",
+          "relay_number": "Relay Number",
+          "relay_device_type": "Device Type",
+          "relay_pulse_duration": "Pulse Duration (milliseconds)"
         }
       }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the device. Please check the IP address, port, and credentials."
     }
   },
   "options": {
@@ -16,7 +44,10 @@
       "init": {
         "title": "2N Intercom Options",
         "data": {
-          "door_type": "Door Type"
+          "door_type": "Door Type (Legacy)",
+          "enable_camera": "Enable Camera",
+          "video_profile": "Video Profile/Stream Name",
+          "enable_doorbell": "Enable Doorbell"
         }
       }
     }
@@ -26,6 +57,18 @@
       "options": {
         "door": "Door",
         "gate": "Gate"
+      }
+    },
+    "protocol": {
+      "options": {
+        "http": "HTTP",
+        "https": "HTTPS"
+      }
+    },
+    "relay_device_type": {
+      "options": {
+        "door": "Door (momentary switch)",
+        "gate": "Gate (garage door opener)"
       }
     }
   }
