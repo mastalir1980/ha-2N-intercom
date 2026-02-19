@@ -250,9 +250,11 @@ class TwoNIntercomAPI:
                     response.raise_for_status()
                     content_type = response.headers.get("Content-Type", "")
                     if "image" not in content_type:
+                        error_body = await response.text()
                         _LOGGER.error(
-                            "Snapshot returned non-image content-type: %s",
+                            "Snapshot returned non-image content-type: %s body=%s",
                             content_type,
+                            error_body,
                         )
                         return None
                     return await response.read()
