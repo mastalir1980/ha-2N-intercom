@@ -10,6 +10,7 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNA
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.integration import async_get_integration
 
 from .api import TwoNIntercomAPI
 from .const import (
@@ -54,6 +55,24 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         self._data: dict[str, Any] = {}
         self._relays: list[dict[str, Any]] = []
+        self._integration_name: str | None = None
+        self._integration_version: str | None = None
+
+    async def _ensure_integration_info(self) -> None:
+        """Load and cache integration name/version."""
+        if self._integration_name is not None and self._integration_version is not None:
+            return
+
+        integration = await async_get_integration(self.hass, DOMAIN)
+        self._integration_name = integration.name or "2N Intercom"
+        self._integration_version = integration.version or ""
+
+    def _name_with_version(self, name: str) -> str:
+        """Append version to name if missing."""
+        version = self._integration_version or ""
+        if version and version not in name:
+            return f"{name} {version}"
+        return name
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -135,9 +154,14 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # No relays, create entry
                 return await self._async_create_entry()
 
+        await self._ensure_integration_info()
+        default_name = self._name_with_version(
+            self._integration_name or "2N Intercom"
+        )
+
         data_schema = vol.Schema(
             {
-                vol.Required("name", default="2N Intercom"): cv.string,
+                vol.Required("name", default=default_name): cv.string,
                 vol.Required(
                     CONF_ENABLE_CAMERA, default=DEFAULT_ENABLE_CAMERA
                 ): cv.boolean,
@@ -206,13 +230,17 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _async_create_entry(self) -> FlowResult:
         """Create the config entry."""
+        await self._ensure_integration_info()
+        entry_name = self._data.get("name", self._integration_name or "2N Intercom")
+        title = self._name_with_version(entry_name)
+
         await self.async_set_unique_id(
-            f"{self._data[CONF_HOST]}_{self._data.get('name', '2N Intercom')}"
+            f"{self._data[CONF_HOST]}_{entry_name}"
         )
         self._abort_if_unique_id_configured()
 
         return self.async_create_entry(
-            title=self._data.get("name", "2N Intercom"),
+            title=title,
             data=self._data,
         )
 

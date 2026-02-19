@@ -74,6 +74,35 @@ def check_homekit_in_manifest():
         print("✗ HomeKit support not declared in manifest.json")
         return False
 
+def sync_manifest_name_with_version() -> bool:
+    """Ensure manifest name includes the current version."""
+    manifest_file = COMPONENT_DIR / "manifest.json"
+    with open(manifest_file) as f:
+        manifest = json.load(f)
+
+    version = manifest.get("version")
+    if not version:
+        print("✗ Manifest version missing; cannot sync name")
+        return False
+
+    current_name = manifest.get("name", "2N Intercom")
+    if current_name.endswith(version):
+        base_name = current_name[: -len(version)].rstrip()
+    else:
+        base_name = current_name
+
+    new_name = f"{base_name} {version}".strip()
+    if new_name != current_name:
+        manifest["name"] = new_name
+        with open(manifest_file, "w") as f:
+            json.dump(manifest, f, indent=2)
+            f.write("\n")
+        print(f"✓ Updated manifest name to: {new_name}")
+    else:
+        print(f"✓ Manifest name already includes version: {new_name}")
+
+    return True
+
 def main():
     """Run all checks."""
     print("=" * 60)
@@ -120,6 +149,11 @@ def main():
     # Check HomeKit support
     print("\n4. Checking HomeKit integration...")
     if not check_homekit_in_manifest():
+        all_passed = False
+
+    # Sync manifest name with version
+    print("\n5. Syncing manifest name with version...")
+    if not sync_manifest_name_with_version():
         all_passed = False
     
     # Summary

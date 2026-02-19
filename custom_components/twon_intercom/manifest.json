@@ -1,6 +1,6 @@
 {
   "domain": "twon_intercom",
-  "name": "2N Intercom",
+  "name": "2N Intercom 2.0.0",
   "codeowners": ["@mastalir1980"],
   "config_flow": true,
   "documentation": "https://github.com/mastalir1980/ha-2N-intercom",
