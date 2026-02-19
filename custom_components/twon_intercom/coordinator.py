@@ -56,6 +56,9 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
         self._last_call_state: dict[str, Any] = {}
         self._ring_detected = False
         self._last_ring_time: datetime | None = None
+        # Note: _retry_count is safe from race conditions because Home Assistant's
+        # DataUpdateCoordinator serializes update calls - only one _async_update_data
+        # runs at a time
         self._retry_count = 0
         self._snapshot_cache: bytes | None = None
         self._snapshot_cache_time: datetime | None = None
@@ -111,20 +114,23 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
             raise ConfigEntryNotReady(f"Authentication failed: {err}") from err
             
         except (TwoNConnectionError, ConnectionError, TimeoutError) as err:
-            # Connection errors - implement exponential backoff
+            # Connection errors - use retry counter for tracking
+            # Note: Home Assistant's DataUpdateCoordinator handles the actual retry timing
+            # via the update_interval. We track retries here for logging and decision making.
             if self._retry_count < MAX_RETRIES:
                 self._retry_count += 1
-                delay = min(2 ** self._retry_count, MAX_BACKOFF_DELAY)
+                # Calculate expected delay for informational logging
+                expected_delay = min(2 ** self._retry_count, MAX_BACKOFF_DELAY)
                 _LOGGER.warning(
-                    "Connection error (retry %s/%s, next attempt in %ss): %s",
+                    "Connection error (retry %s/%s, coordinator will retry per update_interval ~%ss): %s",
                     self._retry_count,
                     MAX_RETRIES,
-                    delay,
+                    expected_delay,
                     err,
                 )
                 raise UpdateFailed(f"Connection error: {err}") from err
             else:
-                # Max retries exceeded
+                # Max retries exceeded - require integration reload
                 _LOGGER.error(
                     "Max retries (%s) exceeded for connection to device",
                     MAX_RETRIES,
