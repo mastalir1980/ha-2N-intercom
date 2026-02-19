@@ -26,7 +26,6 @@ from .const import (
     CONF_RELAY_PULSE_DURATION,
     CONF_RELAYS,
     CONF_VERIFY_SSL,
-    CONF_VIDEO_PROFILE,
     DEFAULT_ENABLE_CAMERA,
     DEFAULT_ENABLE_DOORBELL,
     DEFAULT_PORT_HTTP,
@@ -35,7 +34,6 @@ from .const import (
     DEFAULT_PULSE_DURATION,
     DEFAULT_RELAY_COUNT,
     DEFAULT_VERIFY_SSL,
-    DEFAULT_VIDEO_PROFILE,
     DEVICE_TYPE_DOOR,
     DEVICE_TYPE_GATE,
     DOMAIN,
@@ -173,9 +171,6 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_ENABLE_CAMERA, default=DEFAULT_ENABLE_CAMERA
                 ): cv.boolean,
                 vol.Required(
-                    CONF_VIDEO_PROFILE, default=DEFAULT_VIDEO_PROFILE
-                ): cv.string,
-                vol.Required(
                     CONF_ENABLE_DOORBELL, default=DEFAULT_ENABLE_DOORBELL
                 ): cv.boolean,
                 vol.Required(
@@ -283,10 +278,6 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
                     CONF_ENABLE_CAMERA,
                     default=current_data.get(CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA),
                 ): cv.boolean,
-                vol.Required(
-                    CONF_VIDEO_PROFILE,
-                    default=current_data.get(CONF_VIDEO_PROFILE, DEFAULT_VIDEO_PROFILE),
-                ): cv.string,
                 vol.Required(
                     CONF_ENABLE_DOORBELL,
                     default=current_data.get(

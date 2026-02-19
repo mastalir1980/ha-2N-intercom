@@ -24,14 +24,14 @@ This document summarizes the complete redesign and implementation of the 2N Inte
 **Enhanced config_flow.py:**
 - Multi-step configuration wizard:
   1. **Connection Step**: IP, port, protocol, credentials, SSL verification
-  2. **Device Step**: Camera, doorbell, video profile settings
+   2. **Device Step**: Camera and doorbell settings
   3. **Relay Step(s)**: Per-relay configuration with type and duration
 - Real-time credential validation
 - Options flow for post-setup configuration changes
 
 **Configuration Keys Added:**
 - Connection: `host`, `port`, `protocol`, `username`, `password`, `verify_ssl`
-- Features: `enable_camera`, `enable_doorbell`, `video_profile`
+- Features: `enable_camera`, `enable_doorbell`
 - Relays: `relay_count`, `relays` (array of relay configs)
 - Per-relay: `relay_name`, `relay_number`, `relay_device_type`, `relay_pulse_duration`
 
@@ -220,7 +220,6 @@ This document summarizes the complete redesign and implementation of the 2N Inte
 3. **Device configuration:**
    - Device name
    - Enable camera (yes/no)
-   - Video profile name
    - Enable doorbell (yes/no)
    - Number of relays (0-4)
 4. **For each relay:**

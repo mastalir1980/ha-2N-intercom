@@ -19,7 +19,6 @@
         "data": {
           "name": "Název",
           "enable_camera": "Povolit kameru",
-          "video_profile": "Video profil / název streamu",
           "enable_doorbell": "Povolit zvonek",
           "relay_count": "Počet relé"
         }
@@ -46,7 +45,6 @@
         "data": {
           "door_type": "Typ dveří (starší)",
           "enable_camera": "Povolit kameru",
-          "video_profile": "Video profil / název streamu",
           "enable_doorbell": "Povolit zvonek"
         }
       }

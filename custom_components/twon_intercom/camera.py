@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_VIDEO_PROFILE, DEFAULT_VIDEO_PROFILE, DOMAIN
+from .const import DOMAIN
 from .coordinator import TwoNIntercomCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -31,10 +31,8 @@ async def async_setup_entry(
         "coordinator"
     ]
     
-    video_profile = config_entry.data.get(CONF_VIDEO_PROFILE, DEFAULT_VIDEO_PROFILE)
-    
     async_add_entities(
-        [TwoNIntercomCamera(coordinator, config_entry, video_profile)],
+        [TwoNIntercomCamera(coordinator, config_entry)],
         True,
     )
 
@@ -50,14 +48,12 @@ class TwoNIntercomCamera(CoordinatorEntity[TwoNIntercomCoordinator], Camera):
         self,
         coordinator: TwoNIntercomCoordinator,
         config_entry: ConfigEntry,
-        video_profile: str,
     ) -> None:
         """Initialize the camera."""
         super().__init__(coordinator)
         Camera.__init__(self)
         
         self._config_entry = config_entry
-        self._video_profile = video_profile
         self._attr_unique_id = f"{config_entry.entry_id}_camera"
         self._last_snapshot: bytes | None = None
         self._last_snapshot_time: float = 0
@@ -118,7 +114,7 @@ class TwoNIntercomCamera(CoordinatorEntity[TwoNIntercomCoordinator], Camera):
     async def stream_source(self) -> str | None:
         """Return the source of the stream."""
         # Return RTSP URL for streaming
-        return self.coordinator.api.get_rtsp_url_with_credentials(self._video_profile)
+        return self.coordinator.api.get_rtsp_url_with_credentials()
 
     @property
     def available(self) -> bool:

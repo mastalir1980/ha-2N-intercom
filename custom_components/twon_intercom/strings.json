@@ -19,7 +19,6 @@
         "data": {
           "name": "Name",
           "enable_camera": "Enable Camera",
-          "video_profile": "Video Profile/Stream Name",
           "enable_doorbell": "Enable Doorbell",
           "relay_count": "Number of Relays"
         }
@@ -46,7 +45,6 @@
         "data": {
           "door_type": "Door Type (Legacy)",
           "enable_camera": "Enable Camera",
-          "video_profile": "Video Profile/Stream Name",
           "enable_doorbell": "Enable Doorbell"
         }
       }

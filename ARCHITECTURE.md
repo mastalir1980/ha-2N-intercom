@@ -158,7 +158,6 @@ class TwoNIntercomData:
 **Step 2: Device Configuration**
 - Device name (default: "2N Intercom")
 - Enable camera (checkbox, default: True)
-- Video profile/stream name (text, default: "default")
 - Enable doorbell (checkbox, default: True)
 
 **Step 3: Relay Configuration**
@@ -350,7 +349,6 @@ DOMAIN = "twon_intercom"
 # Configuration keys
 CONF_PROTOCOL = "protocol"  # "http" or "https"
 CONF_VERIFY_SSL = "verify_ssl"
-CONF_VIDEO_PROFILE = "video_profile"
 CONF_ENABLE_CAMERA = "enable_camera"
 CONF_ENABLE_DOORBELL = "enable_doorbell"
 CONF_RELAY_COUNT = "relay_count"

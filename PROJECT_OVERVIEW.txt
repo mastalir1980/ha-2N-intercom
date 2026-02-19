@@ -35,7 +35,7 @@ CORE INFRASTRUCTURE:
 
 CONFIGURATION FEATURES:
   • Connection: IP, port, protocol, credentials, SSL
-  • Device: Camera, doorbell, video profile
+  • Device: Camera, doorbell
   • Relays: Up to 4, per-relay type and duration
   • Options: Post-setup configuration changes
   • Validation: Real-time credential testing
@@ -90,7 +90,6 @@ QUALITY METRICS:
    • Live RTSP H.264 streaming
    • HTTP API snapshots with caching
    • HomeKit-compatible video
-   • Configurable video profiles
 
 🔔 DOORBELL:
    • Ring event detection (5-second polling)

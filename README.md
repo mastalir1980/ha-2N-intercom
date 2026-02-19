@@ -8,7 +8,6 @@ Home Assistant custom integration for 2N IP Intercom systems with comprehensive 
 - **Live RTSP video streaming** with H.264 codec
 - **Snapshot support** via 2N HTTP API
 - **HomeKit-compatible** video streaming
-- Configurable video profiles/streams
 
 ### 🔔 Doorbell
 - **Ring event detection** from call status API
@@ -30,7 +29,7 @@ Home Assistant custom integration for 2N IP Intercom systems with comprehensive 
 - **Full UI-based configuration** (no YAML required)
 - **Multi-step setup wizard**:
   1. Connection settings (IP, port, protocol, credentials)
-  2. Device features (camera, doorbell, video profile)
+  2. Device features (camera, doorbell)
   3. Relay configuration (per-relay device type and settings)
 - **Options flow** for changing settings without re-setup
 - **Credential validation** during setup
@@ -88,7 +87,6 @@ For detailed architecture information, see [ARCHITECTURE.md](ARCHITECTURE.md).
 2. **Device Features**
    - Name: Device name (default: "2N Intercom")
    - Enable Camera: Enable camera platform
-   - Video Profile: RTSP stream name/profile (default: "default")
    - Enable Doorbell: Enable doorbell binary sensor
    - Number of Relays: Select 0-4 relays to configure
 
@@ -226,9 +224,8 @@ Result:
 
 **Solutions:**
 1. Verify RTSP stream is enabled on 2N intercom
-2. Check video profile name matches configuration
-3. Test RTSP URL manually: `rtsp://username:password@ip:port/profile`
-4. Check Home Assistant logs for stream errors
+2. Test RTSP URL manually: `rtsp://username:password@ip:554`
+3. Check Home Assistant logs for stream errors
 
 ### Doorbell Not Triggering
 

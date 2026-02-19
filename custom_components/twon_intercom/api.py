@@ -235,30 +235,32 @@ class TwoNIntercomAPI:
             _LOGGER.error("Unexpected error getting snapshot: %s", err)
             return None
 
-    def get_rtsp_url(self, profile: str = "default") -> str:
+    def _get_rtsp_port(self) -> int:
+        """Return RTSP port, avoiding HTTP/HTTPS ports."""
+        if self.port in (80, 443):
+            return 554
+        return self.port
+
+    def get_rtsp_url(self) -> str:
         """
         Get RTSP stream URL.
-        
-        Args:
-            profile: Stream profile name (e.g., "default", "high", "low")
             
         Returns:
             RTSP URL with embedded credentials
         """
         # Redact password in logs
-        return f"rtsp://{self.username}:****@{self.host}:{self.port}"
+        rtsp_port = self._get_rtsp_port()
+        return f"rtsp://{self.username}:****@{self.host}:{rtsp_port}"
 
-    def get_rtsp_url_with_credentials(self, profile: str = "default") -> str:
+    def get_rtsp_url_with_credentials(self) -> str:
         """
         Get RTSP stream URL with credentials (for actual use).
-        
-        Args:
-            profile: Stream profile name
             
         Returns:
             RTSP URL with embedded credentials
         """
-        return f"rtsp://{self.username}:{self.password}@{self.host}:{self.port}"
+        rtsp_port = self._get_rtsp_port()
+        return f"rtsp://{self.username}:{self.password}@{self.host}:{rtsp_port}"
 
 
 class TwoNAuthenticationError(Exception):

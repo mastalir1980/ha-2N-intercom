@@ -74,7 +74,6 @@ Test these scenarios:
 #### Step 3: Device Configuration
 - [ ] Name: "Test Intercom"
 - [ ] Enable Camera: `Yes`
-- [ ] Video Profile: `default`
 - [ ] Enable Doorbell: `Yes`
 - [ ] Number of Relays: `2`
 - [ ] Proceeds to relay configuration
@@ -224,7 +223,6 @@ automation:
 - [ ] Options dialog opens
 - [ ] Can toggle camera on/off
 - [ ] Can toggle doorbell on/off
-- [ ] Can change video profile
 - [ ] Can change legacy door type
 - [ ] Save changes
 - [ ] Integration reloads
@@ -358,10 +356,8 @@ If upgrading from v1.0:
 
 **Check:**
 1. Test RTSP URL with VLC/ffplay
-2. Check video profile name
-3. Enable RTSP on device
-4. Check codec support (H.264)
-5. Try different profile name
+2. Enable RTSP on device
+3. Check codec support (H.264)
 
 ### Issue: Doorbell Not Detecting
 
