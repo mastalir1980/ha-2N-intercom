@@ -246,7 +246,7 @@ class TwoNIntercomAPI:
             RTSP URL with embedded credentials
         """
         # Redact password in logs
-        return f"rtsp://{self.username}:****@{self.host}:{self.port}/{profile}"
+        return f"rtsp://{self.username}:****@{self.host}:{self.port}"
 
     def get_rtsp_url_with_credentials(self, profile: str = "default") -> str:
         """
@@ -258,7 +258,7 @@ class TwoNIntercomAPI:
         Returns:
             RTSP URL with embedded credentials
         """
-        return f"rtsp://{self.username}:{self.password}@{self.host}:{self.port}/{profile}"
+        return f"rtsp://{self.username}:{self.password}@{self.host}:{self.port}"
 
 
 class TwoNAuthenticationError(Exception):
