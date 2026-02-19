@@ -1,21 +1,89 @@
 """The 2N Intercom integration."""
 from __future__ import annotations
 
+import logging
+
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, PLATFORMS
+from .api import TwoNIntercomAPI
+from .const import (
+    CONF_ENABLE_CAMERA,
+    CONF_ENABLE_DOORBELL,
+    CONF_PROTOCOL,
+    CONF_RELAYS,
+    CONF_VERIFY_SSL,
+    DEFAULT_ENABLE_CAMERA,
+    DEFAULT_ENABLE_DOORBELL,
+    DEFAULT_PROTOCOL,
+    DEFAULT_VERIFY_SSL,
+    DOMAIN,
+)
+from .coordinator import TwoNIntercomCoordinator
+
+_LOGGER = logging.getLogger(__name__)
+
+# Determine which platforms to set up based on config
+def _get_platforms(entry: ConfigEntry) -> list[str]:
+    """Get list of platforms to set up based on configuration."""
+    platforms = []
+    
+    # Camera platform
+    if entry.data.get(CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA):
+        platforms.append("camera")
+    
+    # Doorbell platform
+    if entry.data.get(CONF_ENABLE_DOORBELL, DEFAULT_ENABLE_DOORBELL):
+        platforms.append("binary_sensor")
+    
+    # Relay platforms - check if we have relays configured
+    relays = entry.data.get(CONF_RELAYS, [])
+    if relays:
+        # Add switch for door relays
+        platforms.append("switch")
+        # Add cover for gate relays
+        platforms.append("cover")
+    
+    # Always include lock for backward compatibility
+    platforms.append("lock")
+    
+    return platforms
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up 2N Intercom from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = entry.data
-
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
+    
+    # Create API client
+    api = TwoNIntercomAPI(
+        host=entry.data[CONF_HOST],
+        port=entry.data[CONF_PORT],
+        username=entry.data[CONF_USERNAME],
+        password=entry.data[CONF_PASSWORD],
+        protocol=entry.data.get(CONF_PROTOCOL, DEFAULT_PROTOCOL),
+        verify_ssl=entry.data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+    )
+    
+    # Create coordinator
+    coordinator = TwoNIntercomCoordinator(hass, api)
+    
+    # Fetch initial data
+    await coordinator.async_config_entry_first_refresh()
+    
+    # Store coordinator
+    hass.data[DOMAIN][entry.entry_id] = {
+        "coordinator": coordinator,
+        "api": api,
+    }
+    
+    # Set up platforms
+    platforms = _get_platforms(entry)
+    await hass.config_entries.async_forward_entry_setups(entry, platforms)
+    
+    # Register update listener
     entry.async_on_unload(entry.add_update_listener(async_update_options))
-
+    
     return True
 
 
@@ -26,8 +94,13 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    platforms = _get_platforms(entry)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
+    
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
-
+        # Close API session
+        data = hass.data[DOMAIN].pop(entry.entry_id)
+        if "api" in data:
+            await data["api"].async_close()
+    
     return unload_ok
