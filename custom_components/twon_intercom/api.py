@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime
 import logging
 from typing import Any
@@ -254,10 +255,27 @@ class TwoNIntercomAPI:
                     if "image" not in content_type:
                         error_body = await response.text()
                         _LOGGER.error(
-                            "Snapshot returned non-image content-type: %s body=%s",
+                            "Snapshot returned non-image content-type: %s body=%s request_url=%s params=%s",
                             content_type,
                             error_body,
+                            url,
+                            params,
                         )
+
+                        error_code = None
+                        try:
+                            payload = json.loads(error_body)
+                            error_code = payload.get("error", {}).get("code")
+                        except json.JSONDecodeError:
+                            error_code = None
+
+                        if error_code == 12 and (width, height) != (640, 480):
+                            _LOGGER.warning(
+                                "Retrying snapshot with fallback resolution 640x480 request_url=%s",
+                                url,
+                            )
+                            return await self.async_get_snapshot(width=640, height=480)
+
                         return None
                     return await response.read()
                     

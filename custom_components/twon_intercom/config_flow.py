@@ -118,9 +118,16 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
 
         # Default port based on protocol
-        default_port = DEFAULT_PORT_HTTP
-        if user_input and user_input.get(CONF_PROTOCOL) == PROTOCOL_HTTPS:
-            default_port = DEFAULT_PORT_HTTPS
+        default_protocol = (
+            user_input.get(CONF_PROTOCOL)
+            if user_input is not None
+            else DEFAULT_PROTOCOL
+        )
+        default_port = (
+            DEFAULT_PORT_HTTPS
+            if default_protocol == PROTOCOL_HTTPS
+            else DEFAULT_PORT_HTTP
+        )
 
         data_schema = vol.Schema(
             {
