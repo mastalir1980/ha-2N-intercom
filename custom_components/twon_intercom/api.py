@@ -13,6 +13,7 @@ import async_timeout
 _LOGGER = logging.getLogger(__name__)
 
 API_TIMEOUT = 10
+RTSP_PATH = "h264_stream"
 
 
 class TwoNIntercomAPI:
@@ -341,7 +342,9 @@ class TwoNIntercomAPI:
         """
         # Redact password in logs
         rtsp_port = self._get_rtsp_port()
-        return f"rtsp://{self.username}:****@{self.host}:{rtsp_port}"
+        return (
+            f"rtsp://{self.username}:****@{self.host}:{rtsp_port}/{RTSP_PATH}"
+        )
 
     def get_rtsp_url_with_credentials(self) -> str:
         """
@@ -351,7 +354,9 @@ class TwoNIntercomAPI:
             RTSP URL with embedded credentials
         """
         rtsp_port = self._get_rtsp_port()
-        return f"rtsp://{self.username}:{self.password}@{self.host}:{rtsp_port}"
+        return (
+            f"rtsp://{self.username}:{self.password}@{self.host}:{rtsp_port}/{RTSP_PATH}"
+        )
 
 
 class TwoNAuthenticationError(Exception):
