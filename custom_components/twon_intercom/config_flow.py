@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
+import logging
 import json
 from pathlib import Path
 
@@ -43,6 +44,8 @@ from .const import (
     PROTOCOL_HTTPS,
     PROTOCOLS,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -312,6 +315,13 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
                 )
 
                 if not await api.async_test_connection():
+                    _LOGGER.warning(
+                        "Options connection test failed host=%s port=%s protocol=%s verify_ssl=%s",
+                        user_input.get(CONF_HOST),
+                        user_input.get(CONF_PORT),
+                        user_input.get(CONF_PROTOCOL, DEFAULT_PROTOCOL),
+                        user_input.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+                    )
                     errors["base"] = "cannot_connect"
                 else:
                     await api.async_close()
@@ -319,6 +329,13 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
                     return await self.async_step_device()
 
             except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception(
+                    "Options connection test exception host=%s port=%s protocol=%s verify_ssl=%s",
+                    user_input.get(CONF_HOST),
+                    user_input.get(CONF_PORT),
+                    user_input.get(CONF_PROTOCOL, DEFAULT_PROTOCOL),
+                    user_input.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+                )
                 errors["base"] = "cannot_connect"
 
         default_protocol = (
