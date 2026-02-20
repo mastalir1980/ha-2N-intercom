@@ -1,0 +1,6 @@
+{
+  "name": "2N Intercom [CAM]",
+  "domains": ["twon_intercom"],
+  "render_readme": true,
+  "homeassistant": "2025.0.0"
+}

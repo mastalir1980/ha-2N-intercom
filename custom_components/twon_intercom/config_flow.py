@@ -77,10 +77,7 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._integration_version = ""
 
     def _name_with_version(self, name: str) -> str:
-        """Append version to name if missing."""
-        version = self._integration_version or ""
-        if version and version not in name:
-            return f"{name} {version}"
+        """Return name unchanged (version is not appended)."""
         return name
 
     async def async_step_user(
@@ -171,9 +168,7 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self._async_create_entry()
 
         await self._ensure_integration_info()
-        default_name = self._name_with_version(
-            self._integration_name or "2N Intercom"
-        )
+        default_name = self._integration_name or "2N Intercom [CAM]"
 
         data_schema = vol.Schema(
             {
@@ -407,7 +402,8 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
         data_schema = vol.Schema(
             {
                 vol.Required(
-                    "name", default=current_data.get("name", "2N Intercom")
+                    "name",
+                    default=current_data.get("name", "2N Intercom [CAM]"),
                 ): cv.string,
                 vol.Required(
                     CONF_ENABLE_CAMERA,

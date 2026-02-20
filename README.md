@@ -52,6 +52,13 @@ This integration uses modern Home Assistant best practices:
 
 For detailed architecture information, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
+## Manual
+
+- Install and setup: [INSTALLATION.md](INSTALLATION.md)
+- HomeKit details: [HOMEKIT_INTEGRATION.md](HOMEKIT_INTEGRATION.md)
+- Quick reference: [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
+- Release notes: [CHANGELOG.md](CHANGELOG.md)
+
 ## Installation
 
 ### HACS (Recommended)
@@ -224,7 +231,7 @@ Result:
 
 **Solutions:**
 1. Verify RTSP stream is enabled on 2N intercom
-2. Test RTSP URL manually: `rtsp://username:password@ip:554`
+2. Test RTSP URL manually: `rtsp://username:password@ip:554/h264_stream`
 3. Check Home Assistant logs for stream errors
 
 ### Doorbell Not Triggering
@@ -286,15 +293,8 @@ custom_components/twon_intercom/
 To test the integration:
 
 1. Install in development mode
-2. Enable debug logging in `configuration.yaml`:
-```yaml
-logger:
-  default: info
-  logs:
-    custom_components.twon_intercom: debug
-```
-3. Check Home Assistant logs for any errors
-4. Test all features (camera, doorbell, relays)
+2. Check Home Assistant logs for any errors
+3. Test all features (camera, doorbell, relays)
 
 ### Contributing
 
@@ -308,25 +308,19 @@ Contributions are welcome! Please:
 
 ## Version History
 
-### 2.0.0 (Current)
-- Complete rewrite with comprehensive features
-- Added camera platform with RTSP streaming
-- Added doorbell binary sensor
-- Added switch platform for doors
-- Added cover platform for gates
-- Implemented DataUpdateCoordinator
+### 1.0.0 (Current)
+- Initial public release
+- Camera platform with RTSP streaming
+- Doorbell binary sensor
+- Switch platform for doors
+- Cover platform for gates
+- DataUpdateCoordinator-based polling
 - Full config flow with multi-step wizard
-- Updated for Home Assistant 2025+
-
-### 1.0.0
-- Initial release
-- Basic lock entity with door/gate type selection
-- Simple configuration
 - HomeKit support
 
 ## License
 
-This project is open source. See the repository for license information.
+This project is open source. See [LICENSE](LICENSE).
 
 ## Credits
 

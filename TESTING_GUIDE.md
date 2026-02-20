@@ -137,7 +137,7 @@ After setup completes, verify these entities exist:
 **Stream Testing:**
 ```bash
 # Test RTSP stream directly
-ffplay rtsp://username:password@YOUR_IP/default
+ffplay rtsp://username:password@YOUR_IP/h264_stream
 ```
 
 - [ ] Stream opens in media player
@@ -164,7 +164,6 @@ ffplay rtsp://username:password@YOUR_IP/default
 - [ ] Caller info populated (if available)
 
 **Polling:**
-- [ ] Enable debug logging
 - [ ] Check coordinator polls every 5 seconds
 - [ ] No excessive API calls
 
@@ -364,11 +363,10 @@ If upgrading from v1.0:
 **Symptoms:** Ring doesn't trigger sensor
 
 **Check:**
-1. Enable debug logging
-2. Check coordinator polling
-3. Verify `/api/call/status` response during ring
-4. Check call status attributes
-5. Reduce polling interval if needed
+1. Check coordinator polling
+2. Verify `/api/call/status` response during ring
+3. Check call status attributes
+4. Reduce polling interval if needed
 
 ### Issue: Relay Not Working
 
@@ -391,22 +389,6 @@ If upgrading from v1.0:
 3. Device not in unavailable state
 4. Bridge paired correctly
 5. Try resetting bridge
-
-## Debug Logging
-
-Enable detailed logging in `configuration.yaml`:
-
-```yaml
-logger:
-  default: warning
-  logs:
-    custom_components.twon_intercom: debug
-    custom_components.twon_intercom.api: debug
-    custom_components.twon_intercom.coordinator: debug
-    custom_components.twon_intercom.camera: debug
-```
-
-Restart HA and check logs during testing.
 
 ## Test Report Template
 
