@@ -65,13 +65,8 @@ class TwoNIntercomDoorbell(CoordinatorEntity[TwoNIntercomCoordinator], BinarySen
     @property
     def device_info(self) -> dict[str, Any]:
         """Return device information about this doorbell."""
-        return {
-            "identifiers": {(DOMAIN, self._config_entry.entry_id)},
-            "name": self._config_entry.data.get("name", "2N Intercom"),
-            "manufacturer": "2N",
-            "model": "IP Intercom",
-            "sw_version": "1.0.0",
-        }
+        name = self._config_entry.data.get("name", "2N Intercom")
+        return self.coordinator.get_device_info(self._config_entry.entry_id, name)
 
     @property
     def is_on(self) -> bool:

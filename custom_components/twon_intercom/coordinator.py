@@ -63,10 +63,18 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
         self._snapshot_cache: bytes | None = None
         self._snapshot_cache_time: datetime | None = None
         self._snapshot_cache_size: tuple[int | None, int | None] | None = None
+        self._system_info: dict[str, Any] | None = None
 
     async def _async_update_data(self) -> TwoNIntercomData:
         """Fetch data from API."""
         try:
+            if self._system_info is None:
+                try:
+                    self._system_info = await self.api.async_get_system_info()
+                except Exception as err:  # pylint: disable=broad-except
+                    _LOGGER.debug("Failed to fetch system info: %s", err)
+                    self._system_info = {}
+
             # Get current call status
             call_status = await self.api.async_get_call_status()
             
@@ -166,6 +174,24 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
         if self.data and self.data.caller_info:
             return self.data.caller_info
         return {}
+
+    @property
+    def system_info(self) -> dict[str, Any]:
+        """Return cached system info."""
+        return self._system_info or {}
+
+    def get_device_info(self, entry_id: str, name: str) -> dict[str, Any]:
+        """Build device info for entities."""
+        system_info = self.system_info
+        model = system_info.get("variant") or system_info.get("deviceName") or "IP Intercom"
+        sw_version = system_info.get("swVersion") or "1.0.0"
+        return {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": name,
+            "manufacturer": "2N",
+            "model": model,
+            "sw_version": sw_version,
+        }
 
     async def async_trigger_relay(
         self, relay: int, duration: int = 2000

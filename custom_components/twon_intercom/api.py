@@ -178,6 +178,41 @@ class TwoNIntercomAPI:
             _LOGGER.error("Unexpected error getting call status: %s", err)
             raise TwoNAPIError(f"API error: {err}") from err
 
+    async def async_get_system_info(self) -> dict[str, Any]:
+        """Get system info from /api/system/info."""
+        try:
+            session = await self.async_get_session()
+            url = f"{self._base_url}/api/system/info"
+
+            async with async_timeout.timeout(API_TIMEOUT):
+                async with session.get(
+                    url,
+                    auth=self._get_auth(),
+                ) as response:
+                    if response.status == 401:
+                        raise TwoNAuthenticationError(
+                            "Authentication failed - invalid credentials"
+                        )
+
+                    response.raise_for_status()
+                    data = await response.json()
+
+            if isinstance(data, dict):
+                return data.get("result", {})
+            return {}
+
+        except TwoNAuthenticationError:
+            raise
+        except asyncio.TimeoutError as err:
+            _LOGGER.error("Timeout getting system info: %s", err)
+            raise TwoNConnectionError(f"Timeout: {err}") from err
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error getting system info: %s", err)
+            raise TwoNConnectionError(f"Connection error: {err}") from err
+        except Exception as err:
+            _LOGGER.error("Unexpected error getting system info: %s", err)
+            raise TwoNAPIError(f"API error: {err}") from err
+
     async def async_switch_control(
         self, relay: int, action: str = "on", duration: int = 0
     ) -> bool:
