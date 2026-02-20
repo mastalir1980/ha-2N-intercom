@@ -290,6 +290,11 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
 
         if user_input is not None:
             try:
+                if not user_input.get(CONF_USERNAME):
+                    user_input[CONF_USERNAME] = current_data.get(CONF_USERNAME, "")
+                if not user_input.get(CONF_PASSWORD):
+                    user_input[CONF_PASSWORD] = current_data.get(CONF_PASSWORD, "")
+
                 if CONF_PORT not in user_input:
                     user_input[CONF_PORT] = (
                         DEFAULT_PORT_HTTPS
