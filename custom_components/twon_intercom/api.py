@@ -254,11 +254,12 @@ class TwoNIntercomAPI:
                     content_type = response.headers.get("Content-Type", "")
                     if "image" not in content_type:
                         error_body = await response.text()
+                        request_url = str(response.url)
                         _LOGGER.error(
                             "Snapshot returned non-image content-type: %s body=%s request_url=%s params=%s",
                             content_type,
                             error_body,
-                            url,
+                            request_url,
                             params,
                         )
 
@@ -271,8 +272,9 @@ class TwoNIntercomAPI:
 
                         if error_code == 12 and (width, height) != (640, 480):
                             _LOGGER.warning(
-                                "Retrying snapshot with fallback resolution 640x480 request_url=%s",
-                                url,
+                                "Retrying snapshot with fallback resolution 640x480 request_url=%s params=%s",
+                                request_url,
+                                params,
                             )
                             return await self.async_get_snapshot(width=640, height=480)
 
