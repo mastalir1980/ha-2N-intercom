@@ -61,7 +61,10 @@ class TwoNIntercomCamera(CoordinatorEntity[TwoNIntercomCoordinator], Camera):
     @property
     def device_info(self) -> dict[str, Any]:
         """Return device information about this camera."""
-        name = self._config_entry.data.get("name", "2N Intercom")
+        name = self._config_entry.options.get(
+            "name",
+            self._config_entry.data.get("name", "2N Intercom"),
+        )
         return self.coordinator.get_device_info(self._config_entry.entry_id, name)
 
     @property

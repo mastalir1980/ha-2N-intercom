@@ -64,12 +64,11 @@ class TwoNIntercomLock(CoordinatorEntity[TwoNIntercomCoordinator], LockEntity):
     @property
     def device_info(self) -> dict[str, Any]:
         """Return device information about this lock."""
-        return {
-            "identifiers": {(DOMAIN, self._config_entry.entry_id)},
-            "name": self._config_entry.data.get("name", "2N Intercom"),
-            "manufacturer": "2N",
-            "model": "Intercom",
-        }
+        name = self._config_entry.options.get(
+            "name",
+            self._config_entry.data.get("name", "2N Intercom"),
+        )
+        return self.coordinator.get_device_info(self._config_entry.entry_id, name)
 
     @property
     def is_locked(self) -> bool:

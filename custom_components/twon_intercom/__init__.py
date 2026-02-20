@@ -24,21 +24,27 @@ from .coordinator import TwoNIntercomCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _get_entry_data(entry: ConfigEntry) -> dict[str, object]:
+    """Return merged config data with options overriding defaults."""
+    return {**entry.data, **entry.options}
+
 # Determine which platforms to set up based on config
 def _get_platforms(entry: ConfigEntry) -> list[str]:
     """Get list of platforms to set up based on configuration."""
+    data = _get_entry_data(entry)
     platforms = []
     
     # Camera platform
-    if entry.data.get(CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA):
+    if data.get(CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA):
         platforms.append("camera")
     
     # Doorbell platform
-    if entry.data.get(CONF_ENABLE_DOORBELL, DEFAULT_ENABLE_DOORBELL):
+    if data.get(CONF_ENABLE_DOORBELL, DEFAULT_ENABLE_DOORBELL):
         platforms.append("binary_sensor")
     
     # Relay platforms - check if we have relays configured
-    relays = entry.data.get(CONF_RELAYS, [])
+    relays = data.get(CONF_RELAYS, [])
     if relays:
         # Add switch for door relays
         platforms.append("switch")
@@ -54,15 +60,17 @@ def _get_platforms(entry: ConfigEntry) -> list[str]:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up 2N Intercom from a config entry."""
     hass.data.setdefault(DOMAIN, {})
+
+    data = _get_entry_data(entry)
     
     # Create API client
     api = TwoNIntercomAPI(
-        host=entry.data[CONF_HOST],
-        port=entry.data[CONF_PORT],
-        username=entry.data[CONF_USERNAME],
-        password=entry.data[CONF_PASSWORD],
-        protocol=entry.data.get(CONF_PROTOCOL, DEFAULT_PROTOCOL),
-        verify_ssl=entry.data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+        host=data[CONF_HOST],
+        port=data[CONF_PORT],
+        username=data[CONF_USERNAME],
+        password=data[CONF_PASSWORD],
+        protocol=data.get(CONF_PROTOCOL, DEFAULT_PROTOCOL),
+        verify_ssl=data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
     )
     
     # Create coordinator

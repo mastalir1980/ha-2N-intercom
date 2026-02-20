@@ -268,19 +268,124 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
         self._config_entry = config_entry
+        self._data: dict[str, Any] = {}
+        self._relays: list[dict[str, Any]] = []
+
+    def _merged_data(self) -> dict[str, Any]:
+        """Return merged config data with options overriding defaults."""
+        return {**self._config_entry.data, **self._config_entry.options}
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage the options."""
+        """Start full options flow at connection settings."""
+        return await self.async_step_user(user_input)
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle connection settings in options."""
+        errors = {}
+        current_data = self._merged_data()
+
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            try:
+                if CONF_PORT not in user_input:
+                    user_input[CONF_PORT] = (
+                        DEFAULT_PORT_HTTPS
+                        if user_input.get(CONF_PROTOCOL) == PROTOCOL_HTTPS
+                        else DEFAULT_PORT_HTTP
+                    )
 
-        # Get current values from config entry
-        current_data = self.config_entry.data
+                api = TwoNIntercomAPI(
+                    host=user_input[CONF_HOST],
+                    port=user_input[CONF_PORT],
+                    username=user_input[CONF_USERNAME],
+                    password=user_input[CONF_PASSWORD],
+                    protocol=user_input.get(CONF_PROTOCOL, DEFAULT_PROTOCOL),
+                    verify_ssl=user_input.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+                )
 
-        options_schema = vol.Schema(
+                if not await api.async_test_connection():
+                    errors["base"] = "cannot_connect"
+                else:
+                    await api.async_close()
+                    self._data = user_input
+                    return await self.async_step_device()
+
+            except Exception:  # pylint: disable=broad-except
+                errors["base"] = "cannot_connect"
+
+        default_protocol = (
+            user_input.get(CONF_PROTOCOL)
+            if user_input is not None
+            else current_data.get(CONF_PROTOCOL, DEFAULT_PROTOCOL)
+        )
+        default_port = current_data.get(CONF_PORT)
+        if default_port is None:
+            default_port = (
+                DEFAULT_PORT_HTTPS
+                if default_protocol == PROTOCOL_HTTPS
+                else DEFAULT_PORT_HTTP
+            )
+
+        data_schema = vol.Schema(
             {
+                vol.Required(
+                    CONF_HOST, default=current_data.get(CONF_HOST, "")
+                ): cv.string,
+                vol.Required(CONF_PORT, default=default_port): cv.port,
+                vol.Required(
+                    CONF_PROTOCOL, default=default_protocol
+                ): vol.In(PROTOCOLS),
+                vol.Required(
+                    CONF_USERNAME, default=current_data.get(CONF_USERNAME, "")
+                ): cv.string,
+                vol.Required(
+                    CONF_PASSWORD, default=current_data.get(CONF_PASSWORD, "")
+                ): cv.string,
+                vol.Required(
+                    CONF_VERIFY_SSL,
+                    default=current_data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+                ): cv.boolean,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=data_schema,
+            errors=errors,
+        )
+
+    async def async_step_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle device configuration step in options."""
+        errors = {}
+        current_data = self._merged_data()
+
+        relays = current_data.get(CONF_RELAYS, [])
+        derived_door_type = DOOR_TYPE_GATE if any(
+            relay.get(CONF_RELAY_DEVICE_TYPE) == DEVICE_TYPE_GATE
+            for relay in relays
+        ) else DOOR_TYPE_DOOR
+
+        if user_input is not None:
+            self._data.update(user_input)
+
+            relay_count = user_input.get(CONF_RELAY_COUNT, DEFAULT_RELAY_COUNT)
+            if relay_count > 0:
+                self._relays = []
+                return await self.async_step_relay(relay_index=0)
+
+            self._data[CONF_RELAYS] = []
+            return await self._async_create_entry()
+
+        data_schema = vol.Schema(
+            {
+                vol.Required(
+                    "name", default=current_data.get("name", "2N Intercom")
+                ): cv.string,
                 vol.Required(
                     CONF_ENABLE_CAMERA,
                     default=current_data.get(CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA),
@@ -291,18 +396,84 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
                         CONF_ENABLE_DOORBELL, DEFAULT_ENABLE_DOORBELL
                     ),
                 ): cv.boolean,
-                # Legacy door type for backward compatibility
+                vol.Required(
+                    CONF_RELAY_COUNT,
+                    default=current_data.get(CONF_RELAY_COUNT, DEFAULT_RELAY_COUNT),
+                ): vol.In([0, 1, 2, 3, 4]),
                 vol.Required(
                     CONF_DOOR_TYPE,
-                    default=self.config_entry.options.get(
-                        CONF_DOOR_TYPE,
-                        current_data.get(CONF_DOOR_TYPE, DOOR_TYPE_DOOR),
-                    ),
+                    default=current_data.get(CONF_DOOR_TYPE, derived_door_type),
                 ): vol.In(DOOR_TYPES),
             }
         )
 
         return self.async_show_form(
-            step_id="init",
-            data_schema=options_schema,
+            step_id="device",
+            data_schema=data_schema,
+            errors=errors,
         )
+
+    async def async_step_relay(
+        self, user_input: dict[str, Any] | None = None, relay_index: int = 0
+    ) -> FlowResult:
+        """Handle relay configuration step in options."""
+        errors = {}
+        current_data = self._merged_data()
+        relay_count = self._data.get(CONF_RELAY_COUNT, DEFAULT_RELAY_COUNT)
+        existing_relays = current_data.get(CONF_RELAYS, [])
+
+        if user_input is not None:
+            self._relays.append(user_input)
+
+            if len(self._relays) < relay_count:
+                return await self.async_step_relay(relay_index=len(self._relays))
+
+            self._data[CONF_RELAYS] = self._relays
+            return await self._async_create_entry()
+
+        relay_display_number = relay_index + 1
+        default_relay = (
+            existing_relays[relay_index]
+            if relay_index < len(existing_relays)
+            else {}
+        )
+
+        data_schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_RELAY_NAME,
+                    default=default_relay.get(
+                        CONF_RELAY_NAME, f"Relay {relay_display_number}"
+                    ),
+                ): cv.string,
+                vol.Required(
+                    CONF_RELAY_NUMBER,
+                    default=default_relay.get(
+                        CONF_RELAY_NUMBER, relay_display_number
+                    ),
+                ): vol.In([1, 2, 3, 4]),
+                vol.Required(
+                    CONF_RELAY_DEVICE_TYPE,
+                    default=default_relay.get(
+                        CONF_RELAY_DEVICE_TYPE, DEVICE_TYPE_DOOR
+                    ),
+                ): vol.In([DEVICE_TYPE_DOOR, DEVICE_TYPE_GATE]),
+                vol.Required(
+                    CONF_RELAY_PULSE_DURATION,
+                    default=default_relay.get(
+                        CONF_RELAY_PULSE_DURATION, DEFAULT_PULSE_DURATION
+                    ),
+                ): cv.positive_int,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="relay",
+            data_schema=data_schema,
+            errors=errors,
+            description_placeholders={"relay_number": str(relay_display_number)},
+        )
+
+    async def _async_create_entry(self) -> FlowResult:
+        """Create the options entry."""
+        return self.async_create_entry(title="", data=self._data)
