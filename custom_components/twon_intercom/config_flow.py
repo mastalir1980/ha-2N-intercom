@@ -39,6 +39,7 @@ from .const import (
     DEVICE_TYPE_GATE,
     DOMAIN,
     DOOR_TYPE_DOOR,
+    DOOR_TYPE_GATE,
     DOOR_TYPES,
     PROTOCOL_HTTP,
     PROTOCOL_HTTPS,
