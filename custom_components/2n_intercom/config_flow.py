@@ -538,7 +538,9 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
             directory = await api.async_get_directory()
             await api.async_close()
 
-            if isinstance(directory, dict):
+            if isinstance(directory, list):
+                users = directory
+            elif isinstance(directory, dict):
                 users = directory.get("users", [])
             else:
                 users = []
@@ -549,6 +551,14 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
                     peer = call_pos.get("peer")
                     if peer and peer not in peers:
                         peers.append(peer)
+
+            if not peers:
+                _LOGGER.debug(
+                    "dir/query returned no peers host=%s directory_type=%s keys=%s",
+                    data.get(CONF_HOST),
+                    type(directory).__name__,
+                    list(directory.keys()) if isinstance(directory, dict) else None,
+                )
 
             _LOGGER.debug(
                 "Loaded called peers from dir/query host=%s count=%s peers=%s",
