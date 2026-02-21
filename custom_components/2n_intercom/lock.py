@@ -10,7 +10,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_DOOR_TYPE, DOMAIN, DOOR_TYPE_GATE
+from .const import (
+    CONF_DOOR_TYPE,
+    CONF_RELAY_DEVICE_TYPE,
+    CONF_RELAYS,
+    DEVICE_TYPE_GATE,
+    DOMAIN,
+    DOOR_TYPE_DOOR,
+    DOOR_TYPE_GATE,
+)
 from .coordinator import TwoNIntercomCoordinator
 
 
@@ -27,6 +35,16 @@ async def async_setup_entry(
     door_type = config_entry.options.get(
         CONF_DOOR_TYPE, config_entry.data.get(CONF_DOOR_TYPE)
     )
+    if door_type is None:
+        relays = config_entry.data.get(CONF_RELAYS, [])
+        door_type = (
+            DOOR_TYPE_GATE
+            if any(
+                relay.get(CONF_RELAY_DEVICE_TYPE) == DEVICE_TYPE_GATE
+                for relay in relays
+            )
+            else DOOR_TYPE_DOOR
+        )
 
     async_add_entities(
         [TwoNIntercomLock(coordinator, config_entry, door_type)],
