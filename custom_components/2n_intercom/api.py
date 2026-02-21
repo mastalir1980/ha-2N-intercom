@@ -131,46 +131,15 @@ class TwoNIntercomAPI:
             # Parse directory data
             # Expected format: {"success": true, "result": {...}} or list
             if isinstance(data, dict) and data.get("success") is False:
-                _LOGGER.debug("Directory error response=%s", data.get("error"))
                 return data
 
             if isinstance(data, dict) and "result" in data:
                 result = data.get("result")
-                _LOGGER.debug("Directory response full=%s", data)
-                if isinstance(result, dict):
-                    users = result.get("users") or []
-                    _LOGGER.debug(
-                        "Directory result dict users=%s keys=%s",
-                        len(users),
-                        list(result.keys()),
-                    )
-                elif isinstance(result, list):
-                    _LOGGER.debug(
-                        "Directory result list length=%s",
-                        len(result),
-                    )
-                else:
-                    _LOGGER.debug(
-                        "Directory result type=%s",
-                        type(result).__name__,
-                    )
                 return result or []
 
             if isinstance(data, dict) and "users" in data:
-                users = data.get("users") or []
-                _LOGGER.debug("Directory response full=%s", data)
-                _LOGGER.debug(
-                    "Directory dict users=%s keys=%s",
-                    len(users),
-                    list(data.keys()),
-                )
                 return data
 
-            _LOGGER.debug(
-                "Directory response type=%s keys=%s",
-                type(data).__name__,
-                list(data.keys()) if isinstance(data, dict) else None,
-            )
             return []
             
         except TwoNAuthenticationError:

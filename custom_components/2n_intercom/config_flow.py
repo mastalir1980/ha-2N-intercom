@@ -12,6 +12,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
 
 from .api import TwoNIntercomAPI
@@ -48,6 +49,12 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _all_calls_label(language: str) -> str:
+    if language.startswith("cs"):
+        return "Vsechny hovory"
+    return "All calls"
 
 
 class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -171,13 +178,20 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         await self._ensure_integration_info()
         default_name = self._integration_name or "2N Intercom"
         peers = await self._async_get_called_peers(self._data)
-        called_choices = [""] + peers if peers else []
+        called_options = [
+            {
+                "label": _all_calls_label(self.hass.config.language),
+                "value": "",
+            }
+        ] + [{"label": peer, "value": peer} for peer in peers]
         default_called = self._data.get(CONF_CALLED_ID, "")
 
-        called_field = (
-            vol.In(called_choices)
-            if called_choices
-            else cv.string
+        called_field = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=called_options,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                custom_value=True,
+            )
         )
 
         data_schema = vol.Schema(
@@ -396,13 +410,20 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
         current_data = self._merged_data()
 
         peers = await self._async_get_called_peers(current_data)
-        called_choices = [""] + peers if peers else []
+        called_options = [
+            {
+                "label": _all_calls_label(self.hass.config.language),
+                "value": "",
+            }
+        ] + [{"label": peer, "value": peer} for peer in peers]
         default_called = current_data.get(CONF_CALLED_ID, "")
 
-        called_field = (
-            vol.In(called_choices)
-            if called_choices
-            else cv.string
+        called_field = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=called_options,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                custom_value=True,
+            )
         )
 
         relays = current_data.get(CONF_RELAYS, [])
@@ -538,13 +559,6 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
             directory = await api.async_get_directory()
             await api.async_close()
 
-            if isinstance(directory, dict) and "error" in directory:
-                _LOGGER.debug(
-                    "dir/query error host=%s error=%s",
-                    data.get(CONF_HOST),
-                    directory.get("error"),
-                )
-
             users: list[dict[str, Any]] = []
             if isinstance(directory, list):
                 for entry in directory:
@@ -568,31 +582,6 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
                     peer = call_pos.get("peer")
                     if peer and peer not in peers:
                         peers.append(peer)
-
-            if not peers:
-                first_entry = None
-                preview = None
-                if isinstance(directory, list) and directory:
-                    first_entry = directory[0]
-                    preview = directory[:2]
-                elif isinstance(directory, dict) and directory:
-                    first_entry = directory
-                    preview = list(directory.keys())
-
-                _LOGGER.debug(
-                    "dir/query returned no peers host=%s directory_type=%s keys=%s preview=%s",
-                    data.get(CONF_HOST),
-                    type(directory).__name__,
-                    list(first_entry.keys()) if isinstance(first_entry, dict) else None,
-                    preview,
-                )
-
-            _LOGGER.debug(
-                "Loaded called peers from dir/query host=%s count=%s peers=%s",
-                data.get(CONF_HOST),
-                len(peers),
-                peers,
-            )
 
             return peers
         except Exception:  # pylint: disable=broad-except

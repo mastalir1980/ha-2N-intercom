@@ -11,6 +11,14 @@
           "username": "Uživatelské jméno",
           "password": "Heslo",
           "verify_ssl": "Ověřit SSL certifikát"
+        },
+        "data_description": {
+          "host": "IP adresa nebo hostname zařízení",
+          "port": "HTTP/HTTPS port zařízení",
+          "protocol": "Použijte HTTP nebo HTTPS",
+          "username": "Přihlašovací jméno zařízení",
+          "password": "Přihlašovací heslo zařízení",
+          "verify_ssl": "Zapněte jen pokud je HTTPS certifikát důvěryhodný"
         }
       },
       "device": {
@@ -22,6 +30,13 @@
           "enable_doorbell": "Povolit zvonek",
           "relay_count": "Počet relé",
           "called_id": "Volaný účet (peer)"
+        },
+        "data_description": {
+          "name": "Zobrazený název v Home Assistant",
+          "enable_camera": "Vytvoří entitu kamery",
+          "enable_doorbell": "Vytvoří entitu zvonku",
+          "relay_count": "Kolik relé chcete nastavit",
+          "called_id": "Vyberte účet, na který se zvoní. Prázdné = všechny hovory."
         }
       },
       "relay": {
@@ -32,6 +47,12 @@
           "relay_number": "Číslo relé",
           "relay_device_type": "Typ zařízení",
           "relay_pulse_duration": "Doba pulsu (milisekundy)"
+        },
+        "data_description": {
+          "relay_name": "Zobrazený název relé",
+          "relay_number": "Fyzické číslo relé na zařízení",
+          "relay_device_type": "Dveře vytvoří spínač, vrata vytvoří kryt",
+          "relay_pulse_duration": "Jak dlouho se relé sepne"
         }
       }
     },

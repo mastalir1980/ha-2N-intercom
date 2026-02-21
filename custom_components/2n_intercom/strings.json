@@ -11,6 +11,14 @@
           "username": "Username",
           "password": "Password",
           "verify_ssl": "Verify SSL Certificate"
+        },
+        "data_description": {
+          "host": "IP address or hostname of the intercom",
+          "port": "HTTP/HTTPS port on the device",
+          "protocol": "Use HTTP or HTTPS",
+          "username": "Device login username",
+          "password": "Device login password",
+          "verify_ssl": "Enable only if the HTTPS certificate is trusted"
         }
       },
       "device": {
@@ -22,6 +30,13 @@
           "enable_doorbell": "Enable Doorbell",
           "relay_count": "Number of Relays",
           "called_id": "Ringing account (peer)"
+        },
+        "data_description": {
+          "name": "Displayed name in Home Assistant",
+          "enable_camera": "Create the camera entity",
+          "enable_doorbell": "Create the doorbell entity",
+          "relay_count": "How many relays to configure",
+          "called_id": "Select which account should ring. Leave empty for all calls."
         }
       },
       "relay": {
@@ -32,6 +47,12 @@
           "relay_number": "Relay Number",
           "relay_device_type": "Device Type",
           "relay_pulse_duration": "Pulse Duration (milliseconds)"
+        },
+        "data_description": {
+          "relay_name": "Displayed name for this relay",
+          "relay_number": "Physical relay number on the device",
+          "relay_device_type": "Door creates a switch, gate creates a cover",
+          "relay_pulse_duration": "How long to activate the relay"
         }
       }
     },
