@@ -108,12 +108,16 @@ class TwoNIntercomAPI:
             session = await self.async_get_session()
             url = f"{self._base_url}/api/dir/query"
             
+            payload = {
+                "iterator": {"timestamp": 0},
+                "fields": ["name", "callPos.peer"],
+            }
+
             async with async_timeout.timeout(API_TIMEOUT):
                 async with session.post(
                     url,
-                    data={},
+                    json=payload,
                     auth=self._get_auth(),
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
                 ) as response:
                     # Check for authentication errors
                     if response.status == 401:
