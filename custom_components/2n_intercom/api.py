@@ -145,9 +145,19 @@ class TwoNIntercomAPI:
                     )
                 return result or []
 
+            if isinstance(data, dict) and "users" in data:
+                users = data.get("users") or []
+                _LOGGER.debug(
+                    "Directory dict users=%s keys=%s",
+                    len(users),
+                    list(data.keys()),
+                )
+                return data
+
             _LOGGER.debug(
-                "Directory response type=%s",
+                "Directory response type=%s keys=%s",
                 type(data).__name__,
+                list(data.keys()) if isinstance(data, dict) else None,
             )
             return []
             
