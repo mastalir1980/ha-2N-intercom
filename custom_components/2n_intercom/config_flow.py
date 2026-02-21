@@ -538,12 +538,22 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
             directory = await api.async_get_directory()
             await api.async_close()
 
+            users: list[dict[str, Any]] = []
             if isinstance(directory, list):
-                users = directory
+                for entry in directory:
+                    if isinstance(entry, dict) and "users" in entry:
+                        users.extend(entry.get("users") or [])
+                    elif isinstance(entry, dict):
+                        users.append(entry)
             elif isinstance(directory, dict):
-                users = directory.get("users", [])
-            else:
-                users = []
+                if "users" in directory:
+                    users = directory.get("users", [])
+                elif "result" in directory:
+                    result = directory.get("result")
+                    if isinstance(result, dict):
+                        users = result.get("users", [])
+                    elif isinstance(result, list):
+                        users = result
 
             peers: list[str] = []
             for user in users:
@@ -553,11 +563,21 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
                         peers.append(peer)
 
             if not peers:
+                first_entry = None
+                preview = None
+                if isinstance(directory, list) and directory:
+                    first_entry = directory[0]
+                    preview = directory[:2]
+                elif isinstance(directory, dict) and directory:
+                    first_entry = directory
+                    preview = list(directory.keys())
+
                 _LOGGER.debug(
-                    "dir/query returned no peers host=%s directory_type=%s keys=%s",
+                    "dir/query returned no peers host=%s directory_type=%s keys=%s preview=%s",
                     data.get(CONF_HOST),
                     type(directory).__name__,
-                    list(directory.keys()) if isinstance(directory, dict) else None,
+                    list(first_entry.keys()) if isinstance(first_entry, dict) else None,
+                    preview,
                 )
 
             _LOGGER.debug(
