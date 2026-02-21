@@ -14,7 +14,7 @@ cd /config
 mkdir -p custom_components
 
 # Copy the integration
-cp -r /path/to/ha-2N-intercom/custom_components/twon_intercom custom_components/
+cp -r /path/to/ha-2N-intercom/custom_components/2n_intercom custom_components/
 ```
 
 ### 2. Restart Home Assistant
@@ -101,7 +101,7 @@ The integration will reload with the new configuration, and the HomeKit accessor
 ## Troubleshooting
 
 ### Integration not appearing
-- Ensure the files are in the correct location: `config/custom_components/twon_intercom/`
+- Ensure the files are in the correct location: `config/custom_components/2n_intercom/`
 - Restart Home Assistant
 - Check the logs for any errors
 

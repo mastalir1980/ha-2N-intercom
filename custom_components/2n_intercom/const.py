@@ -1,6 +1,6 @@
 """Constants for the 2N Intercom integration."""
 
-DOMAIN = "twon_intercom"
+DOMAIN = "2n_intercom"
 
 # Configuration keys
 CONF_PROTOCOL = "protocol"

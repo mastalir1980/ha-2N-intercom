@@ -94,7 +94,7 @@ The integration declares HomeKit support in `manifest.json`:
 
 ```json
 {
-  "domain": "twon_intercom",
+  "domain": "2n_intercom",
   "homekit": {}
 }
 ```

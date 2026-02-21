@@ -14,7 +14,7 @@ This guide helps test the 2N Intercom integration with a physical device.
 
 ### 1. Installation Testing
 
-- [ ] Copy `custom_components/twon_intercom` to HA config directory
+- [ ] Copy `custom_components/2n_intercom` to HA config directory
 - [ ] Restart Home Assistant
 - [ ] Check HA logs for loading errors
 - [ ] Verify integration appears in Integration list

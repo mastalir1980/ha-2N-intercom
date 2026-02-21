@@ -87,7 +87,7 @@ Allow users to select between Door (Dveře) and Gate (Vrata) types, which are pr
 ## File Structure
 
 ```
-custom_components/twon_intercom/
+custom_components/2n_intercom/
 ├── __init__.py           # Main integration
 ├── config_flow.py        # Configuration UI
 ├── const.py              # Constants (door types)
@@ -105,7 +105,7 @@ custom_components/twon_intercom/
 
 | Issue | Solution |
 |-------|----------|
-| Integration not found | Check files in `config/custom_components/twon_intercom/` |
+| Integration not found | Check files in `config/custom_components/2n_intercom/` |
 | Not in HomeKit | Verify HomeKit bridge is configured |
 | Wrong accessory type | Change door type in options |
 | Entity not updating | Reload integration |
@@ -145,6 +145,6 @@ python3 validate.py
 ---
 
 **Version**: 1.0.0  
-**Domain**: `twon_intercom`  
+**Domain**: `2n_intercom`  
 **Platform**: `lock`  
 **HomeKit**: ✓ Supported

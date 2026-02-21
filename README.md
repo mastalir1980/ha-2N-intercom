@@ -73,7 +73,7 @@ For detailed architecture information, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ### Manual Installation
 
-1. Copy the `custom_components/twon_intercom` directory to your Home Assistant `config/custom_components/` directory
+1. Copy the `custom_components/2n_intercom` directory to your Home Assistant `config/custom_components/` directory
 2. Restart Home Assistant
 3. Go to Configuration → Integrations
 4. Click the "+ Add Integration" button
@@ -270,7 +270,7 @@ Result:
 ### Project Structure
 
 ```
-custom_components/twon_intercom/
+custom_components/2n_intercom/
 ├── __init__.py              # Integration setup
 ├── api.py                   # 2N API client
 ├── coordinator.py           # DataUpdateCoordinator

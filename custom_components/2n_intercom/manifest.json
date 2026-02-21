@@ -1,5 +1,5 @@
 {
-  "domain": "twon_intercom",
+  "domain": "2n_intercom",
   "name": "2N Intercom",
   "codeowners": ["@mastalir1980"],
   "config_flow": true,

@@ -57,7 +57,7 @@ SOLUTION IMPLEMENTED:
                            FILE STRUCTURE
 ═══════════════════════════════════════════════════════════════════════════
 
-custom_components/twon_intercom/
+custom_components/2n_intercom/
 ├── __init__.py              Main integration setup
 ├── config_flow.py           Configuration UI with door type selection
 ├── const.py                 Constants (DOOR_TYPE_DOOR, DOOR_TYPE_GATE)
@@ -122,7 +122,7 @@ Languages Supported:  2 (Czech, English)
 ═══════════════════════════════════════════════════════════════════════════
 
 1. Installation:
-   Copy custom_components/twon_intercom/ to Home Assistant config
+   Copy custom_components/2n_intercom/ to Home Assistant config
 
 2. Setup:
    Settings → Devices & Services → Add Integration → "2N Intercom"
@@ -173,6 +173,6 @@ For Gates:
 Created by: GitHub Copilot Agent
 Date: February 12, 2026
 Version: 1.0.0
-Domain: twon_intercom
+Domain: 2n_intercom
 
 ═══════════════════════════════════════════════════════════════════════════

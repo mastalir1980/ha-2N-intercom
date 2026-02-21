@@ -33,37 +33,37 @@ The door type selection propagates to HomeKit:
 ## Files Created
 
 ### Core Integration Files
-1. **custom_components/twon_intercom/__init__.py**
+1. **custom_components/2n_intercom/__init__.py**
    - Main integration setup
    - Platform loading
    - Options update listener
 
-2. **custom_components/twon_intercom/manifest.json**
+2. **custom_components/2n_intercom/manifest.json**
    - Integration metadata
    - HomeKit support declaration
 
-3. **custom_components/twon_intercom/const.py**
+3. **custom_components/2n_intercom/const.py**
    - Constants and configuration keys
    - Door type definitions
 
-4. **custom_components/twon_intercom/config_flow.py**
+4. **custom_components/2n_intercom/config_flow.py**
    - Configuration UI flow
    - Door type selection
    - Options flow for updates
 
-5. **custom_components/twon_intercom/lock.py**
+5. **custom_components/2n_intercom/lock.py**
    - Lock entity implementation
    - HomeKit device class mapping
    - Lock/unlock/open functionality
 
 ### Localization Files
-6. **custom_components/twon_intercom/strings.json**
+6. **custom_components/2n_intercom/strings.json**
    - Default UI strings
 
-7. **custom_components/twon_intercom/translations/en.json**
+7. **custom_components/2n_intercom/translations/en.json**
    - English translations
 
-8. **custom_components/twon_intercom/translations/cs.json**
+8. **custom_components/2n_intercom/translations/cs.json**
    - Czech translations
 
 ### Documentation Files
@@ -158,7 +158,7 @@ To test this implementation in a real Home Assistant environment:
 
 1. **Install the integration**
    ```bash
-   cp -r custom_components/twon_intercom /config/custom_components/
+   cp -r custom_components/2n_intercom /config/custom_components/
    ```
 
 2. **Restart Home Assistant**

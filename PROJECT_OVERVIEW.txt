@@ -141,7 +141,7 @@ Testing Guide: See TESTING_GUIDE.md for complete procedures
                               FILE STRUCTURE
 ═══════════════════════════════════════════════════════════════════════════
 
-custom_components/twon_intercom/
+custom_components/2n_intercom/
 ├── __init__.py              Integration setup (96 lines)
 ├── api.py                   2N API client (228 lines)
 ├── coordinator.py           DataUpdateCoordinator (117 lines)

@@ -168,7 +168,7 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self._async_create_entry()
 
         await self._ensure_integration_info()
-        default_name = self._integration_name or "2N Intercom [CAM]"
+        default_name = self._integration_name or "2N Intercom"
 
         data_schema = vol.Schema(
             {
@@ -403,7 +403,7 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
             {
                 vol.Required(
                     "name",
-                    default=current_data.get("name", "2N Intercom [CAM]"),
+                    default=current_data.get("name", "2N Intercom"),
                 ): cv.string,
                 vol.Required(
                     CONF_ENABLE_CAMERA,

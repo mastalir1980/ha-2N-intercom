@@ -16,7 +16,7 @@ from pathlib import Path
 
 # Base directory
 BASE_DIR = Path(__file__).parent
-COMPONENT_DIR = BASE_DIR / "custom_components" / "twon_intercom"
+COMPONENT_DIR = BASE_DIR / "custom_components" / "2n_intercom"
 
 def check_file_exists(filepath: Path, description: str) -> bool:
     """Check if a file exists."""

@@ -11,7 +11,7 @@ This document outlines the complete architecture for a Home Assistant custom int
 │                     Home Assistant Core                          │
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐ │
-│  │           2N Intercom Integration (twon_intercom)          │ │
+│  │           2N Intercom Integration (2n_intercom)          │ │
 │  │                                                            │ │
 │  │  ┌──────────────┐  ┌───────────────┐  ┌───────────────┐  │ │
 │  │  │ Config Flow  │  │  Coordinator  │  │   API Client  │  │ │
@@ -66,7 +66,7 @@ This document outlines the complete architecture for a Home Assistant custom int
 ### 1. File Structure
 
 ```
-custom_components/twon_intercom/
+custom_components/2n_intercom/
 ├── __init__.py              # Integration setup, coordinator initialization
 ├── manifest.json            # Integration metadata, dependencies
 ├── const.py                 # Constants, configuration keys
@@ -344,7 +344,7 @@ All entities share common device info:
 
 ```python
 # Domain
-DOMAIN = "twon_intercom"
+DOMAIN = "2n_intercom"
 
 # Configuration keys
 CONF_PROTOCOL = "protocol"  # "http" or "https"
