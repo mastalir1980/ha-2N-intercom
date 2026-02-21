@@ -13,12 +13,12 @@
           "verify_ssl": "Ověřit SSL certifikát"
         },
         "data_description": {
-          "host": "IP adresa nebo hostname zařízení",
-          "port": "HTTP/HTTPS port zařízení",
-          "protocol": "Použijte HTTP nebo HTTPS",
-          "username": "Přihlašovací jméno zařízení",
+          "host": "IP adresa nebo hostname zařízení (např. 192.168.1.100)",
+          "port": "HTTP/HTTPS port zařízení (ponechte výchozí, pokud jste nic neměnili)",
+          "protocol": "Použijte HTTP nebo HTTPS podle nastavení zařízení",
+          "username": "Přihlašovací jméno zařízení pro API",
           "password": "Přihlašovací heslo zařízení",
-          "verify_ssl": "Zapněte jen pokud je HTTPS certifikát důvěryhodný"
+          "verify_ssl": "Zapněte jen pokud Home Assistant důvěřuje HTTPS certifikátu"
         }
       },
       "device": {
@@ -33,10 +33,10 @@
         },
         "data_description": {
           "name": "Zobrazený název v Home Assistant",
-          "enable_camera": "Vytvoří entitu kamery",
-          "enable_doorbell": "Vytvoří entitu zvonku",
-          "relay_count": "Kolik relé chcete nastavit",
-          "called_id": "Vyberte účet, na který se zvoní. Prázdné = všechny hovory."
+          "enable_camera": "Vytvoří entitu kamery pro snímky i stream",
+          "enable_doorbell": "Vytvoří entitu zvonku pro detekci zvonění",
+          "relay_count": "Kolik relé chcete nastavit (0-4)",
+          "called_id": "Vyberte účet, na který se zvoní. Všechny hovory = zvonění pro všechna tlačítka."
         }
       },
       "relay": {
@@ -50,9 +50,9 @@
         },
         "data_description": {
           "relay_name": "Zobrazený název relé",
-          "relay_number": "Fyzické číslo relé na zařízení",
+          "relay_number": "Fyzické číslo relé na zařízení (1-4)",
           "relay_device_type": "Dveře vytvoří spínač, vrata vytvoří kryt",
-          "relay_pulse_duration": "Jak dlouho se relé sepne"
+          "relay_pulse_duration": "Jak dlouho se relé sepne (ms)"
         }
       }
     },
@@ -68,6 +68,40 @@
           "door_type": "Typ dveří (starší)",
           "enable_camera": "Povolit kameru",
           "enable_doorbell": "Povolit zvonek"
+        }
+      },
+      "user": {
+        "title": "Možnosti 2N Intercom - Připojení",
+        "description": "Upravte nastavení připojení",
+        "data_description": {
+          "host": "IP adresa nebo hostname zařízení",
+          "port": "HTTP/HTTPS port zařízení",
+          "protocol": "Použijte HTTP nebo HTTPS podle nastavení zařízení",
+          "username": "Přihlašovací jméno zařízení pro API",
+          "password": "Přihlašovací heslo zařízení",
+          "verify_ssl": "Zapněte jen pokud Home Assistant důvěřuje HTTPS certifikátu"
+        }
+      },
+      "device": {
+        "title": "Možnosti 2N Intercom - Zařízení",
+        "description": "Upravte funkce zařízení",
+        "data_description": {
+          "name": "Zobrazený název v Home Assistant",
+          "enable_camera": "Vytvoří entitu kamery",
+          "enable_doorbell": "Vytvoří entitu zvonku",
+          "relay_count": "Kolik relé chcete nastavit (0-4)",
+          "door_type": "Legacy typ zámku (dveře nebo vrata)",
+          "called_id": "Vyberte účet, na který se zvoní. Všechny hovory = zvonění pro všechna tlačítka."
+        }
+      },
+      "relay": {
+        "title": "Možnosti 2N Intercom - Relé {relay_number}",
+        "description": "Upravte relé {relay_number}",
+        "data_description": {
+          "relay_name": "Zobrazený název relé",
+          "relay_number": "Fyzické číslo relé na zařízení (1-4)",
+          "relay_device_type": "Dveře vytvoří spínač, vrata vytvoří kryt",
+          "relay_pulse_duration": "Jak dlouho se relé sepne (ms)"
         }
       }
     }
