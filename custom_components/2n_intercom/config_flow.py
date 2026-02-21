@@ -395,7 +395,7 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
         errors = {}
         current_data = self._merged_data()
 
-        peers = await self._async_get_called_peers(self._data or current_data)
+        peers = await self._async_get_called_peers(current_data)
         called_choices = [""] + peers if peers else []
         default_called = current_data.get(CONF_CALLED_ID, "")
 
