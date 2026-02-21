@@ -10,6 +10,7 @@ CONF_ENABLE_DOORBELL = "enable_doorbell"
 CONF_RELAY_COUNT = "relay_count"
 CONF_RELAYS = "relays"
 CONF_DOOR_TYPE = "door_type"
+CONF_CALLED_ID = "called_id"
 
 # Relay configuration keys
 CONF_RELAY_NAME = "relay_name"

@@ -20,7 +20,8 @@
           "name": "Název",
           "enable_camera": "Povolit kameru",
           "enable_doorbell": "Povolit zvonek",
-          "relay_count": "Počet relé"
+          "relay_count": "Počet relé",
+          "called_id": "Volaný účet (peer)"
         }
       },
       "relay": {

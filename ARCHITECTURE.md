@@ -10,12 +10,12 @@ This document outlines the complete architecture for a Home Assistant custom int
 ┌──────────────────────────────────────────────────────────────────┐
 │                     Home Assistant Core                          │
 │                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │           2N Intercom Integration (2n_intercom)          │ │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │           2N Intercom Integration (2n_intercom)            │ │
 │  │                                                            │ │
-│  │  ┌──────────────┐  ┌───────────────┐  ┌───────────────┐  │ │
-│  │  │ Config Flow  │  │  Coordinator  │  │   API Client  │  │ │
-│  │  │              │  │               │  │               │  │ │
+│  │  ┌──────────────┐  ┌───────────────┐  ┌───────────────┐    │ │
+│  │  │ Config Flow  │  │  Coordinator  │  │   API Client  │    │ │
+│  │  │              │  │               │  │               │    │ │
 │  │  │ - Setup UI   │  │ - Polling     │  │ - HTTP API    │  │ │
 │  │  │ - Validation │  │ - Updates     │  │ - RTSP URLs   │  │ │
 │  │  │ - Options    │  │ - Error       │  │ - Auth        │  │ │

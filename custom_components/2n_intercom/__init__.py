@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 
 from .api import TwoNIntercomAPI
 from .const import (
+    CONF_CALLED_ID,
     CONF_ENABLE_CAMERA,
     CONF_ENABLE_DOORBELL,
     CONF_PROTOCOL,
@@ -74,7 +75,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     
     # Create coordinator
-    coordinator = TwoNIntercomCoordinator(hass, api)
+    coordinator = TwoNIntercomCoordinator(
+        hass,
+        api,
+        called_id=data.get(CONF_CALLED_ID),
+    )
     
     # Fetch initial data
     await coordinator.async_config_entry_first_refresh()

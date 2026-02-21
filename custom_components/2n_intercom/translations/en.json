@@ -20,7 +20,8 @@
           "name": "Name",
           "enable_camera": "Enable Camera",
           "enable_doorbell": "Enable Doorbell",
-          "relay_count": "Number of Relays"
+          "relay_count": "Number of Relays",
+          "called_id": "Ringing account (peer)"
         }
       },
       "relay": {

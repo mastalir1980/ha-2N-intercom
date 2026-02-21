@@ -96,6 +96,7 @@ For detailed architecture information, see [ARCHITECTURE.md](ARCHITECTURE.md).
    - Enable Camera: Enable camera platform
    - Enable Doorbell: Enable doorbell binary sensor
    - Number of Relays: Select 0-4 relays to configure
+  - Ringing account (peer): Optional filter for multi-button setups
 
 3. **Relay Configuration** (for each relay)
    - Relay Name: Display name (e.g., "Front Door", "Garden Gate")

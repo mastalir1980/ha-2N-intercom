@@ -16,6 +16,7 @@ import homeassistant.helpers.config_validation as cv
 
 from .api import TwoNIntercomAPI
 from .const import (
+    CONF_CALLED_ID,
     CONF_DOOR_TYPE,
     CONF_ENABLE_CAMERA,
     CONF_ENABLE_DOORBELL,
@@ -169,6 +170,15 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         await self._ensure_integration_info()
         default_name = self._integration_name or "2N Intercom"
+        peers = await self._async_get_called_peers(self._data)
+        called_choices = [""] + peers if peers else []
+        default_called = self._data.get(CONF_CALLED_ID, "")
+
+        called_field = (
+            vol.In(called_choices)
+            if called_choices
+            else cv.string
+        )
 
         data_schema = vol.Schema(
             {
@@ -182,6 +192,9 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(
                     CONF_RELAY_COUNT, default=DEFAULT_RELAY_COUNT
                 ): vol.In([0, 1, 2, 3, 4]),
+                vol.Optional(
+                    CONF_CALLED_ID, default=default_called
+                ): called_field,
             }
         )
 
@@ -382,6 +395,16 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
         errors = {}
         current_data = self._merged_data()
 
+        peers = await self._async_get_called_peers(self._data or current_data)
+        called_choices = [""] + peers if peers else []
+        default_called = current_data.get(CONF_CALLED_ID, "")
+
+        called_field = (
+            vol.In(called_choices)
+            if called_choices
+            else cv.string
+        )
+
         relays = current_data.get(CONF_RELAYS, [])
         derived_door_type = DOOR_TYPE_GATE if any(
             relay.get(CONF_RELAY_DEVICE_TYPE) == DEVICE_TYPE_GATE
@@ -423,6 +446,10 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
                     CONF_DOOR_TYPE,
                     default=current_data.get(CONF_DOOR_TYPE, derived_door_type),
                 ): vol.In(DOOR_TYPES),
+                vol.Optional(
+                    CONF_CALLED_ID,
+                    default=default_called,
+                ): called_field,
             }
         )
 
@@ -496,3 +523,33 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
     async def _async_create_entry(self) -> FlowResult:
         """Create the options entry."""
         return self.async_create_entry(title="", data=self._data)
+
+    async def _async_get_called_peers(self, data: dict[str, Any]) -> list[str]:
+        """Return list of called peers from directory."""
+        try:
+            api = TwoNIntercomAPI(
+                host=data[CONF_HOST],
+                port=data.get(CONF_PORT, DEFAULT_PORT_HTTPS),
+                username=data.get(CONF_USERNAME, ""),
+                password=data.get(CONF_PASSWORD, ""),
+                protocol=data.get(CONF_PROTOCOL, DEFAULT_PROTOCOL),
+                verify_ssl=data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+            )
+            directory = await api.async_get_directory()
+            await api.async_close()
+
+            if isinstance(directory, dict):
+                users = directory.get("users", [])
+            else:
+                users = []
+
+            peers: list[str] = []
+            for user in users:
+                for call_pos in user.get("callPos", []) or []:
+                    peer = call_pos.get("peer")
+                    if peer and peer not in peers:
+                        peers.append(peer)
+
+            return peers
+        except Exception:  # pylint: disable=broad-except
+            return []

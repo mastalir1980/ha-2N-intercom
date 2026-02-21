@@ -44,6 +44,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
         hass: HomeAssistant,
         api: TwoNIntercomAPI,
         scan_interval: int = DEFAULT_SCAN_INTERVAL,
+        called_id: str | None = None,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -64,6 +65,27 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
         self._snapshot_cache_time: datetime | None = None
         self._snapshot_cache_size: tuple[int | None, int | None] | None = None
         self._system_info: dict[str, Any] | None = None
+        self._ring_filter_peer = self._normalize_peer(called_id)
+        self._last_called_peer: str | None = None
+
+    @staticmethod
+    def _normalize_peer(peer: str | None) -> str | None:
+        if not peer:
+            return None
+        normalized = peer.replace("sip:", "")
+        if "@" in normalized:
+            normalized = normalized.split("@", 1)[0]
+        return normalized.strip() or None
+
+    @staticmethod
+    def _extract_called_peer(call_status: dict[str, Any]) -> str | None:
+        sessions = call_status.get("sessions") or []
+        if not sessions:
+            return None
+        calls = sessions[0].get("calls") or []
+        if not calls:
+            return None
+        return calls[0].get("peer")
 
     async def _async_update_data(self) -> TwoNIntercomData:
         """Fetch data from API."""
@@ -84,12 +106,24 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
             # Detect ring events
             current_state = call_status.get("state", "idle")
             previous_state = self._last_call_state.get("state", "idle")
+            called_peer_raw = self._extract_called_peer(call_status)
+            self._last_called_peer = self._normalize_peer(called_peer_raw)
+            ring_allowed = (
+                self._ring_filter_peer is None
+                or self._last_called_peer == self._ring_filter_peer
+            )
             
             # Ring detection: state changes to "ringing"
-            if current_state == "ringing" and previous_state != "ringing":
+            if (
+                current_state == "ringing"
+                and previous_state != "ringing"
+                and ring_allowed
+            ):
                 self._ring_detected = True
                 self._last_ring_time = datetime.now()
                 _LOGGER.info("Doorbell ring detected")
+            elif current_state == "ringing" and not ring_allowed:
+                self._ring_detected = False
             elif current_state != "ringing":
                 # Reset ring detection when call ends or timeout (30 seconds)
                 if self._ring_detected and (
@@ -174,6 +208,11 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
         if self.data and self.data.caller_info:
             return self.data.caller_info
         return {}
+
+    @property
+    def called_peer(self) -> str | None:
+        """Return the last called peer from call status."""
+        return self._last_called_peer
 
     @property
     def system_info(self) -> dict[str, Any]:

@@ -83,6 +83,9 @@ class TwoNIntercomDoorbell(CoordinatorEntity[TwoNIntercomCoordinator], BinarySen
         
         if self.coordinator.last_ring_time:
             attributes["last_ring"] = self.coordinator.last_ring_time.isoformat()
+
+        if self.coordinator.called_peer:
+            attributes["called_peer"] = self.coordinator.called_peer
         
         caller_info = self.coordinator.caller_info
         if caller_info:

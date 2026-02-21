@@ -117,6 +117,11 @@ The integration will reload with the new configuration, and the HomeKit accessor
 
 ## Advanced Configuration
 
+### Ringing Account Filter
+
+If you have multiple buttons, you can limit doorbell events to a single
+account by selecting **Ringing account (peer)** in options.
+
 ### Multiple Doors/Gates
 
 You can add multiple instances of the integration for different doors:
