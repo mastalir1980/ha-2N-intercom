@@ -1,6 +1,5 @@
 {
   "name": "2N Intercom",
-  "domains": ["2n_intercom"],
   "render_readme": true,
   "homeassistant": "2025.0.0"
 }
