@@ -109,7 +109,7 @@ class TwoNIntercomAPI:
             url = f"{self._base_url}/api/dir/query"
             
             async with async_timeout.timeout(API_TIMEOUT):
-                async with session.get(
+                async with session.post(
                     url,
                     auth=self._get_auth(),
                 ) as response:
