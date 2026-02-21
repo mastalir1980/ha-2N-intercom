@@ -538,6 +538,13 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
             directory = await api.async_get_directory()
             await api.async_close()
 
+            if isinstance(directory, dict) and "error" in directory:
+                _LOGGER.debug(
+                    "dir/query error host=%s error=%s",
+                    data.get(CONF_HOST),
+                    directory.get("error"),
+                )
+
             users: list[dict[str, Any]] = []
             if isinstance(directory, list):
                 for entry in directory:

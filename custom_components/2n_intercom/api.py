@@ -124,6 +124,10 @@ class TwoNIntercomAPI:
                     
             # Parse directory data
             # Expected format: {"success": true, "result": {...}} or list
+            if isinstance(data, dict) and data.get("success") is False:
+                _LOGGER.debug("Directory error response=%s", data.get("error"))
+                return data
+
             if isinstance(data, dict) and "result" in data:
                 result = data.get("result")
                 _LOGGER.debug("Directory response full=%s", data)
