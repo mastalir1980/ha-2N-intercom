@@ -123,9 +123,32 @@ class TwoNIntercomAPI:
                     data = await response.json()
                     
             # Parse directory data
-            # Expected format: {"success": true, "result": [...]}
+            # Expected format: {"success": true, "result": {...}} or list
             if isinstance(data, dict) and "result" in data:
-                return data["result"]
+                result = data.get("result")
+                if isinstance(result, dict):
+                    users = result.get("users") or []
+                    _LOGGER.debug(
+                        "Directory result dict users=%s keys=%s",
+                        len(users),
+                        list(result.keys()),
+                    )
+                elif isinstance(result, list):
+                    _LOGGER.debug(
+                        "Directory result list length=%s",
+                        len(result),
+                    )
+                else:
+                    _LOGGER.debug(
+                        "Directory result type=%s",
+                        type(result).__name__,
+                    )
+                return result or []
+
+            _LOGGER.debug(
+                "Directory response type=%s",
+                type(data).__name__,
+            )
             return []
             
         except TwoNAuthenticationError:
