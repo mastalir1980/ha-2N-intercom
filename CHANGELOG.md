@@ -9,3 +9,5 @@
 - Cover platform for gate relays
 - Multi-step config flow and options flow
 - HomeKit bridge support
+- Ringing account filter based on directory peers
+- Gate/door lock type inferred from relay configuration
