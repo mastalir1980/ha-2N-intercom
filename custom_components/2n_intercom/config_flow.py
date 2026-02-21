@@ -17,6 +17,7 @@ import homeassistant.helpers.config_validation as cv
 
 from .api import TwoNIntercomAPI
 from .const import (
+    CALLED_ID_ALL,
     CONF_CALLED_ID,
     CONF_DOOR_TYPE,
     CONF_ENABLE_CAMERA,
@@ -181,10 +182,10 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         called_options = [
             {
                 "label": _all_calls_label(self.hass.config.language),
-                "value": "",
+                "value": CALLED_ID_ALL,
             }
         ] + [{"label": peer, "value": peer} for peer in peers]
-        default_called = self._data.get(CONF_CALLED_ID, "")
+        default_called = self._data.get(CONF_CALLED_ID) or CALLED_ID_ALL
 
         called_field = selector.SelectSelector(
             selector.SelectSelectorConfig(
@@ -413,10 +414,10 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
         called_options = [
             {
                 "label": _all_calls_label(self.hass.config.language),
-                "value": "",
+                "value": CALLED_ID_ALL,
             }
         ] + [{"label": peer, "value": peer} for peer in peers]
-        default_called = current_data.get(CONF_CALLED_ID, "")
+        default_called = current_data.get(CONF_CALLED_ID) or CALLED_ID_ALL
 
         called_field = selector.SelectSelector(
             selector.SelectSelectorConfig(

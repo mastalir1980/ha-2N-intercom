@@ -14,7 +14,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .api import TwoNIntercomAPI, TwoNAuthenticationError, TwoNConnectionError
-from .const import DOMAIN, DEFAULT_SCAN_INTERVAL
+from .const import CALLED_ID_ALL, DOMAIN, DEFAULT_SCAN_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
 
     @staticmethod
     def _normalize_peer(peer: str | None) -> str | None:
-        if not peer:
+        if not peer or peer == CALLED_ID_ALL:
             return None
         normalized = peer.replace("sip:", "")
         if "@" in normalized:

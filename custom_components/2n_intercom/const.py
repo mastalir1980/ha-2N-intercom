@@ -11,6 +11,7 @@ CONF_RELAY_COUNT = "relay_count"
 CONF_RELAYS = "relays"
 CONF_DOOR_TYPE = "door_type"
 CONF_CALLED_ID = "called_id"
+CALLED_ID_ALL = "__all__"
 
 # Relay configuration keys
 CONF_RELAY_NAME = "relay_name"
