@@ -550,6 +550,17 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):
                     if peer and peer not in peers:
                         peers.append(peer)
 
+            _LOGGER.debug(
+                "Loaded called peers from dir/query host=%s count=%s peers=%s",
+                data.get(CONF_HOST),
+                len(peers),
+                peers,
+            )
+
             return peers
         except Exception:  # pylint: disable=broad-except
+            _LOGGER.exception(
+                "Failed to load called peers from dir/query host=%s",
+                data.get(CONF_HOST),
+            )
             return []
