@@ -126,6 +126,7 @@ class TwoNIntercomAPI:
             # Expected format: {"success": true, "result": {...}} or list
             if isinstance(data, dict) and "result" in data:
                 result = data.get("result")
+                _LOGGER.debug("Directory response full=%s", data)
                 if isinstance(result, dict):
                     users = result.get("users") or []
                     _LOGGER.debug(
@@ -147,6 +148,7 @@ class TwoNIntercomAPI:
 
             if isinstance(data, dict) and "users" in data:
                 users = data.get("users") or []
+                _LOGGER.debug("Directory response full=%s", data)
                 _LOGGER.debug(
                     "Directory dict users=%s keys=%s",
                     len(users),
