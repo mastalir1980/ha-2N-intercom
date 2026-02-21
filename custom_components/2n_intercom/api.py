@@ -111,7 +111,9 @@ class TwoNIntercomAPI:
             async with async_timeout.timeout(API_TIMEOUT):
                 async with session.post(
                     url,
+                    data={},
                     auth=self._get_auth(),
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
                 ) as response:
                     # Check for authentication errors
                     if response.status == 401:
