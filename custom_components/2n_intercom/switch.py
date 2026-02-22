@@ -36,7 +36,7 @@ async def async_setup_entry(
         "coordinator"
     ]
     
-    relays = config_entry.data.get(CONF_RELAYS, [])
+    relays = {**config_entry.data, **config_entry.options}.get(CONF_RELAYS, [])
     
     # Create switch entities for door-type relays
     switches = []
