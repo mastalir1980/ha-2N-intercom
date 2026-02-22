@@ -340,6 +340,6 @@ This implementation provides a production-ready, feature-complete integration fo
 ---
 
 *Implementation Date:* February 19, 2026  
-*Version:* 1.0.0  
+*Version:* 1.0.1  
 *Author:* GitHub Copilot Agent  
 *Repository:* mastalir1980/ha-2N-intercom

@@ -5,7 +5,7 @@
 PROJECT: Complete redesign and implementation of 2N IP Intercom integration
 REPOSITORY: mastalir1980/ha-2N-intercom
 BRANCH: copilot/design-home-assistant-custom-integration
-VERSION: 1.0.0
+VERSION: 1.0.1
 DATE COMPLETED: February 19, 2026
 STATUS: ✅ READY FOR PHYSICAL DEVICE TESTING
 

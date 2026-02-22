@@ -172,7 +172,7 @@ For Gates:
 
 Created by: GitHub Copilot Agent
 Date: February 12, 2026
-Version: 1.0.0
+Version: 1.0.1
 Domain: 2n_intercom
 
 ═══════════════════════════════════════════════════════════════════════════

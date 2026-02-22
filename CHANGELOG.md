@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1 - 2026-02-22
+
+- Do not expose lock entity when relays are configured
+- Read relay configuration from options for switch/cover entities
+
 ## 1.0.0 - 2026-02-20
 
 - Initial public release

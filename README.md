@@ -309,7 +309,11 @@ Contributions are welcome! Please:
 
 ## Version History
 
-### 1.0.0 (Current)
+### 1.0.1 (Current)
+- Fix HomeKit entity exposure when relays are configured
+- Ensure relay entities load from options
+
+### 1.0.0
 - Initial public release
 - Camera platform with RTSP streaming
 - Doorbell binary sensor
