@@ -51,9 +51,9 @@ def _get_platforms(entry: ConfigEntry) -> list[str]:
         platforms.append("switch")
         # Add cover for gate relays
         platforms.append("cover")
-    
-    # Always include lock for backward compatibility
-    platforms.append("lock")
+    else:
+        # Legacy behavior: expose a single lock entity when no relays exist
+        platforms.append("lock")
     
     return platforms
 
