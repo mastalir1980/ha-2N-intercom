@@ -41,7 +41,7 @@ class TwoNIntercomDoorbell(CoordinatorEntity[TwoNIntercomCoordinator], BinarySen
 
     _attr_has_entity_name = True
     _attr_name = "Doorbell"
-    _attr_device_class = BinarySensorDeviceClass.OCCUPANCY  # Fallback for older HA versions
+    _attr_device_class = BinarySensorDeviceClass.OCCUPANCY  # Default, overridden in __init__
 
     def __init__(
         self,
@@ -54,13 +54,13 @@ class TwoNIntercomDoorbell(CoordinatorEntity[TwoNIntercomCoordinator], BinarySen
         self._config_entry = config_entry
         self._attr_unique_id = f"{config_entry.entry_id}_doorbell"
         
-        # Set device class to doorbell if available in HA version
-        # This enables proper HomeKit doorbell integration
-        try:
-            self._attr_device_class = BinarySensorDeviceClass.DOORBELL
-        except AttributeError:
-            # Fallback for older HA versions
-            self._attr_device_class = BinarySensorDeviceClass.OCCUPANCY
+        # Prefer doorbell device class for HomeKit integration.
+        # If the enum is missing (older HA), fall back to raw string.
+        self._attr_device_class = getattr(
+            BinarySensorDeviceClass,
+            "DOORBELL",
+            "doorbell",
+        )
 
     @property
     def device_info(self) -> dict[str, Any]:
