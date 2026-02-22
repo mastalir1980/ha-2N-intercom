@@ -99,11 +99,11 @@ class TwoNIntercomDoorbell(CoordinatorEntity[TwoNIntercomCoordinator], BinarySen
         # Add call status info if available
         if self.coordinator.data:
             call_status = self.coordinator.data.call_status
-            if call_status:
-                if "state" in call_status:
-                    attributes["call_state"] = call_status["state"]
-                if "direction" in call_status:
-                    attributes["call_direction"] = call_status["direction"]
+            call_state = self.coordinator.call_state
+            if call_state:
+                attributes["call_state"] = call_state
+            if call_status and "direction" in call_status:
+                attributes["call_direction"] = call_status["direction"]
         
         return attributes
 
