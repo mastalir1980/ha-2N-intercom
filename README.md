@@ -186,12 +186,29 @@ Result:
 
 1. Ensure Home Assistant HomeKit Bridge is configured
 2. Add the 2N Intercom integration
-3. Entities will automatically appear in HomeKit
+3. Link the doorbell sensor to the camera (YAML only)
+
+```yaml
+homekit:
+  - name: 2N Intercom Doorbell
+    port: 21065
+    filter:
+      include_entities:
+        - camera.2n_intercom_camera
+    entity_config:
+      camera.2n_intercom_camera:
+        linked_doorbell_sensor: binary_sensor.2n_intercom_doorbell
+```
+
+Notes:
+- Do not include `binary_sensor.*_doorbell` in the filter.
+- Do not include the camera or doorbell in any other HomeKit bridge.
+- After YAML change, restart HA and re-add the HomeKit bridge in the Home app.
 
 ### Accessory Types
 
 - **Camera** → Video Doorbell (if doorbell enabled)
-- **Binary Sensor** → Doorbell service
+- **Binary Sensor** → Linked to camera via `linked_doorbell_sensor`
 - **Switch (Door)** → Switch or Lock accessory
 - **Cover (Gate)** → Garage Door Opener accessory
 
@@ -257,6 +274,12 @@ Result:
 5. Check Home Assistant logs for API errors
 
 ### HomeKit Not Showing Entities
+
+**Doorbell appears as occupancy sensor:**
+1. Remove `binary_sensor.*_doorbell` from HomeKit filter.
+2. Link doorbell to camera via `linked_doorbell_sensor` (see setup above).
+3. Ensure the camera and doorbell are not present in any other HomeKit bridge.
+4. Restart Home Assistant and re-add the HomeKit bridge in the Home app.
 
 **Symptoms:** Entities visible in HA but not in Home app
 

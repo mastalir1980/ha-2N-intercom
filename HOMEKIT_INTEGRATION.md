@@ -8,6 +8,33 @@ This integration allows users to select between two door types:
 
 The selection made by the user is automatically propagated to the HomeKit bridge, ensuring the correct accessory type is exposed in HomeKit.
 
+## Doorbell in HomeKit (Important)
+
+HomeKit shows the doorbell **on the camera accessory**, not as a standalone binary sensor.
+To get the doorbell tile and notifications in the Home app, you must link the
+doorbell binary sensor to the camera in the HomeKit bridge configuration.
+
+**Required setup (YAML only):**
+
+```yaml
+homekit:
+  - name: 2N Intercom Doorbell
+    port: 21065
+    filter:
+      include_entities:
+        - camera.2n_intercom_camera
+    entity_config:
+      camera.2n_intercom_camera:
+        linked_doorbell_sensor: binary_sensor.2n_intercom_doorbell
+```
+
+**Rules that must be followed:**
+- Do not add the `binary_sensor.*_doorbell` to the HomeKit filter.
+- Do not include the camera or doorbell in any other HomeKit bridge.
+- HomeKit bridge configuration is YAML-only; it cannot be set from UI.
+
+After changing YAML, restart Home Assistant and re-add the HomeKit bridge in the Home app.
+
 ## How It Works
 
 ### 1. Configuration Flow
