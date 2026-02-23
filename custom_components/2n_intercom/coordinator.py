@@ -24,6 +24,8 @@ MAX_RETRIES = 5
 MAX_BACKOFF_DELAY = 60
 # Snapshot cache duration (seconds)
 SNAPSHOT_CACHE_DURATION = 1
+# Doorbell pulse duration (seconds)
+DOORBELL_PULSE_DURATION = 1
 
 
 @dataclass
@@ -70,6 +72,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
         self._ring_filter_peer = self._normalize_peer(called_id)
         self._last_called_peer: str | None = None
         self._last_call_state_value: str = "idle"
+        self._ring_pulse_until: datetime | None = None
 
     @staticmethod
     def _normalize_peer(peer: str | None) -> str | None:
@@ -145,16 +148,18 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
                 if not was_ringing or not self._ring_detected:
                     self._ring_detected = True
                     self._last_ring_time = datetime.now()
+                    self._ring_pulse_until = (
+                        self._last_ring_time
+                        + timedelta(seconds=DOORBELL_PULSE_DURATION)
+                    )
                     _LOGGER.info("Doorbell ring detected")
             elif is_ringing and not ring_allowed:
                 self._ring_detected = False
             elif not is_ringing:
-                # Reset ring detection when call ends or timeout (30 seconds)
-                if self._ring_detected and (
-                    self._last_ring_time is None
-                    or (datetime.now() - self._last_ring_time).total_seconds() > 30
-                ):
+                # Reset ring detection when call ends
+                if self._ring_detected:
                     self._ring_detected = False
+                    self._ring_pulse_until = None
             
             self._last_call_state = call_status
             self._last_call_state_value = current_state
@@ -216,8 +221,11 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):
     def ring_active(self) -> bool:
         """Return if doorbell is currently ringing."""
         if self.data:
-            # Ring is active if state is ringing or within timeout period
-            return self._ring_detected
+            if not self._ring_detected:
+                return False
+            if self._ring_pulse_until is None:
+                return False
+            return datetime.now() <= self._ring_pulse_until
         return False
 
     @property
