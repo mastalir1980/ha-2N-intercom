@@ -192,7 +192,7 @@
       "message": "Failed to hang up call session(s) {sessions}."
     },
     "invalid_hangup_reason": {
-      "message": "Invalid hangup reason '{reason}'. Valid values: {valid}."
+      "message": "Invalid hangup reason \"{reason}\". Valid values: {valid}."
     }
   },
   "services": {

@@ -188,7 +188,7 @@
       "message": "Anrufsitzung(en) {sessions} konnten nicht beendet werden."
     },
     "invalid_hangup_reason": {
-      "message": "Ungültiger Auflegegrund '{reason}'. Gültige Werte: {valid}."
+      "message": "Ungültiger Auflegegrund \"{reason}\". Gültige Werte: {valid}."
     }
   },
   "services": {

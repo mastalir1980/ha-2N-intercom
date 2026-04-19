@@ -14,6 +14,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import Event, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.typing import ConfigType
 
@@ -46,6 +47,8 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 _VALID_HANGUP_REASONS = {"normal", "rejected", "busy"}
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 def _get_option(entry: TwoNIntercomConfigEntry | ConfigEntry, key: str, default: object = None) -> object:

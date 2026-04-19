@@ -188,7 +188,7 @@
       "message": "Nepodařilo se zavěsit relaci hovoru {sessions}."
     },
     "invalid_hangup_reason": {
-      "message": "Neplatný důvod zavěšení '{reason}'. Platné hodnoty: {valid}."
+      "message": "Neplatný důvod zavěšení \"{reason}\". Platné hodnoty: {valid}."
     }
   },
   "services": {

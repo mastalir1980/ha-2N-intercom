@@ -98,6 +98,16 @@ def _install_homeassistant_stubs() -> None:
     helpers_typing.ConfigType = dict
     sys.modules["homeassistant.helpers.typing"] = helpers_typing
 
+    config_validation = types.ModuleType("homeassistant.helpers.config_validation")
+
+    def config_entry_only_config_schema(domain):
+        def _validator(value):
+            return value
+        return _validator
+
+    config_validation.config_entry_only_config_schema = config_entry_only_config_schema
+    sys.modules["homeassistant.helpers.config_validation"] = config_validation
+
 
 def load_init_module():
     install_api_stubs()
