@@ -1142,6 +1142,8 @@ class AsyncUpdateDataErrorTests(unittest.IsolatedAsyncioTestCase):
         """Return an API with all secondary methods."""
 
         class FullAPI:
+            reset_session_calls = 0
+
             async def async_get_system_info(self):
                 return {"model": "2N"}
 
@@ -1163,9 +1165,18 @@ class AsyncUpdateDataErrorTests(unittest.IsolatedAsyncioTestCase):
             async def async_get_io_status(self):
                 return {}
 
+            async def async_reset_session(self):
+                FullAPI.reset_session_calls += 1
+
         return FullAPI()
 
-    async def test_auth_error_raises_config_entry_auth_failed(self) -> None:
+    async def test_single_auth_error_raises_update_failed(self) -> None:
+        """A single transient 401 must NOT trip the reauth flow.
+
+        It must also reset the HTTP session so the next poll rebuilds the
+        DigestAuthMiddleware from scratch (deterministic recovery from a
+        stale nonce, rather than relying on the middleware to renegotiate).
+        """
         api_module = sys.modules["custom_components.2n_intercom.api"]
         api = self._base_api()
         api.async_get_call_status = lambda self=None: (_ for _ in ()).throw(
@@ -1175,10 +1186,58 @@ class AsyncUpdateDataErrorTests(unittest.IsolatedAsyncioTestCase):
         hass = types.SimpleNamespace()
         c = self.coordinator_module.TwoNIntercomCoordinator(hass, api)
 
+        with self.assertRaises(self.UpdateFailed) as ctx:
+            await c._async_update_data()
+        self.assertIn("Authentication error", str(ctx.exception))
+        self.assertEqual(c._auth_error_count, 1)
+        self.assertEqual(type(api).reset_session_calls, 1)
+
+    async def test_consecutive_auth_errors_raise_config_entry_auth_failed(self) -> None:
+        """After NUM_AUTH_ERRORS consecutive 401s, the reauth flow triggers."""
+        api_module = sys.modules["custom_components.2n_intercom.api"]
+        api = self._base_api()
+        api.async_get_call_status = lambda self=None: (_ for _ in ()).throw(
+            api_module.TwoNAuthenticationError("bad creds")
+        )
+
+        hass = types.SimpleNamespace()
+        c = self.coordinator_module.TwoNIntercomCoordinator(hass, api)
+
+        threshold = self.coordinator_module.NUM_AUTH_ERRORS
+        for _ in range(threshold - 1):
+            with self.assertRaises(self.UpdateFailed):
+                await c._async_update_data()
+
         with self.assertRaises(Exception) as ctx:
             await c._async_update_data()
         # Should be ConfigEntryAuthFailed (or its fallback)
         self.assertIn("Authentication failed", str(ctx.exception))
+        self.assertEqual(c._auth_error_count, threshold)
+
+    async def test_auth_error_count_resets_on_success(self) -> None:
+        """A successful poll between auth errors resets the counter."""
+        api_module = sys.modules["custom_components.2n_intercom.api"]
+        api = self._base_api()
+
+        fail = True
+
+        async def maybe_fail_call():
+            if fail:
+                raise api_module.TwoNAuthenticationError("bad creds")
+            return {"state": "idle", "sessions": []}
+
+        api.async_get_call_status = maybe_fail_call
+
+        hass = types.SimpleNamespace()
+        c = self.coordinator_module.TwoNIntercomCoordinator(hass, api)
+
+        with self.assertRaises(self.UpdateFailed):
+            await c._async_update_data()
+        self.assertEqual(c._auth_error_count, 1)
+
+        fail = False
+        await c._async_update_data()
+        self.assertEqual(c._auth_error_count, 0)
 
     async def test_connection_error_raises_update_failed(self) -> None:
         api_module = sys.modules["custom_components.2n_intercom.api"]

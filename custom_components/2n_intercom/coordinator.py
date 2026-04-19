@@ -74,6 +74,13 @@ if TYPE_CHECKING:
 MAX_RETRIES = 5
 # Maximum delay between retries (seconds)
 MAX_BACKOFF_DELAY = 60
+# Consecutive auth failures tolerated before triggering HA's reauth flow.
+# A single 401 can come from a stale digest nonce (aiohttp DigestAuthMiddleware
+# caches nonce/nc across the long-lived session and the 2N firmware rotates
+# nonces over time), a brief device recovery, or a garbled response. Only a
+# sustained run indicates the stored credentials actually stopped working —
+# matches the platinum reolink integration's NUM_CRED_ERRORS pattern.
+NUM_AUTH_ERRORS = 3
 # Snapshot cache duration (seconds)
 SNAPSHOT_CACHE_DURATION = 1
 # Doorbell pulse duration (seconds)
@@ -138,6 +145,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         # DataUpdateCoordinator serializes update calls - only one _async_update_data
         # runs at a time
         self._retry_count = 0
+        self._auth_error_count = 0
         self._snapshot_cache: bytes | None = None
         self._snapshot_cache_time: datetime | None = None
         self._snapshot_cache_size: tuple[int | None, int | None] | None = None
@@ -823,8 +831,9 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             # Get current call status
             call_status = await self.api.async_get_call_status()
 
-            # Reset retry count on successful update
+            # Reset retry / auth-failure counters on successful update
             self._retry_count = 0
+            self._auth_error_count = 0
 
             # Baseline state capture — ring detection is event-driven via
             # CallStateChanged / CallSessionStateChanged subscriptions;
@@ -854,12 +863,37 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             )
             
         except TwoNAuthenticationError as err:
-            # Authentication errors require user intervention. Raising
-            # ConfigEntryAuthFailed triggers HA's reauth flow (registered in
-            # config_flow.async_step_reauth), which is the canonical 2026.4+
-            # path — replaces the removed hass.components.persistent_notification
-            # accessor.
-            _LOGGER.error("Authentication failed: %s", err)
+            # Tolerate a short run of 401s before surfacing reauth. A single
+            # 401 is frequently transient (stale digest nonce, brief device
+            # recovery, garbled response) and clears on the next tick once
+            # aiohttp's DigestAuthMiddleware renegotiates; the user's stored
+            # credentials are still correct in that case. Only when we see
+            # NUM_AUTH_ERRORS in a row without an intervening success do we
+            # raise ConfigEntryAuthFailed, which registers via
+            # config_flow.async_step_reauth to prompt for new credentials.
+            #
+            # Reset the HTTP session proactively so the next poll rebuilds the
+            # DigestAuthMiddleware from scratch — this turns "wait for the
+            # middleware to notice the stale challenge" into a deterministic
+            # fresh handshake on the next attempt.
+            try:
+                await self.api.async_reset_session()
+            except Exception as reset_err:  # pylint: disable=broad-except
+                _LOGGER.debug("Session reset after auth error failed: %s", reset_err)
+            self._auth_error_count += 1
+            if self._auth_error_count < NUM_AUTH_ERRORS:
+                _LOGGER.warning(
+                    "Authentication error %s/%s (will retry next poll): %s",
+                    self._auth_error_count,
+                    NUM_AUTH_ERRORS,
+                    err,
+                )
+                raise UpdateFailed(f"Authentication error: {err}") from err
+            _LOGGER.error(
+                "Authentication failed after %s consecutive attempts: %s",
+                self._auth_error_count,
+                err,
+            )
             raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
             
         except (TwoNConnectionError, ConnectionError, TimeoutError) as err:

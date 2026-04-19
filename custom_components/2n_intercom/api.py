@@ -608,6 +608,29 @@ class TwoNIntercomAPI:
             await self._session.close()
             self._session = None
 
+    async def async_reset_session(self) -> None:
+        """Drop the current HTTP session so the next request rebuilds it.
+
+        The aiohttp ``DigestAuthMiddleware`` attached to the session caches
+        the server's challenge (realm, nonce, opaque) and an increasing nc
+        counter for the life of the session. When the device ages out a
+        nonce, the cached state is stale and every subsequent request sees
+        401 until the middleware renegotiates. Rebuilding the session is a
+        deterministic reset of that state — the next call goes through a
+        fresh 401→challenge→response handshake with a new nonce.
+
+        Safe for both ownership modes: HA-managed sessions from
+        ``async_create_clientsession`` tolerate being closed early (the
+        lifecycle helper is idempotent on an already-closed session), and
+        the next ``async_get_session`` will fall back to an owned session
+        with the same DigestAuthMiddleware configuration.
+        """
+        session = self._session
+        self._session = None
+        self._owns_session = True
+        if session is not None and not session.closed:
+            await session.close()
+
     async def async_connect(self) -> bool:
         """
         Establish and validate connection to the intercom.
