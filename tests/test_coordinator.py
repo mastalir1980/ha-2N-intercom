@@ -2262,3 +2262,136 @@ class EventDrivenHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         # Verify the rebuilt data reflects the cache patch
         self.assertTrue(c.data.switch_status["switches"][0]["active"])
+
+
+class KeyPressedRingTests(unittest.IsolatedAsyncioTestCase):
+    """Tests for KeyPressed-driven doorbell ring detection."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.coordinator_module = load_coordinator_module()
+
+    def _make_coordinator(self, **kwargs):
+        hass = types.SimpleNamespace()
+        api = types.SimpleNamespace()
+        return self.coordinator_module.TwoNIntercomCoordinator(hass, api, **kwargs)
+
+    def _make_data(self, c):
+        return self.coordinator_module.TwoNIntercomData(
+            call_status={}, last_ring_time=None, caller_info=None,
+            active_session_id=None, available=True, phone_status={},
+            switch_caps={}, switch_status={}, io_caps={}, io_status={},
+        )
+
+    def test_keypress_triggers_ring_pulse(self) -> None:
+        c = self._make_coordinator()
+        c.data = self._make_data(c)
+        updated = c._process_log_event(
+            {"event": "KeyPressed", "params": {"key": "main_button"}}
+        )
+        self.assertTrue(updated)
+        self.assertTrue(c._ring_detected)
+        self.assertTrue(c.ring_active)
+        self.assertIsNotNone(c._ring_pulse_until)
+        self.assertEqual(c.last_key_pressed, "main_button")
+        self.assertIsNotNone(c.last_ring_time)
+
+    def test_keypress_ignored_when_disabled(self) -> None:
+        c = self._make_coordinator(ring_on_keypress=False)
+        c.data = self._make_data(c)
+        updated = c._process_log_event(
+            {"event": "KeyPressed", "params": {"key": "main_button"}}
+        )
+        self.assertFalse(updated)
+        self.assertFalse(c._ring_detected)
+
+    def test_keypress_non_dict_params(self) -> None:
+        c = self._make_coordinator()
+        self.assertFalse(
+            c._process_log_event({"event": "KeyPressed", "params": "bad"})
+        )
+
+    def test_keypress_without_key_name_still_rings(self) -> None:
+        c = self._make_coordinator()
+        c.data = self._make_data(c)
+        updated = c._process_log_event({"event": "KeyPressed", "params": {}})
+        self.assertTrue(updated)
+        self.assertTrue(c._ring_detected)
+        self.assertIsNone(c.last_key_pressed)
+
+    def test_keypress_bypasses_called_id_filter(self) -> None:
+        c = self._make_coordinator(called_id="sip:200@device")
+        c.data = self._make_data(c)
+        updated = c._process_log_event(
+            {"event": "KeyPressed", "params": {"key": "main_button"}}
+        )
+        self.assertTrue(updated)
+        self.assertTrue(c._ring_detected)
+
+    def test_keypress_schedules_pulse_clear_when_loop_available(self) -> None:
+        scheduled: list[tuple[float, object]] = []
+
+        class _FakeHandle:
+            def __init__(self) -> None:
+                self.cancelled = False
+
+            def cancel(self) -> None:
+                self.cancelled = True
+
+        class _FakeLoop:
+            def call_later(self, delay, callback):
+                scheduled.append((delay, callback))
+                return _FakeHandle()
+
+        c = self._make_coordinator()
+        c.hass.loop = _FakeLoop()
+        c.data = self._make_data(c)
+        c._process_log_event({"event": "KeyPressed", "params": {"key": "1"}})
+        self.assertEqual(len(scheduled), 1)
+        self.assertGreater(scheduled[0][0], 0)
+
+    def test_pulse_clear_resets_ring_and_notifies(self) -> None:
+        fired: list[tuple[float, object]] = []
+
+        class _FakeHandle:
+            def cancel(self) -> None:
+                pass
+
+        class _FakeLoop:
+            def call_later(self, delay, callback):
+                fired.append((delay, callback))
+                return _FakeHandle()
+
+        c = self._make_coordinator()
+        c.hass.loop = _FakeLoop()
+        c.data = self._make_data(c)
+        notified: list[bool] = []
+        c.async_update_listeners = lambda: notified.append(True)  # type: ignore[method-assign]
+        c._process_log_event({"event": "KeyPressed", "params": {"key": "1"}})
+        # Simulate the timer firing after the pulse window has passed.
+        from datetime import datetime, timedelta, timezone
+
+        c._ring_pulse_until = datetime.now(timezone.utc) - timedelta(seconds=1)
+        fired[0][1]()
+        self.assertFalse(c._ring_detected)
+        self.assertIsNone(c._ring_pulse_until)
+        self.assertTrue(notified)
+
+    def test_subscription_includes_keypress_when_enabled(self) -> None:
+        c = self._make_coordinator()
+        c._log_caps = frozenset({"KeyPressed"})
+        self.assertIn("KeyPressed", c._build_log_event_list())
+
+    def test_subscription_excludes_keypress_when_disabled(self) -> None:
+        c = self._make_coordinator(ring_on_keypress=False)
+        c._log_caps = frozenset({"KeyPressed"})
+        self.assertNotIn("KeyPressed", c._build_log_event_list())
+
+    def test_subscription_excludes_keypress_when_device_does_not_list_it(
+        self,
+    ) -> None:
+        """Like access events, KeyPressed needs /api/log/caps to list it."""
+        for caps in (None, frozenset(), frozenset({"CardEntered"})):
+            c = self._make_coordinator()
+            c._log_caps = caps
+            self.assertNotIn("KeyPressed", c._build_log_event_list(), caps)

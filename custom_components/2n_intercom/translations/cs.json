@@ -22,6 +22,7 @@
           "name": "Název",
           "enable_camera": "Povolit kameru",
           "enable_doorbell": "Povolit zvonek",
+          "ring_on_keypress": "Zvonit při stisku tlačítka",
           "called_id": "Volaný účet (peer)",
           "go_back": "Zpět na předchozí krok"
         },
@@ -29,6 +30,7 @@
           "name": "Zobrazený název v Home Assistant",
           "enable_camera": "Vytvoří entitu kamery pro snímky i stream",
           "enable_doorbell": "Vytvoří entitu zvonku pro detekci zvonění",
+          "ring_on_keypress": "Považovat fyzický stisk tlačítka (událost KeyPressed) za zazvonění, i když stisk nezahájí SIP hovor — nutné pro zařízení s prázdným adresářem. Poznámka: filtr vyzváněcího účtu se na stisky tlačítek nevztahuje.",
           "called_id": "Vyberte účet, na který se zvoní. Všechny hovory = zvonění pro všechna tlačítka.",
           "go_back": "Zaškrtněte a odešlete pro návrat do nastavení připojení bez uložení. Zadané hodnoty zůstanou zachovány."
         }
@@ -81,7 +83,8 @@
         "title": "Možnosti 2N Intercom",
         "data": {
           "enable_camera": "Povolit kameru",
-          "enable_doorbell": "Povolit zvonek"
+          "enable_doorbell": "Povolit zvonek",
+          "ring_on_keypress": "Zvonit při stisku tlačítka"
         }
       },
       "device": {
@@ -91,6 +94,7 @@
           "name": "Název",
           "enable_camera": "Povolit kameru",
           "enable_doorbell": "Povolit zvonek",
+          "ring_on_keypress": "Zvonit při stisku tlačítka",
           "scan_interval": "Záložní interval dotazování (sekundy)",
           "called_id": "Volaný účet (peer)",
           "grant_access_user": "Výchozí uživatel pro udělení přístupu"
@@ -99,6 +103,7 @@
           "name": "Zobrazený název v Home Assistant",
           "enable_camera": "Vytvoří entitu kamery",
           "enable_doorbell": "Vytvoří entitu zvonku",
+          "ring_on_keypress": "Považovat fyzický stisk tlačítka (událost KeyPressed) za zazvonění, i když stisk nezahájí SIP hovor — nutné pro zařízení s prázdným adresářem. Poznámka: filtr vyzváněcího účtu se na stisky tlačítek nevztahuje.",
           "scan_interval": "Záložní interval dotazování (2-600 s). Události přinášejí aktualizace v reálném čase; dotazování slouží jen jako záchranná síť. Výchozích 60 s vyhovuje většině instalací.",
           "called_id": "Vyberte účet, na který se zvoní. Všechny hovory = zvonění pro všechna tlačítka.",
           "grant_access_user": "Uživatel z adresáře (UUID), jehož jménem služba grant_access otevře dveře, pokud volání uživatele neuvádí. Zařízení uplatní jeho přístupová práva a průchod zapíše do logu. Ponechte prázdné, pokud má být uživatel uveden v každém volání."

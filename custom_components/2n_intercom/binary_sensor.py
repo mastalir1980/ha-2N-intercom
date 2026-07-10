@@ -127,6 +127,9 @@ class TwoNIntercomDoorbell(TwoNIntercomEntity, BinarySensorEntity):  # type: ign
         if self.coordinator.called_peer:
             attributes["called_peer"] = self.coordinator.called_peer
 
+        if getattr(self.coordinator, "last_key_pressed", None):
+            attributes["last_key_pressed"] = self.coordinator.last_key_pressed
+
         caller_info = self.coordinator.caller_info
         if caller_info:
             if "name" in caller_info:

@@ -41,6 +41,7 @@ from .const import (
     CONF_MJPEG_HEIGHT,
     CONF_MJPEG_WIDTH,
     DEFAULT_LIVE_VIEW_MODE,
+    DEFAULT_RING_ON_KEYPRESS,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
@@ -191,6 +192,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         called_id: str | None = None,
         config_entry: ConfigEntry | None = None,
         ring_snapshot_enabled: bool = False,
+        ring_on_keypress: bool = DEFAULT_RING_ON_KEYPRESS,
     ) -> None:
         """Initialize the coordinator."""
         # HA 2024.10+ accepts config_entry kwarg; pass when available so log
@@ -253,6 +255,9 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         self._ring_snapshot_enabled = ring_snapshot_enabled
         self._ring_snapshot: bytes | None = None
         self._ring_snapshot_time: datetime | None = None
+        self._ring_on_keypress = bool(ring_on_keypress)
+        self._last_key_pressed: str | None = None
+        self._ring_pulse_clear_handle: asyncio.TimerHandle | None = None
 
     @staticmethod
     def _normalize_peer(peer: str | None) -> str | None:
@@ -357,6 +362,57 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             self._motion_detected = False
             return True
         return False
+
+    def _process_key_pressed_event(self, params: dict[str, Any]) -> bool:
+        """Handle a KeyPressed log event (physical button press).
+
+        A button press is a doorbell ring even when it never becomes a SIP
+        call — a device with an empty directory (no call destination) emits
+        only ``KeyPressed``. The ``called_id`` peer filter cannot apply here
+        because there is no call, so every button press rings; installs that
+        need per-button filtering should disable ``ring_on_keypress`` and
+        rely on call events instead.
+        """
+        if not self._ring_on_keypress or not isinstance(params, dict):
+            return False
+        key = str(params.get("key") or "").strip()
+        self._last_key_pressed = key or None
+        self._ring_detected = True
+        self._last_ring_time = dt_util.utcnow()
+        self._ring_pulse_until = self._last_ring_time + timedelta(
+            seconds=DOORBELL_PULSE_DURATION
+        )
+        self._schedule_ring_pulse_clear()
+        return True
+
+    def _schedule_ring_pulse_clear(self) -> None:
+        """Arm a one-shot timer that ends the ring pulse.
+
+        Call-state rings are cleared by the follow-up terminal call event,
+        but a ``KeyPressed`` ring has no such counterpart — without this
+        timer the doorbell entity would stay ``on`` until the next poll
+        cycle (up to ``scan_interval`` seconds).
+        """
+        if self._ring_pulse_clear_handle is not None:
+            self._ring_pulse_clear_handle.cancel()
+
+        def _clear() -> None:
+            self._ring_pulse_clear_handle = None
+            if (
+                self._ring_pulse_until is not None
+                and dt_util.utcnow() < self._ring_pulse_until
+            ):
+                return  # a newer pulse superseded this timer
+            self._ring_detected = False
+            self._ring_pulse_until = None
+            if hasattr(self, "async_update_listeners"):
+                self.async_update_listeners()
+
+        loop = getattr(self.hass, "loop", None)
+        if loop is not None:
+            self._ring_pulse_clear_handle = loop.call_later(
+                DOORBELL_PULSE_DURATION + 0.1, _clear
+            )
 
     def _process_switch_state_event(self, params: dict[str, Any]) -> bool:
         """Handle a SwitchStateChanged log event.
@@ -498,14 +554,19 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
     def _build_log_event_list(self) -> list[str]:
         """Return the events to subscribe to, limited to what the device supports.
 
-        Access-control events and DirectoryChanged are only added when
-        /api/log/caps lists them. Without caps they are skipped entirely:
+        KeyPressed (when ring_on_keypress is on), access-control events and
+        DirectoryChanged are only added when /api/log/caps lists them. Without caps they are skipped entirely:
         subscribing to an unsupported event could break the subscription.
         """
         log_events = list(BASE_LOG_EVENTS)
         if self.motion_detection_available:
             log_events.append("MotionDetected")
         if self._log_caps:
+            # KeyPressed is optional like the access events: only subscribe
+            # when the device lists it, so an unsupported event can never
+            # break the subscription.
+            if self._ring_on_keypress and "KeyPressed" in self._log_caps:
+                log_events.append("KeyPressed")
             log_events.extend(
                 event
                 for event in (*ACCESS_LOG_EVENTS, DIRECTORY_CHANGED_EVENT)
@@ -795,6 +856,9 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         if event_name == DIRECTORY_CHANGED_EVENT:
             return self._process_directory_changed_event()
 
+        if event_name == "KeyPressed":
+            return self._process_key_pressed_event(event.get("params") or {})
+
         if event_name == "SwitchStateChanged":
             return self._process_switch_state_event(event.get("params") or {})
         if event_name == "InputChanged":
@@ -1010,6 +1074,9 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
     async def async_stop_log_listener(self) -> None:
         """Stop the background log-listener task and unsubscribe active channel."""
         self._log_listener_stopped = True
+        if self._ring_pulse_clear_handle is not None:
+            self._ring_pulse_clear_handle.cancel()
+            self._ring_pulse_clear_handle = None
         subscription_id = self._log_subscription_id
         task = self._log_listener_task
         self._log_listener_task = None
@@ -1330,6 +1397,11 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
     def last_ring_time(self) -> datetime | None:
         """Return last ring timestamp."""
         return self._last_ring_time
+
+    @property
+    def last_key_pressed(self) -> str | None:
+        """Return the key name from the most recent KeyPressed event."""
+        return self._last_key_pressed
 
     @property
     def caller_info(self) -> dict[str, Any]:
