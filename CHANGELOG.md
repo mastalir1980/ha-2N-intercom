@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.0 - 2026-10-11
+
+### Security — secure-by-default connection
+- Config-flow auto-detect now prefers a **verified TLS** connection: it tries `HTTPS:443` with certificate verification first, then unverified HTTPS (self-signed 2N cert), and only then plaintext `HTTP:80`. Users with a valid/own-CA certificate get a verified connection instead of being pinned to `verify_ssl=False` (S1).
+- Plaintext **HTTP is now the last-resort** candidate and logs a `WARNING` when a connection settles on it (S2).
+- The **HTTP Basic-auth fallback is refused over plaintext HTTP** so credentials are never sent in cleartext; it stays enabled over HTTPS and behind a new opt-in `allow_insecure` flag for devices that genuinely need it. Digest auth is unaffected (S3).
+- New `allow_insecure` toggle exposed in the reconfigure flow (default off), stored in entry options and respected by runtime requests, reauthentication, and directory lookups; EN/CS/DE translations added for the reconfigure step.
+- Existing connections are not automatically migrated. Reconfigure HTTP entries to HTTPS where possible; existing HTTP Basic users must explicitly opt in if HTTPS or Digest cannot be used.
+
 ## 1.3.1 - 2026-04-12
 
 ### Documentation sync and quality scale

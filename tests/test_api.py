@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 import logging
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -1046,6 +1047,54 @@ class CallControlApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(transport_info.selected_mode, api_module.LIVE_VIEW_MODE_MJPEG)
 
 
+class AuthenticationRequestTests(unittest.IsolatedAsyncioTestCase):
+    """Exercise the request path, not just the auth-permission predicate."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.api_module = load_api_module()
+
+    async def test_basic_retry_requires_https_or_explicit_opt_in(self) -> None:
+        for protocol, opt_in, challenge, retry in (
+            ("http", False, "Basic realm=device", False),
+            ("http", True, "Basic realm=device", True),
+            ("https", False, "Basic realm=device", True),
+            ("http", False, "Digest realm=device", False),
+        ):
+            with self.subTest(protocol=protocol, opt_in=opt_in, challenge=challenge):
+                calls = []
+                rejected = SimpleNamespace(
+                    status=401, headers={"WWW-Authenticate": challenge}
+                )
+                accepted = SimpleNamespace(status=200, headers={})
+
+                @asynccontextmanager
+                async def request(method, url, **kwargs):
+                    calls.append((method, url, kwargs))
+                    yield accepted if "auth" in kwargs else rejected
+
+                api = self.api_module.TwoNIntercomAPI(
+                    host="intercom.local", username="api-user", password="test-secret",
+                    port=443 if protocol == "https" else 80,
+                    protocol=protocol, allow_insecure=opt_in,
+                    session=SimpleNamespace(closed=False, request=request),
+                )
+                if protocol == "http" and not opt_in and challenge.startswith("Basic"):
+                    with self.assertLogs(self.api_module._LOGGER, level="WARNING") as logs:
+                        async with api._async_request("GET", "/api/system/info") as response:
+                            self.assertIs(response, rejected)
+                    self.assertIn("refusing", " ".join(logs.output))
+                    self.assertNotIn("test-secret", " ".join(logs.output))
+                else:
+                    async with api._async_request("GET", "/api/system/info") as response:
+                        self.assertIs(response, accepted if retry else rejected)
+                self.assertNotIn("auth", calls[0][2])
+                self.assertEqual(len(calls), 2 if retry else 1)
+                if retry:
+                    self.assertEqual(calls[1][2]["auth"].login, "api-user")
+                    self.assertEqual(calls[1][2]["auth"].password, "test-secret")
+
+
 class SessionOwnershipTests(unittest.IsolatedAsyncioTestCase):
     """Tests for the inject-websession session-ownership contract.
 
@@ -1247,6 +1296,28 @@ class PureHelperTests(unittest.TestCase):
 
         ok_200 = t.SimpleNamespace(status=200, headers={})
         self.assertFalse(fn(ok_200))
+
+    def test_basic_auth_permitted_over_https(self) -> None:
+        """Basic fallback is allowed over HTTPS (credential encrypted in transit)."""
+        api = self.api_module.TwoNIntercomAPI(
+            host="x", username="u", password="p", port=443, protocol="https",
+        )
+        self.assertTrue(api._basic_auth_permitted())
+
+    def test_basic_auth_refused_over_plaintext_http(self) -> None:
+        """Basic fallback is refused over plain HTTP unless explicitly allowed."""
+        api = self.api_module.TwoNIntercomAPI(
+            host="x", username="u", password="p", port=80, protocol="http",
+        )
+        self.assertFalse(api._basic_auth_permitted())
+
+    def test_basic_auth_opt_in_over_http(self) -> None:
+        """allow_insecure re-enables Basic over HTTP for users who accept the risk."""
+        api = self.api_module.TwoNIntercomAPI(
+            host="x", username="u", password="p", port=80, protocol="http",
+            allow_insecure=True,
+        )
+        self.assertTrue(api._basic_auth_permitted())
 
     def test_build_http_url_with_auth(self) -> None:
         api = self.api_module.TwoNIntercomAPI(

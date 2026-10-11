@@ -30,6 +30,23 @@
           "enable_doorbell": "Vytvoří entitu zvonku pro detekci zvonění",
           "called_id": "Vyberte účet, na který se zvoní. Všechny hovory = zvonění pro všechna tlačítka."
         }
+      },
+      "reconfigure": {
+        "title": "2N Intercom - Připojení",
+        "description": "Upravte způsob, jakým se Home Assistant připojuje k interkomu.",
+        "data": {
+          "host": "IP adresa",
+          "port": "Port",
+          "protocol": "Protokol",
+          "username": "Uživatel",
+          "password": "Heslo",
+          "verify_ssl": "Ověřovat TLS certifikát",
+          "allow_insecure": "Povolit nezabezpečené připojení"
+        },
+        "data_description": {
+          "verify_ssl": "Ověřovat HTTPS certifikát zařízení. Vypněte jen pro tovární self-signed certifikát.",
+          "allow_insecure": "Povolit odeslání přihlašovacích údajů přes HTTP Basic po nešifrovaném HTTP. Zapněte pouze tehdy, pokud zařízení nezvládá HTTPS ani Digest."
+        }
       }
     },
     "error": {
@@ -188,7 +205,7 @@
       "message": "Nepodařilo se zavěsit relaci hovoru {sessions}."
     },
     "invalid_hangup_reason": {
-      "message": "Neplatný důvod zavěšení '{reason}'. Platné hodnoty: {valid}."
+      "message": "Neplatný důvod zavěšení {reason}. Platné hodnoty: {valid}."
     }
   },
   "services": {

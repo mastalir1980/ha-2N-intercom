@@ -23,6 +23,7 @@ from .const import (
     CAMERA_MJPEG_FPS_MAX,
     CAMERA_MJPEG_FPS_MIN,
     CAMERA_SOURCES,
+    CONF_ALLOW_INSECURE,
     CONF_CALLED_ID,
     CONF_CAMERA_SOURCE,
     CONF_ENABLE_CAMERA,
@@ -42,6 +43,7 @@ from .const import (
     CONF_SCAN_INTERVAL,
     CONF_SERIAL_NUMBER,
     CONF_VERIFY_SSL,
+    DEFAULT_ALLOW_INSECURE,
     DEFAULT_CAMERA_MJPEG_FPS,
     DEFAULT_CAMERA_MJPEG_HEIGHT,
     DEFAULT_CAMERA_MJPEG_WIDTH,
@@ -95,6 +97,7 @@ async def _async_get_called_peers(data: dict[str, Any]) -> list[str]:
             password=data.get(CONF_PASSWORD, ""),
             protocol=data.get(CONF_PROTOCOL, DEFAULT_PROTOCOL),
             verify_ssl=data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+            allow_insecure=data.get(CONF_ALLOW_INSECURE, DEFAULT_ALLOW_INSECURE),
         )
         directory = await api.async_get_directory()
 
@@ -205,23 +208,40 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
             api: TwoNIntercomAPI | None = None
 
             try:
-                # Auto-detect: try HTTPS:443 first, then HTTP:80
-                for protocol, port in (
-                    (PROTOCOL_HTTPS, DEFAULT_PORT_HTTPS),
-                    (PROTOCOL_HTTP, DEFAULT_PORT_HTTP),
+                # Auto-detect in order of decreasing security:
+                #   1. HTTPS:443 with certificate verification (most secure)
+                #   2. HTTPS:443 without verification (self-signed 2N cert —
+                #      encrypted in transit, the realistic 2N default)
+                #   3. HTTP:80 (plaintext — last resort, warned below)
+                # Preferring verify_ssl=True means users with a valid/own-CA
+                # certificate get a verified connection instead of being pinned
+                # to verify_ssl=False forever.
+                for protocol, port, verify_ssl in (
+                    (PROTOCOL_HTTPS, DEFAULT_PORT_HTTPS, True),
+                    (PROTOCOL_HTTPS, DEFAULT_PORT_HTTPS, False),
+                    (PROTOCOL_HTTP, DEFAULT_PORT_HTTP, False),
                 ):
                     api, ok = await self._async_try_connect(
                         host, username, password, protocol, port,
-                        verify_ssl=False,
+                        verify_ssl=verify_ssl,
                     )
                     if ok:
                         user_input[CONF_PROTOCOL] = protocol
                         user_input[CONF_PORT] = port
-                        user_input[CONF_VERIFY_SSL] = False
+                        user_input[CONF_VERIFY_SSL] = verify_ssl
+                        if protocol == PROTOCOL_HTTP:
+                            _LOGGER.warning(
+                                "2N host=%s is only reachable over plaintext "
+                                "HTTP; credentials are not encrypted in transit. "
+                                "Enable HTTPS on the device for a secure "
+                                "connection.",
+                                host,
+                            )
                         break
                 else:
                     _LOGGER.warning(
-                        "Auto-detect failed for host=%s (tried HTTPS:443, HTTP:80)",
+                        "Auto-detect failed for host=%s "
+                        "(tried HTTPS:443 verified, HTTPS:443 unverified, HTTP:80)",
                         host,
                     )
                     errors["base"] = "cannot_connect"
@@ -382,6 +402,10 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
                     password=merged[CONF_PASSWORD],
                     protocol=merged.get(CONF_PROTOCOL, DEFAULT_PROTOCOL),
                     verify_ssl=merged.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+                    allow_insecure=self._reauth_entry.options.get(
+                        CONF_ALLOW_INSECURE,
+                        merged.get(CONF_ALLOW_INSECURE, DEFAULT_ALLOW_INSECURE),
+                    ) if self._reauth_entry is not None else DEFAULT_ALLOW_INSECURE,
                 )
                 if not await api.async_test_connection():
                     errors["base"] = "invalid_auth"
@@ -442,6 +466,14 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
         """Reuse the user step shape for reconfigure with current values prefilled."""
         errors: dict[str, str] = {}
         api: TwoNIntercomAPI | None = None
+        entry = self._reconfigure_entry
+        current_allow_insecure = self._data.get(
+            CONF_ALLOW_INSECURE, DEFAULT_ALLOW_INSECURE
+        )
+        if entry is not None:
+            current_allow_insecure = entry.options.get(
+                CONF_ALLOW_INSECURE, current_allow_insecure
+            )
 
         if user_input is not None:
             try:
@@ -458,6 +490,9 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
                     password=user_input[CONF_PASSWORD],
                     protocol=user_input.get(CONF_PROTOCOL, DEFAULT_PROTOCOL),
                     verify_ssl=user_input.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+                    allow_insecure=user_input.get(
+                        CONF_ALLOW_INSECURE, current_allow_insecure
+                    ),
                 )
                 if not await api.async_test_connection():
                     errors["base"] = "cannot_connect"
@@ -473,8 +508,16 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
 
             if not errors and self._reconfigure_entry is not None:
                 merged = {**self._data, **user_input}
+                allow_insecure = merged.pop(
+                    CONF_ALLOW_INSECURE, current_allow_insecure
+                )
                 self.hass.config_entries.async_update_entry(
-                    self._reconfigure_entry, data=merged
+                    self._reconfigure_entry,
+                    data=merged,
+                    options={
+                        **self._reconfigure_entry.options,
+                        CONF_ALLOW_INSECURE: allow_insecure,
+                    },
                 )
                 await self.hass.config_entries.async_reload(
                     self._reconfigure_entry.entry_id
@@ -506,6 +549,10 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
                 vol.Required(
                     CONF_VERIFY_SSL,
                     default=current.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+                ): cv.boolean,
+                vol.Required(
+                    CONF_ALLOW_INSECURE,
+                    default=current_allow_insecure,
                 ): cv.boolean,
             }
         )
@@ -603,6 +650,9 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
 
         # Connection data for the API call to fetch peers lives in entry.data.
         conn_data = dict(self.config_entry.data)
+        conn_data[CONF_ALLOW_INSECURE] = self._current_option(
+            CONF_ALLOW_INSECURE, DEFAULT_ALLOW_INSECURE
+        )
         peers = await _async_get_called_peers(conn_data)
         called_options: list[SelectOptionDict] = [
             SelectOptionDict(
@@ -915,4 +965,7 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
 
     async def _async_create_entry(self) -> ConfigFlowResult:
         """Create the options entry."""
+        self._data[CONF_ALLOW_INSECURE] = self._current_option(
+            CONF_ALLOW_INSECURE, DEFAULT_ALLOW_INSECURE
+        )
         return self.async_create_entry(title="", data=self._data)

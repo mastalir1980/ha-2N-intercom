@@ -30,6 +30,23 @@
           "enable_doorbell": "Create the doorbell entity for ring detection",
           "called_id": "Select which account should ring. Choose All calls to ring on every button."
         }
+      },
+      "reconfigure": {
+        "title": "2N Intercom - Connection",
+        "description": "Update how Home Assistant connects to the intercom.",
+        "data": {
+          "host": "IP Address",
+          "port": "Port",
+          "protocol": "Protocol",
+          "username": "Username",
+          "password": "Password",
+          "verify_ssl": "Verify TLS certificate",
+          "allow_insecure": "Allow insecure connection"
+        },
+        "data_description": {
+          "verify_ssl": "Validate the device's HTTPS certificate. Leave off only for the factory self-signed certificate.",
+          "allow_insecure": "Permit sending credentials with HTTP Basic auth over plaintext HTTP. Leave off unless your device cannot use HTTPS or Digest auth."
+        }
       }
     },
     "error": {
@@ -188,7 +205,7 @@
       "message": "Failed to hang up call session(s) {sessions}."
     },
     "invalid_hangup_reason": {
-      "message": "Invalid hangup reason '{reason}'. Valid values: {valid}."
+      "message": "Invalid hangup reason {reason}. Valid values: {valid}."
     }
   },
   "services": {

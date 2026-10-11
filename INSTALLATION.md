@@ -77,7 +77,7 @@ If you run the HA HomeKit Bridge, the camera entity exposes a HomeKit-compatible
 
 The integration supports the modern HA flows:
 
-- **Reconfigure** (HA 2024.10+) — Settings → Devices & Services → 2N Intercom → ⋮ → **Reconfigure**. Update host, port, protocol, credentials, or SSL verification without removing the entry. Automations stay attached.
+- **Reconfigure** (HA 2024.10+) — Settings → Devices & Services → 2N Intercom → ⋮ → **Reconfigure**. Update host, port, protocol, credentials, TLS verification, or the insecure HTTP Basic opt-in without removing the entry. Automations stay attached.
 - **Reauth** — when the device starts rejecting credentials the integration raises `ConfigEntryAuthFailed`, and HA shows a notification asking the user to re-enter the password. Click it to walk through the reauth flow.
 
 For per-relay or device-feature changes, use the regular **Configure** (Options) button on the integration card.
@@ -109,11 +109,12 @@ Recommended pattern: pair `hangup_call` with the call-state sensor's `active_ses
 - Restart HA, check logs for import errors
 
 ### Setup fails with "Cannot Connect"
-- Verify host/port and try HTTP if HTTPS verification is failing
+- Verify host/port and enable HTTPS on the device. Setup tries verified HTTPS first, unverified HTTPS for self-signed certificates second, and plaintext HTTP last. Existing entries keep their saved protocol until reconfigured.
 - The 2N HTTP API exposes a **per-service-group** auth setting in the device web UI under **Services → HTTP API**. Each service group (Camera, Switch, I/O, Phone, Call, Log) can be set to None, Basic, or Digest independently. The integration handles whatever combination the operator has chosen, but the configured username/password must be valid for **every** group it talks to
 
 ### Reauth notification keeps reappearing
 - Credentials really are wrong, or the account is locked on the device. Clear it via the 2N web UI, then complete the reauth flow
+- If a service requires Basic auth over HTTP, switch to HTTPS or configure Digest on the device. Only if neither is possible, enable **Allow insecure connection** in **Reconfigure** to permit sending credentials over plaintext HTTP.
 
 ### Camera entity exists but has no live view
 - Open the entity attributes — `live_view_selected_mode` should be `mjpeg` (or `rtsp`), and `mjpeg_available` should be `true`

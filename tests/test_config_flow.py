@@ -236,6 +236,7 @@ class FakeAPI:
         password,
         protocol,
         verify_ssl,
+        allow_insecure=False,
     ) -> None:
         self.host = host
         self.port = port
@@ -243,6 +244,7 @@ class FakeAPI:
         self.password = password
         self.protocol = protocol
         self.verify_ssl = verify_ssl
+        self.allow_insecure = allow_insecure
         self.closed = False
         FakeAPI.instances.append(self)
 
@@ -286,9 +288,11 @@ class FakeConfigEntries:
             entries = [e for e in entries if getattr(e, "domain", None) == domain]
         return entries
 
-    def async_update_entry(self, entry, *, data=None, **_kwargs):
+    def async_update_entry(self, entry, *, data=None, options=None, **_kwargs):
         if data is not None:
             entry.data = data
+        if options is not None:
+            entry.options = options
         self.update_calls.append((entry.entry_id, dict(entry.data)))
 
     async def async_reload(self, entry_id):
@@ -344,9 +348,72 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
         # Auto-detect stores the discovered protocol/port in _data.
         self.assertEqual(flow._data["protocol"], "https")
         self.assertEqual(flow._data["port"], 443)
+        # Secure-by-default: when the device answers on HTTPS, the first
+        # candidate (verify_ssl=True) wins, so we pin a *verified* connection
+        # instead of disabling TLS verification forever.
+        self.assertTrue(flow._data["verify_ssl"])
         # Every API the flow opens is also closed — no resource leaks.
         self.assertGreaterEqual(len(FakeAPI.instances), 1)
         self.assertTrue(all(instance.closed for instance in FakeAPI.instances))
+
+    async def test_user_step_falls_back_to_unverified_https(self) -> None:
+        """If cert verification fails, auto-detect drops to unverified HTTPS."""
+        flow = self._make_flow()
+        attempts: list[tuple[str, int, bool]] = []
+
+        async def fake_try_connect(
+            host, username, password, protocol, port, *, verify_ssl
+        ):
+            attempts.append((protocol, port, verify_ssl))
+            # Verified HTTPS fails (e.g. self-signed cert); unverified succeeds.
+            if protocol == "https" and verify_ssl:
+                return None, False
+            api = FakeAPI(
+                host=host, port=port, username=username, password=password,
+                protocol=protocol, verify_ssl=verify_ssl,
+            )
+            return api, True
+
+        flow._async_try_connect = fake_try_connect  # type: ignore[assignment]
+        result = await flow.async_step_user(
+            {"host": "192.0.2.20", "username": "u", "password": "p"}
+        )
+        self.assertEqual(result["step_id"], "device")
+        # Verified HTTPS was tried first, then unverified HTTPS won.
+        self.assertEqual(attempts[0], ("https", 443, True))
+        self.assertEqual(flow._data["protocol"], "https")
+        self.assertEqual(flow._data["port"], 443)
+        self.assertFalse(flow._data["verify_ssl"])
+
+    async def test_user_step_http_is_last_resort(self) -> None:
+        """Plaintext HTTP is only used when neither HTTPS variant connects."""
+        flow = self._make_flow()
+        attempts: list[tuple[str, int, bool]] = []
+
+        async def fake_try_connect(
+            host, username, password, protocol, port, *, verify_ssl
+        ):
+            attempts.append((protocol, port, verify_ssl))
+            if protocol == "https":
+                return None, False
+            api = FakeAPI(
+                host=host, port=port, username=username, password=password,
+                protocol=protocol, verify_ssl=verify_ssl,
+            )
+            return api, True
+
+        flow._async_try_connect = fake_try_connect  # type: ignore[assignment]
+        result = await flow.async_step_user(
+            {"host": "192.0.2.20", "username": "u", "password": "p"}
+        )
+        self.assertEqual(result["step_id"], "device")
+        # HTTPS (verified, then unverified) attempted before HTTP.
+        self.assertEqual(
+            attempts,
+            [("https", 443, True), ("https", 443, False), ("http", 80, False)],
+        )
+        self.assertEqual(flow._data["protocol"], "http")
+        self.assertEqual(flow._data["port"], 80)
 
     async def test_user_step_failed_connection_keeps_form_with_error(self) -> None:
         FakeAPI.connection_result = False
@@ -521,6 +588,55 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["errors"], {"base": "cannot_connect"})
         self.assertEqual(hass.config_entries.update_calls, [])
         self.assertEqual(hass.config_entries.reload_calls, [])
+
+    async def test_reconfigure_stores_and_forwards_insecure_opt_in(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1",
+            {
+                "host": "192.0.2.20", "port": 80, "protocol": "http",
+                "username": "user", "password": "pass", "verify_ssl": False,
+            },
+            options={"scan_interval": 120},
+        )
+        flow = self._make_flow(FakeHass([entry]))
+        flow.context = {"entry_id": entry.entry_id}
+
+        for allow_insecure in (True, False):
+            with self.subTest(allow_insecure=allow_insecure):
+                result = await flow.async_step_reconfigure(
+                    {**entry.data, "allow_insecure": allow_insecure}
+                )
+                self.assertEqual(result["reason"], "reconfigure_successful")
+                self.assertEqual(FakeAPI.instances[-1].allow_insecure, allow_insecure)
+                self.assertNotIn("allow_insecure", entry.data)
+                self.assertEqual(entry.options, {
+                    "scan_interval": 120, "allow_insecure": allow_insecure,
+                })
+                form = await flow.async_step_reconfigure(None)
+                defaults = {
+                    key.key: key.default for key in form["data_schema"].schema
+                }
+                self.assertEqual(defaults["allow_insecure"], allow_insecure)
+
+    async def test_reauth_preserves_insecure_opt_in(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1",
+            {
+                "host": "192.0.2.20", "port": 80, "protocol": "http",
+                "username": "user", "password": "old", "verify_ssl": False,
+            },
+            options={"allow_insecure": True},
+        )
+        flow = self._make_flow(FakeHass([entry]))
+        flow.context = {"entry_id": entry.entry_id}
+        await flow.async_step_reauth(entry.data)
+        result = await flow.async_step_reauth_confirm(
+            {"username": "user", "password": "new"}
+        )
+        self.assertEqual(result["reason"], "reauth_successful")
+        self.assertTrue(FakeAPI.instances[-1].allow_insecure)
+        self.assertEqual(entry.options, {"allow_insecure": True})
+        self.assertNotIn("allow_insecure", entry.data)
 
     # --- Device step tests ---
 
@@ -835,6 +951,26 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result["type"], "form")
         self.assertEqual(result["step_id"], "camera")
+
+    async def test_options_preserve_insecure_opt_in_for_directory_and_save(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1",
+            {
+                "host": "192.0.2.20", "port": 80, "protocol": "http",
+                "username": "user", "password": "pass",
+            },
+            options={"allow_insecure": True, "host": "stale.example"},
+        )
+        flow = self._make_options_flow(entry)
+        result = await flow.async_step_device({
+            "name": "Intercom", "enable_camera": False,
+            "enable_doorbell": True, "scan_interval": 60,
+        })
+        self.assertTrue(FakeAPI.instances[-1].allow_insecure)
+        self.assertEqual(FakeAPI.instances[-1].host, "192.0.2.20")
+        self.assertEqual(result["type"], "create_entry")
+        self.assertTrue(result["data"]["allow_insecure"])
+        self.assertNotIn("host", result["data"])
 
     async def test_camera_step_no_relays_creates_entry(self) -> None:
         entry = FakeConfigEntry(
