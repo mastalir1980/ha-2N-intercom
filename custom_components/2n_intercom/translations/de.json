@@ -6,13 +6,13 @@
         "description": "Geben Sie die IP-Adresse und API-Zugangsdaten Ihrer 2N Gegensprechanlage ein. Das Verbindungsprotokoll wird automatisch erkannt.",
         "data": {
           "host": "IP-Adresse",
-          "username": "Benutzername",
-          "password": "Passwort"
+          "username": "API-Benutzername",
+          "password": "API-Passwort"
         },
         "data_description": {
           "host": "IP-Adresse oder Hostname des Geräts (z. B. 192.0.2.100)",
-          "username": "Anmeldename des Geräts für den API-Zugang",
-          "password": "Anmeldepasswort des Geräts"
+          "username": "Benutzername des HTTP-API-Kontos des Geräts — verwaltet in der Geräte-Weboberfläche unter Services > HTTP API > Accounts",
+          "password": "Passwort des HTTP-API-Kontos des Geräts"
         }
       },
       "device": {
@@ -40,14 +40,28 @@
           "host": "IP-Adresse",
           "port": "Port",
           "protocol": "Protokoll",
-          "username": "Benutzername",
-          "password": "Passwort",
+          "username": "API-Benutzername",
+          "password": "API-Passwort",
           "verify_ssl": "TLS-Zertifikat prüfen",
           "allow_insecure": "Unsichere Verbindung zulassen"
         },
         "data_description": {
           "verify_ssl": "HTTPS-Zertifikat des Geräts prüfen. Nur für das werkseitige selbstsignierte Zertifikat deaktivieren.",
-          "allow_insecure": "Senden von Zugangsdaten per HTTP-Basic-Auth über unverschlüsseltes HTTP erlauben. Deaktiviert lassen, sofern das Gerät HTTPS oder Digest unterstützt."
+          "allow_insecure": "Senden von Zugangsdaten per HTTP-Basic-Auth über unverschlüsseltes HTTP erlauben. Deaktiviert lassen, sofern das Gerät HTTPS oder Digest unterstützt.",
+          "username": "Benutzername des HTTP-API-Kontos des Geräts — verwaltet in der Geräte-Weboberfläche unter Services > HTTP API > Accounts",
+          "password": "Passwort des HTTP-API-Kontos des Geräts"
+        }
+      },
+      "reauth_confirm": {
+        "title": "2N Intercom - Erneute Authentifizierung",
+        "description": "Die gespeicherten API-Zugangsdaten für {host} funktionieren nicht mehr. Geben Sie die aktuellen HTTP-API-Zugangsdaten des Geräts ein.",
+        "data": {
+          "username": "API-Benutzername",
+          "password": "API-Passwort"
+        },
+        "data_description": {
+          "username": "Benutzername des HTTP-API-Kontos des Geräts — verwaltet in der Geräte-Weboberfläche unter Services > HTTP API > Accounts",
+          "password": "Passwort des HTTP-API-Kontos des Geräts"
         }
       }
     },
@@ -71,7 +85,7 @@
       },
       "device": {
         "title": "2N Gegensprechanlage - Gerät",
-        "description": "Gerätefunktionen anpassen. Relais werden automatisch vom Gerät erkannt — Namen und Typen können im nächsten Schritt angepasst werden.",
+        "description": "Gerätefunktionen anpassen. Relais werden automatisch vom Gerät erkannt — Namen und Typen lassen sich im nächsten Schritt überschreiben. IP-Adresse, Port und API-Zugangsdaten werden hier nicht geändert — dafür ⋮ > Neu konfigurieren auf der Integrationskarte verwenden.",
         "data": {
           "name": "Name",
           "enable_camera": "Kamera aktivieren",
@@ -106,8 +120,8 @@
           "mjpeg_width": "Breite des MJPEG-Streams vom Gerät (z. B. 640)",
           "mjpeg_height": "Höhe des MJPEG-Streams vom Gerät (z. B. 480)",
           "mjpeg_fps": "Bilder pro Sekunde für den MJPEG-Stream (1-15)",
-          "rtsp_username": "Benutzername für den 2N-RTSP-Streamingdienst (wird separat von der HTTP-API in der Geräte-Weboberfläche unter Dienste > Streaming konfiguriert)",
-          "rtsp_password": "Passwort für das RTSP-Streaming-Konto",
+          "rtsp_username": "Optional — wird nur für den RTSP-(H.264)-Videostream verwendet. Das Konto legen Sie am Gerät unter Services > Streaming > RTSP Server > User Database an; das API-Konto funktioniert hier nicht. Leer lassen, um MJPEG statt RTSP zu verwenden.",
+          "rtsp_password": "Optional — Passwort des RTSP-Kontos. Es wird hier nie angezeigt: leer lassen, um das gespeicherte Passwort zu behalten. Zum vollständigen Entfernen der RTSP-Zugangsdaten auch den Benutzernamen leeren; ohne sie verwendet die Integration MJPEG.",
           "go_back": "Anhaken und absenden, um ohne Speichern zu den Geräteeinstellungen zurückzukehren. Eingegebene Werte bleiben erhalten."
         }
       },

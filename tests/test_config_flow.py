@@ -185,6 +185,18 @@ def _install_homeassistant_stubs() -> None:
     def SelectOptionDict(*, label: str, value: str) -> dict[str, str]:
         return {"label": label, "value": value}
 
+    class TextSelector:
+        def __init__(self, config):
+            self.config = config
+
+    class TextSelectorConfig:
+        def __init__(self, *, type="text"):
+            self.type = type
+
+    class TextSelectorType:
+        TEXT = "text"
+        PASSWORD = "password"
+
     selector_module.SelectSelector = SelectSelector
     selector_module.SelectSelectorConfig = SelectSelectorConfig
     selector_module.SelectSelectorMode = SelectSelectorMode
@@ -192,6 +204,9 @@ def _install_homeassistant_stubs() -> None:
     selector_module.NumberSelector = NumberSelector
     selector_module.NumberSelectorConfig = NumberSelectorConfig
     selector_module.NumberSelectorMode = NumberSelectorMode
+    selector_module.TextSelector = TextSelector
+    selector_module.TextSelectorConfig = TextSelectorConfig
+    selector_module.TextSelectorType = TextSelectorType
     sys.modules["homeassistant.helpers.selector"] = selector_module
 
     cv_module = types.ModuleType("homeassistant.helpers.config_validation")
@@ -1517,6 +1532,118 @@ class OptionsFlowNavigationTests(unittest.IsolatedAsyncioTestCase):
         # The navigation flag never leaks into saved options.
         for relay in relays:
             self.assertNotIn("go_back", relay)
+
+
+class OptionsFlowRtspCredentialsTests(unittest.IsolatedAsyncioTestCase):
+    """TASK-15: RTSP password masking and keep/clear behaviour."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.config_flow_module = load_config_flow_module()
+        cls.config_flow_module.TwoNIntercomAPI = FakeAPI
+
+    def setUp(self) -> None:
+        FakeAPI.instances = []
+        FakeAPI.connection_result = True
+        FakeAPI.system_info = {"serialNumber": "SN-123"}
+
+    def _make_options_flow(self, entry: FakeConfigEntry):
+        flow = self.config_flow_module.TwoNIntercomOptionsFlow(entry)
+        flow.config_entry = entry
+        flow.hass = FakeHass([entry])
+        return flow
+
+    @staticmethod
+    def _camera_input(**overrides):
+        data = {
+            "live_view_mode": "auto",
+            "camera_source": "internal",
+            "mjpeg_width": 640,
+            "mjpeg_height": 480,
+            "mjpeg_fps": 5,
+        }
+        data.update(overrides)
+        return data
+
+    async def test_rtsp_password_field_is_masked_and_not_prefilled(self) -> None:
+        """The RTSP password uses a password-type selector and the stored
+        value is never suggested back into the form."""
+        entry = FakeConfigEntry(
+            "entry-1",
+            {"host": "192.0.2.20", "port": 443, "username": "u", "password": "p"},
+            options={"rtsp_username": "stream", "rtsp_password": "topsecret"},
+        )
+        flow = self._make_options_flow(entry)
+        result = await flow.async_step_camera(None)
+        self.assertEqual(result["step_id"], "camera")
+
+        marker = _form_field_marker(result, "rtsp_password")
+        field = result["data_schema"].schema[marker]
+        selector_module = sys.modules["homeassistant.helpers.selector"]
+        self.assertIsInstance(field, selector_module.TextSelector)
+        self.assertEqual(field.config.type, "password")
+        # No suggested_value -> the stored password is not rendered.
+        description = getattr(marker, "description", None) or {}
+        self.assertNotIn("suggested_value", description)
+
+        # The username is not secret and stays pre-filled.
+        self.assertEqual(
+            _form_field_marker(result, "rtsp_username").description[
+                "suggested_value"
+            ],
+            "stream",
+        )
+
+    async def test_empty_password_keeps_stored_password(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1",
+            {"host": "192.0.2.20", "port": 443, "username": "u", "password": "p"},
+            options={"rtsp_username": "stream", "rtsp_password": "topsecret"},
+        )
+        flow = self._make_options_flow(entry)
+        result = await flow.async_step_camera(
+            self._camera_input(rtsp_username="stream", rtsp_password="")
+        )
+        self.assertEqual(result["type"], "create_entry")
+        self.assertEqual(result["data"]["rtsp_username"], "stream")
+        self.assertEqual(result["data"]["rtsp_password"], "topsecret")
+
+    async def test_new_password_replaces_stored_password(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1",
+            {"host": "192.0.2.20", "port": 443, "username": "u", "password": "p"},
+            options={"rtsp_username": "stream", "rtsp_password": "topsecret"},
+        )
+        flow = self._make_options_flow(entry)
+        result = await flow.async_step_camera(
+            self._camera_input(rtsp_username="stream", rtsp_password="newpass")
+        )
+        self.assertEqual(result["data"]["rtsp_password"], "newpass")
+
+    async def test_clearing_username_removes_credential_pair(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1",
+            {"host": "192.0.2.20", "port": 443, "username": "u", "password": "p"},
+            options={"rtsp_username": "stream", "rtsp_password": "topsecret"},
+        )
+        flow = self._make_options_flow(entry)
+        result = await flow.async_step_camera(
+            self._camera_input(rtsp_username="", rtsp_password="")
+        )
+        self.assertEqual(result["type"], "create_entry")
+        self.assertNotIn("rtsp_username", result["data"])
+        self.assertNotIn("rtsp_password", result["data"])
+
+    async def test_no_rtsp_credentials_stays_empty(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1",
+            {"host": "192.0.2.20", "port": 443, "username": "u", "password": "p"},
+        )
+        flow = self._make_options_flow(entry)
+        result = await flow.async_step_camera(self._camera_input())
+        self.assertEqual(result["type"], "create_entry")
+        self.assertNotIn("rtsp_username", result["data"])
+        self.assertNotIn("rtsp_password", result["data"])
 
 
 class ConfigFlowHelperTests(unittest.IsolatedAsyncioTestCase):

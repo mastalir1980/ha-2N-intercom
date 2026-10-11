@@ -6,13 +6,13 @@
         "description": "Enter the IP address and API credentials of your 2N Intercom. The connection protocol is detected automatically.",
         "data": {
           "host": "IP Address",
-          "username": "Username",
-          "password": "Password"
+          "username": "API username",
+          "password": "API password"
         },
         "data_description": {
           "host": "IP address or hostname of the intercom (e.g., 192.0.2.100)",
-          "username": "Device login username for API access",
-          "password": "Device login password"
+          "username": "Username of the intercom's HTTP API account — managed in the device web UI under Services > HTTP API > Accounts",
+          "password": "Password of the intercom's HTTP API account"
         }
       },
       "device": {
@@ -40,14 +40,28 @@
           "host": "IP Address",
           "port": "Port",
           "protocol": "Protocol",
-          "username": "Username",
-          "password": "Password",
+          "username": "API username",
+          "password": "API password",
           "verify_ssl": "Verify TLS certificate",
           "allow_insecure": "Allow insecure connection"
         },
         "data_description": {
           "verify_ssl": "Validate the device's HTTPS certificate. Leave off only for the factory self-signed certificate.",
-          "allow_insecure": "Permit sending credentials with HTTP Basic auth over plaintext HTTP. Leave off unless your device cannot use HTTPS or Digest auth."
+          "allow_insecure": "Permit sending credentials with HTTP Basic auth over plaintext HTTP. Leave off unless your device cannot use HTTPS or Digest auth.",
+          "username": "Username of the intercom's HTTP API account — managed in the device web UI under Services > HTTP API > Accounts",
+          "password": "Password of the intercom's HTTP API account"
+        }
+      },
+      "reauth_confirm": {
+        "title": "2N Intercom - Re-authentication",
+        "description": "The stored API credentials for {host} no longer work. Enter the current HTTP API credentials of the intercom.",
+        "data": {
+          "username": "API username",
+          "password": "API password"
+        },
+        "data_description": {
+          "username": "Username of the intercom's HTTP API account — managed in the device web UI under Services > HTTP API > Accounts",
+          "password": "Password of the intercom's HTTP API account"
         }
       }
     },
@@ -71,7 +85,7 @@
       },
       "device": {
         "title": "2N Intercom Options - Device",
-        "description": "Update device features. Relays are auto-detected from the device — override names and types in the next step.",
+        "description": "Update device features. Relays are auto-detected from the device — override names and types in the next step. The IP address, port and API credentials are not changed here — use ⋮ > Reconfigure on the integration card.",
         "data": {
           "name": "Name",
           "enable_camera": "Enable Camera",
@@ -106,8 +120,8 @@
           "mjpeg_width": "Width of the MJPEG stream requested from the device (e.g. 640)",
           "mjpeg_height": "Height of the MJPEG stream requested from the device (e.g. 480)",
           "mjpeg_fps": "Frames per second for the MJPEG stream (1-15)",
-          "rtsp_username": "Username for the 2N RTSP streaming service (configured separately from the HTTP API in the device web UI under Services > Streaming)",
-          "rtsp_password": "Password for the RTSP streaming service account",
+          "rtsp_username": "Optional — only used for the RTSP (H.264) video stream. Create the account on the intercom under Services > Streaming > RTSP Server > User Database; your API account does not work here. Leave empty to use MJPEG instead of RTSP.",
+          "rtsp_password": "Optional — password of the RTSP account. It is never shown here: leave empty to keep the stored password. To remove the RTSP credentials completely, clear the username too; without them the integration uses MJPEG.",
           "go_back": "Check and submit to return to the device settings without saving. Values entered here are kept."
         }
       },

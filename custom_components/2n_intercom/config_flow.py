@@ -831,6 +831,25 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
 
         if user_input is not None:
             go_back = bool(user_input.pop(CONF_GO_BACK, False))
+            # RTSP credentials: the password field is a password-type
+            # selector that is never pre-filled, so an empty password means
+            # "keep the stored one". Clearing the username removes the whole
+            # credential pair — without it the integration never tries RTSP
+            # and uses MJPEG instead.
+            rtsp_username = (user_input.get(CONF_RTSP_USERNAME) or "").strip()
+            if not rtsp_username:
+                user_input.pop(CONF_RTSP_USERNAME, None)
+                user_input.pop(CONF_RTSP_PASSWORD, None)
+                self._data.pop(CONF_RTSP_USERNAME, None)
+                self._data.pop(CONF_RTSP_PASSWORD, None)
+            else:
+                user_input[CONF_RTSP_USERNAME] = rtsp_username
+                if not user_input.get(CONF_RTSP_PASSWORD):
+                    stored_password = self._session_option(CONF_RTSP_PASSWORD, "")
+                    if stored_password:
+                        user_input[CONF_RTSP_PASSWORD] = stored_password
+                    else:
+                        user_input.pop(CONF_RTSP_PASSWORD, None)
             # Coerce NumberSelector outputs (which arrive as float) to ints
             # so the coordinator's ``isinstance(..., int)`` checks pass and
             # the values round-trip cleanly through entry.options storage.
@@ -906,14 +925,14 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
                         ),
                     },
                 ): str,
-                vol.Optional(
-                    CONF_RTSP_PASSWORD,
-                    description={
-                        "suggested_value": self._session_option(
-                            CONF_RTSP_PASSWORD, ""
-                        ),
-                    },
-                ): str,
+                # Password-type selector without a suggested value: the
+                # stored RTSP password is never rendered in clear text.
+                # Submitting the field empty keeps the stored password.
+                vol.Optional(CONF_RTSP_PASSWORD): selector.TextSelector(
+                    selector.TextSelectorConfig(
+                        type=selector.TextSelectorType.PASSWORD
+                    )
+                ),
                 vol.Required(
                     CONF_CAMERA_SOURCE,
                     default=self._session_option(

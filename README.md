@@ -89,7 +89,7 @@ The same username and password must work for every service group the integration
 
 The 2N RTSP server has its **own user database**, completely independent of the HTTP API accounts. RTSP credentials are configured on the device under **Services → Streaming → RTSP Server → User Database**. There is no fallback from HTTP API credentials to RTSP credentials — they are separate systems.
 
-The integration provides optional **RTSP Username** and **RTSP Password** fields in the camera options step. When configured:
+The integration provides optional **RTSP username** and **RTSP password** fields in the camera options step (distinct from the HTTP API credentials, which live in setup / ⋮ → Reconfigure). The password field is masked and the stored password is never shown when the dialog is reopened — leave it empty to keep the stored password, or clear the username to remove the RTSP credential pair completely. When configured:
 
 - The RTSP probe performs a full Digest authentication handshake (unauthenticated OPTIONS → 401 challenge → authenticated OPTIONS) to validate that the credentials actually work before marking RTSP as available.
 - RTSP URLs embed the credentials for the HA stream worker (`rtsp://user:pass@host:554/h264_stream`). Special characters in credentials are URL-encoded.
@@ -164,7 +164,7 @@ Relays are **not** configured during initial setup. The integration auto-discove
 
 ### Options flow parameters
 
-After initial setup, open the integration's **Options** (Settings → Devices & Services → 2N Intercom → **Configure**) to change behavioral settings without removing the entry. Connection settings are changed through the **Reconfigure** flow instead.
+After initial setup, open the integration's **Options** (Settings → Devices & Services → 2N Intercom → **Configure**) to change behavioral settings without removing the entry. The IP address, port and HTTP API credentials are **not** part of Configure — change them via **⋮ → Reconfigure** on the integration card (or the reauth prompt when credentials stop working).
 
 The options flow has up to three steps:
 
@@ -180,8 +180,8 @@ The options flow has up to three steps:
 | Device | `scan_interval` | 2-600 (s) | 60 | Backup polling interval. Events deliver real-time updates; polling only runs as a safety net |
 | Device | `called_id` | string | `All calls` | Ringing account / peer filter |
 | Camera | `live_view_mode` | `auto` \| `rtsp` \| `mjpeg` \| `jpeg_only` | `auto` | Camera live view transport. `auto` picks RTSP if licensed and RTSP credentials are set, then MJPEG, then snapshots |
-| Camera | `rtsp_username` | string | *(empty)* | RTSP server username (from the 2N RTSP user database, **not** the HTTP API account) |
-| Camera | `rtsp_password` | string | *(empty)* | RTSP server password |
+| Camera | `rtsp_username` | string | *(empty)* | Optional. RTSP server username — created on the intercom under Services → Streaming → RTSP Server → User Database; the HTTP API account does **not** work here. Empty = RTSP is never tried, MJPEG is used |
+| Camera | `rtsp_password` | string | *(empty)* | Optional. RTSP server password (masked field, never shown when the dialog is reopened — leave empty to keep the stored password; clear the username to remove the credential pair) |
 | Camera | `camera_source` | `internal` \| `external` | `internal` | Which camera sensor to stream (external = secondary module) |
 | Camera | `mjpeg_width` | 160-2592 (px) | 1280 | MJPEG stream width |
 | Camera | `mjpeg_height` | 160-2592 (px) | 960 | MJPEG stream height |
