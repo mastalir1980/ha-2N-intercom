@@ -87,13 +87,26 @@ def install_api_stubs() -> None:
     class TCPConnector:
         def __init__(self, ssl: bool) -> None:
             self.ssl = ssl
-
-    class ClientSession:
-        def __init__(self, *args, **kwargs) -> None:
             self.closed = False
 
         async def close(self) -> None:
             self.closed = True
+
+    class ClientSession:
+        def __init__(self, *args, **kwargs) -> None:
+            self.connector = kwargs.get("connector", TCPConnector(ssl=True))
+
+        @property
+        def closed(self):
+            return self.connector is None or self.connector.closed
+
+        async def close(self) -> None:
+            if self.connector is not None:
+                await self.connector.close()
+            self.detach()
+
+        def detach(self) -> None:
+            self.connector = None
 
     class ClientResponse:
         status = 200

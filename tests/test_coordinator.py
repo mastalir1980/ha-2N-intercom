@@ -29,7 +29,11 @@ def _install_homeassistant_stubs() -> None:
     class ConfigEntryNotReady(Exception):
         pass
 
+    class ConfigEntryAuthFailed(Exception):
+        pass
+
     exceptions.ConfigEntryNotReady = ConfigEntryNotReady
+    exceptions.ConfigEntryAuthFailed = ConfigEntryAuthFailed
     sys.modules["homeassistant.exceptions"] = exceptions
 
     update_coordinator = types.ModuleType("homeassistant.helpers.update_coordinator")
@@ -43,6 +47,12 @@ def _install_homeassistant_stubs() -> None:
             self.hass = hass
             self.data = None
             self.last_update_success = True
+
+        async def async_config_entry_first_refresh(self):
+            try:
+                self.data = await self._async_update_data()
+            except UpdateFailed as err:
+                raise ConfigEntryNotReady() from err
 
     class UpdateFailed(Exception):
         pass
@@ -1208,9 +1218,8 @@ class AsyncUpdateDataErrorTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(self.UpdateFailed):
                 await c._async_update_data()
 
-        with self.assertRaises(Exception) as ctx:
+        with self.assertRaises(self.coordinator_module.ConfigEntryAuthFailed) as ctx:
             await c._async_update_data()
-        # Should be ConfigEntryAuthFailed (or its fallback)
         self.assertIn("Authentication failed", str(ctx.exception))
         self.assertEqual(c._auth_error_count, threshold)
 
@@ -1238,6 +1247,91 @@ class AsyncUpdateDataErrorTests(unittest.IsolatedAsyncioTestCase):
         fail = False
         await c._async_update_data()
         self.assertEqual(c._auth_error_count, 0)
+
+        fail = True
+        with self.assertRaises(self.UpdateFailed):
+            await c._async_update_data()
+        self.assertEqual(c._auth_error_count, 1)
+
+    async def test_first_refresh_retries_transient_auth_errors(self) -> None:
+        api_module = sys.modules["custom_components.2n_intercom.api"]
+        api = self._base_api()
+        attempts = 0
+
+        async def call_status():
+            nonlocal attempts
+            attempts += 1
+            if attempts < self.coordinator_module.NUM_AUTH_ERRORS:
+                raise api_module.TwoNAuthenticationError("stale nonce")
+            return {"state": "idle", "sessions": []}
+
+        api.async_get_call_status = call_status
+        c = self.coordinator_module.TwoNIntercomCoordinator(types.SimpleNamespace(), api)
+
+        await c.async_config_entry_first_refresh()
+
+        self.assertEqual(attempts, self.coordinator_module.NUM_AUTH_ERRORS)
+        self.assertEqual(type(api).reset_session_calls, attempts - 1)
+        self.assertEqual(c._auth_error_count, 0)
+        self.assertEqual(c.data.call_status["state"], "idle")
+
+    async def test_first_refresh_persistent_auth_failure_triggers_reauth(self) -> None:
+        api_module = sys.modules["custom_components.2n_intercom.api"]
+        api = self._base_api()
+
+        async def call_status():
+            raise api_module.TwoNAuthenticationError("bad credentials")
+
+        api.async_get_call_status = call_status
+        c = self.coordinator_module.TwoNIntercomCoordinator(types.SimpleNamespace(), api)
+
+        with self.assertRaises(self.coordinator_module.ConfigEntryAuthFailed):
+            await c.async_config_entry_first_refresh()
+
+        self.assertEqual(c._auth_error_count, self.coordinator_module.NUM_AUTH_ERRORS)
+        self.assertEqual(type(api).reset_session_calls, c._auth_error_count)
+        self.assertIsNone(c.data)
+
+    async def test_first_refresh_does_not_retry_non_auth_errors(self) -> None:
+        api_module = sys.modules["custom_components.2n_intercom.api"]
+        for initial_auth_failure in (False, True):
+            with self.subTest(initial_auth_failure=initial_auth_failure):
+                api = self._base_api()
+                attempts = 0
+
+                async def call_status():
+                    nonlocal attempts
+                    attempts += 1
+                    if initial_auth_failure and attempts == 1:
+                        raise api_module.TwoNAuthenticationError("stale nonce")
+                    raise api_module.TwoNConnectionError("offline")
+
+                api.async_get_call_status = call_status
+                c = self.coordinator_module.TwoNIntercomCoordinator(
+                    types.SimpleNamespace(), api
+                )
+
+                with self.assertRaises(self.ConfigEntryNotReady):
+                    await c.async_config_entry_first_refresh()
+
+                self.assertEqual(attempts, 2 if initial_auth_failure else 1)
+
+    async def test_session_reset_failure_is_not_silenced(self) -> None:
+        api_module = sys.modules["custom_components.2n_intercom.api"]
+        api = self._base_api()
+
+        async def call_status():
+            raise api_module.TwoNAuthenticationError("stale nonce")
+
+        async def reset_session():
+            raise RuntimeError("session cleanup failed")
+
+        api.async_get_call_status = call_status
+        api.async_reset_session = reset_session
+        c = self.coordinator_module.TwoNIntercomCoordinator(types.SimpleNamespace(), api)
+
+        with self.assertRaisesRegex(RuntimeError, "session cleanup failed"):
+            await c._async_update_data()
 
     async def test_connection_error_raises_update_failed(self) -> None:
         api_module = sys.modules["custom_components.2n_intercom.api"]

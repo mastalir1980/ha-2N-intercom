@@ -79,6 +79,13 @@ The integration handles every combination transparently:
 - The HTTP client uses `aiohttp`'s `DigestAuthMiddleware` (with `preemptive=False`) so it answers Digest challenges automatically.
 - When the device answers a request with `401 + WWW-Authenticate: Basic`, the client retries the same request with Basic auth.
 
+An isolated authentication failure refreshes the Digest session without immediately
+asking for credentials again. Three consecutive failed poll updates trigger reauth;
+a successful update resets the counter. During startup, authentication retries
+happen within the same setup attempt so an invalid stored password still triggers
+reauth instead of leaving the integration in an endless setup-retry loop.
+Session recovery preserves Home Assistant's shared HTTP connector.
+
 The same username and password must work for every service group the integration touches. **Don't try to "simplify" `_async_request`** by hard-coding one scheme — the dual-auth path exists exactly because the device exposes the choice per service group.
 
 #### RTSP authentication

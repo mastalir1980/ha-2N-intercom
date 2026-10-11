@@ -352,17 +352,18 @@ async def async_setup_entry(
 
     import aiohttp as _aiohttp  # local import — only needed here for the middleware
 
-    session = async_create_clientsession(
-        hass,
-        verify_ssl=verify_ssl,
-        middlewares=(
-            _aiohttp.DigestAuthMiddleware(
-                conn[CONF_USERNAME],
-                conn[CONF_PASSWORD],
-                preemptive=False,
+    def _create_session() -> _aiohttp.ClientSession:
+        return async_create_clientsession(
+            hass,
+            verify_ssl=verify_ssl,
+            middlewares=(
+                _aiohttp.DigestAuthMiddleware(
+                    conn[CONF_USERNAME],
+                    conn[CONF_PASSWORD],
+                    preemptive=False,
+                ),
             ),
-        ),
-    )
+        )
 
     # RTSP credentials are optional and live in entry.options because the
     # 2N RTSP server has its own user database, independent of the HTTP
@@ -377,7 +378,8 @@ async def async_setup_entry(
         password=conn[CONF_PASSWORD],
         protocol=conn.get(CONF_PROTOCOL, DEFAULT_PROTOCOL),
         verify_ssl=verify_ssl,
-        session=session,
+        session=_create_session(),
+        session_factory=_create_session,
         rtsp_username=rtsp_username,
         rtsp_password=rtsp_password,
     )

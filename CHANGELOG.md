@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Authentication recovery
+- Tolerate transient authentication failures before requesting new credentials, based on savek-cc's PR #8.
+- Recreate HA-managed Digest sessions without closing the shared HTTP connector or switching to an unmanaged session.
+- Retry authentication within the initial setup attempt so persistently invalid credentials still trigger reauth after three failures.
+- Declare the config-entry-only schema and correct quoted translation placeholders for hassfest.
+
 ## 1.3.1 - 2026-04-12
 
 ### Documentation sync and quality scale
