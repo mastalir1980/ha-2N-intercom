@@ -61,13 +61,16 @@ for e in ha.entries():
 PY
     "$E2E/.venv/bin/python" "$E2E/scripts/bootstrap_staging.py" ;;
   hermes)
-    before="$(readlink "$E2E/reports/latest" 2>/dev/null || true)"
+    before="$(ls -1 "$E2E/reports" 2>/dev/null | sort)"
     E2E_AGENT=0 bash "$E2E/nightly.sh" || true
-    after="$(readlink "$E2E/reports/latest" 2>/dev/null || true)"
-    # nothing changed -> print nothing -> Hermes sends nothing
-    if [ -n "$after" ] && [ "$after" != "$before" ]; then
-      "$E2E/.venv/bin/python" "$E2E/scripts/summary.py" "$after"
-    fi
+    after="$(ls -1 "$E2E/reports" 2>/dev/null | sort)"
+    new="$(comm -13 <(echo "$before") <(echo "$after") | grep -v -e '^latest$' -e '^adhoc$' -e '^nightly.log$' || true)"
+    # nothing new -> print nothing -> Hermes sends nothing
+    for d in $new; do
+      r="$E2E/reports/$d"
+      [ -f "$r/summary.json" ] || continue
+      "$E2E/.venv/bin/python" "$E2E/scripts/summary.py" "$r" && echo
+    done
     exit 0 ;;
   install-slash-command)
     mkdir -p "$REPO/.claude/commands"
