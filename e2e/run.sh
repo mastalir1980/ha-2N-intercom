@@ -48,9 +48,9 @@ STAGE="unit"
 echo "==> [1/4] unit tests + validate"
 (
   cd "$REPO_DIR" &&
-  python3 -m unittest discover -s tests -t tests &&
-  python3 validate.py &&
-  python3 -m py_compile custom_components/2n_intercom/*.py
+  "$PY" -m unittest discover -s tests -t tests &&
+  "$PY" validate.py &&
+  "$PY" -m py_compile custom_components/2n_intercom/*.py
 ) > "$REPORT/unit.log" 2>&1
 if [ $? -ne 0 ]; then
   tail -30 "$REPORT/unit.log"; STATUS="failed"
