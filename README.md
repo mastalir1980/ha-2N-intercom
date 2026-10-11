@@ -43,7 +43,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 - HomeKit accessory mapping per relay type
 
 ### Configuration
-- UI-driven two-step setup (connection → device). Protocol and port are auto-detected (HTTPS:443 first, then HTTP:80)
+- UI-driven two-step setup (connection → device). Auto-detection tries verified HTTPS:443, then unverified HTTPS for self-signed certificates, and finally HTTP:80 with a warning
 - **Reauth flow** — when credentials are rejected the integration raises `ConfigEntryAuthFailed`, so HA opens a notification asking the user to re-enter credentials instead of looping on `ConfigEntryNotReady`
 - **Reconfigure flow** — change host/port/protocol/credentials/SSL without removing the entry (HA 2024.10+)
 - **Options flow** — device features, polling interval, camera transport, and per-relay overrides (name, type, pulse duration). Relays are auto-detected from the device
@@ -77,7 +77,11 @@ The 2N HTTP API exposes a **per-service-group** authentication setting in the de
 The integration handles every combination transparently:
 
 - The HTTP client uses `aiohttp`'s `DigestAuthMiddleware` (with `preemptive=False`) so it answers Digest challenges automatically.
-- When the device answers a request with `401 + WWW-Authenticate: Basic`, the client retries the same request with Basic auth.
+- When the device answers a request with `401 + WWW-Authenticate: Basic`, the client retries with Basic auth over HTTPS. Basic over plaintext HTTP is refused unless **Allow insecure connection** (`allow_insecure`, default off) is enabled in **Reconfigure**. Digest authentication remains supported over both transports.
+
+Prefer HTTPS with certificate verification. Factory self-signed certificates use encrypted HTTPS without identity verification; install a trusted certificate for protection against impersonation. The insecure opt-in permits sending recoverable credentials over plaintext HTTP and should be used only when HTTPS or Digest is unavailable.
+
+Upgrading does not change saved connection settings. Reconfigure existing HTTP entries to HTTPS where possible. HTTP Basic users must either switch to HTTPS/Digest or explicitly enable the insecure opt-in.
 
 The same username and password must work for every service group the integration touches. **Don't try to "simplify" `_async_request`** by hard-coding one scheme — the dual-auth path exists exactly because the device exposes the choice per service group.
 

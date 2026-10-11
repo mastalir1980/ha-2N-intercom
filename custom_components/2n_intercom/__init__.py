@@ -19,6 +19,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .api import TwoNIntercomAPI
 from .const import (
+    CONF_ALLOW_INSECURE,
     CONF_CALLED_ID,
     CONF_ENABLE_CAMERA,
     CONF_ENABLE_DOORBELL,
@@ -29,6 +30,7 @@ from .const import (
     CONF_RTSP_USERNAME,
     CONF_SCAN_INTERVAL,
     CONF_VERIFY_SSL,
+    DEFAULT_ALLOW_INSECURE,
     DEFAULT_ENABLE_CAMERA,
     DEFAULT_ENABLE_DOORBELL,
     DEFAULT_PROTOCOL,
@@ -346,6 +348,9 @@ async def async_setup_entry(
     # connection fields and the options flow cannot shadow them.
     conn = entry.data
     verify_ssl = conn.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+    allow_insecure = bool(
+        _get_option(entry, CONF_ALLOW_INSECURE, DEFAULT_ALLOW_INSECURE)
+    )
 
     import aiohttp as _aiohttp  # local import — only needed here for the middleware
 
@@ -377,6 +382,7 @@ async def async_setup_entry(
         session=session,
         rtsp_username=rtsp_username,
         rtsp_password=rtsp_password,
+        allow_insecure=allow_insecure,
     )
 
     # Honour the per-entry polling interval from the options flow when set,

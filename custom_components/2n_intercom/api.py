@@ -26,6 +26,7 @@ from .const import (
     LIVE_VIEW_MODE_JPEG_ONLY,
     LIVE_VIEW_MODE_MJPEG,
     LIVE_VIEW_MODE_RTSP,
+    PROTOCOL_HTTPS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -379,6 +380,7 @@ class TwoNIntercomAPI:
         session: aiohttp.ClientSession | None = None,
         rtsp_username: str | None = None,
         rtsp_password: str | None = None,
+        allow_insecure: bool = False,
     ) -> None:
         """Initialize the API client."""
         self.host = host
@@ -389,6 +391,9 @@ class TwoNIntercomAPI:
         self.verify_ssl = verify_ssl
         self.rtsp_username = rtsp_username
         self.rtsp_password = rtsp_password
+        # When False (default), the HTTP Basic-auth fallback is refused over a
+        # plaintext-HTTP transport so credentials are never sent in cleartext.
+        self.allow_insecure = allow_insecure
         self._session: aiohttp.ClientSession | None = session
         self._owns_session: bool = session is None
         self._base_url = f"{protocol}://{host}:{port}"
@@ -431,6 +436,20 @@ class TwoNIntercomAPI:
         """Return whether a 401 challenge requires HTTP Basic auth."""
         challenge = response.headers.get("WWW-Authenticate", "")
         return response.status == 401 and "basic" in challenge.lower()
+
+    def _basic_auth_permitted(self) -> bool:
+        """Return whether falling back to HTTP Basic auth is safe.
+
+        Basic auth sends ``base64(user:pass)``, which is trivially reversible,
+        so over a plaintext-HTTP transport it is a cleartext credential on the
+        wire. We allow it over HTTPS (encrypted in transit) but refuse it over
+        plain HTTP unless the user has explicitly opted into insecure transport
+        via ``allow_insecure``. Digest — the primary auth path — is unaffected
+        because it never exposes the password.
+        """
+        if self.protocol == PROTOCOL_HTTPS:
+            return True
+        return self.allow_insecure
 
     @property
     def camera_capabilities(self) -> CameraCapabilities:
@@ -556,6 +575,22 @@ class TwoNIntercomAPI:
 
         async with session.request(method, url, **request_kwargs) as response:
             if not self._requires_basic_auth(response):
+                yield response
+                return
+            if not self._basic_auth_permitted():
+                # Device wants Basic but the transport is plaintext HTTP and the
+                # user hasn't opted into insecure auth. Surface the 401 to the
+                # caller (which raises TwoNAuthenticationError) instead of
+                # leaking the password in cleartext.
+                _LOGGER.warning(
+                    "2N device at %s requested HTTP Basic auth over a plaintext "
+                    "transport (protocol=%s); refusing to send credentials in "
+                    "cleartext. Switch the device to HTTPS, or enable 'Allow "
+                    "insecure connection' in the reconfigure flow if you accept "
+                    "the risk.",
+                    url,
+                    self.protocol,
+                )
                 yield response
                 return
 

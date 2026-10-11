@@ -11,5 +11,5 @@
   "loggers": ["custom_components.2n_intercom"],
   "quality_scale": "platinum",
   "requirements": [],
-  "version": "1.3.1"
+  "version": "1.4.0"
 }

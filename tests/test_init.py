@@ -190,6 +190,7 @@ class FakeHass:
 
 class FakeAPI:
     def __init__(self, *args, call_status=None, answer_result=True, hangup_result=True, **kwargs) -> None:
+        self.allow_insecure = kwargs.get("allow_insecure", False)
         del args, kwargs
         self._call_status = call_status or {
             "state": "ringing",
@@ -757,6 +758,24 @@ class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):
 
         await init_module.async_unload_entry(hass, entry)
         self.assertIsNone(entry.runtime_data)
+
+    async def test_setup_forwards_insecure_opt_in_from_options(self) -> None:
+        init_module = self.init_module
+        init_module.TwoNIntercomAPI = FakeAPI
+        for options, expected in (({}, False), ({"allow_insecure": True}, True)):
+            with self.subTest(options=options):
+                entry = FakeConfigEntry(
+                    "entry-1",
+                    {
+                        "host": "intercom.local", "port": 80, "protocol": "http",
+                        "username": "user", "password": "secret",
+                    },
+                    options=options,
+                )
+                hass = FakeHass([entry])
+                await init_module.async_setup_entry(hass, entry)
+                self.assertEqual(entry.runtime_data.api.allow_insecure, expected)
+                await init_module.async_unload_entry(hass, entry)
 
     async def test_get_option_prefers_options_over_data(self) -> None:
         """_get_option should prefer options, fall back to data."""
