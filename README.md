@@ -175,6 +175,17 @@ The options flow has up to three steps:
 2. **Camera** *(only when camera is enabled)* — live view mode, RTSP credentials, MJPEG resolution/fps, camera source
 3. **Relay** *(one per auto-detected relay)* — name, device type (door/gate), pulse duration
 
+Intermediate forms use Home Assistant's **Next** button; the final form submits
+the settings. To revisit a step, enable **Return to the previous step** and submit
+the current form. Complete required fields first: Home Assistant validates the
+form before navigating. Draft values are retained, including camera settings and
+individual relay edits, and are saved only when you finish without selecting
+the return option. Closing the dialog discards the draft.
+
+**HTTP API username/password are not camera options.** To change them, close the
+options dialog and use the integration entry's **⋮ → Reconfigure** menu. The
+camera step's **RTSP username/password** belong to the separate streaming account.
+
 | Step | Parameter | Type | Default | Description |
 |---|---|---|---|---|
 | Device | `name` | string | *(from setup)* | Display name |

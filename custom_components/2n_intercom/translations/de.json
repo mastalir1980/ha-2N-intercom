@@ -6,8 +6,8 @@
         "description": "Geben Sie die IP-Adresse und API-Zugangsdaten Ihrer 2N Gegensprechanlage ein. Das Verbindungsprotokoll wird automatisch erkannt.",
         "data": {
           "host": "IP-Adresse",
-          "username": "Benutzername",
-          "password": "Passwort"
+          "username": "HTTP-API-Benutzername",
+          "password": "HTTP-API-Passwort"
         },
         "data_description": {
           "host": "IP-Adresse oder Hostname des Geräts (z.\u00a0B. 192.0.2.100)",
@@ -22,18 +22,41 @@
           "name": "Name",
           "enable_camera": "Kamera aktivieren",
           "enable_doorbell": "Klingel aktivieren",
-          "called_id": "Rufkonto (Peer)"
+          "called_id": "Rufkonto (Peer)",
+          "go_back": "Zum vorherigen Schritt zurückkehren"
         },
         "data_description": {
           "name": "Anzeigename in Home Assistant",
           "enable_camera": "Kamera-Entität für Schnappschüsse und Streaming anlegen",
           "enable_doorbell": "Klingel-Entität zur Klingelerkennung anlegen",
-          "called_id": "Wählen Sie das Konto, das klingeln soll. Alle Anrufe = Klingeln bei jeder Taste."
+          "called_id": "Wählen Sie das Konto, das klingeln soll. Alle Anrufe = Klingeln bei jeder Taste.",
+          "go_back": "Aktivieren Sie diese Option und bestätigen Sie das Formular, um zurückzukehren. Eingaben bleiben als Entwurf erhalten; Änderungen werden noch nicht gespeichert."
+        }
+      },
+      "reconfigure": {
+        "title": "2N Gegensprechanlage - HTTP-API-Verbindung",
+        "description": "Ändern Sie die Geräteadresse und das HTTP-API-Konto. Diese Zugangsdaten sind vom RTSP-Kamerakonto getrennt. Das Konto wird am Gerät unter Dienste > HTTP API eingerichtet.",
+        "data": {
+          "host": "IP-Adresse",
+          "port": "Port",
+          "protocol": "Protokoll",
+          "username": "HTTP-API-Benutzername",
+          "password": "HTTP-API-Passwort",
+          "verify_ssl": "TLS-Zertifikat prüfen"
+        }
+      },
+      "reauth_confirm": {
+        "title": "2N Gegensprechanlage - HTTP-API-Anmeldung",
+        "description": "Aktualisieren Sie die HTTP-API-Zugangsdaten für {host}. Geben Sie hier nicht die separaten RTSP-Zugangsdaten ein.",
+        "data": {
+          "username": "HTTP-API-Benutzername",
+          "password": "HTTP-API-Passwort"
         }
       }
     },
     "error": {
-      "cannot_connect": "Verbindung zum Gerät fehlgeschlagen. Bitte IP-Adresse, Port und Zugangsdaten prüfen."
+      "cannot_connect": "Verbindung zum Gerät fehlgeschlagen. Bitte IP-Adresse, Port und Zugangsdaten prüfen.",
+      "invalid_auth": "HTTP-API-Anmeldung fehlgeschlagen. Prüfen Sie die Zugangsdaten und Kontoberechtigungen am Gerät."
     },
     "abort": {
       "already_configured": "Diese 2N Gegensprechanlage ist bereits konfiguriert.",
@@ -52,7 +75,7 @@
       },
       "device": {
         "title": "2N Gegensprechanlage - Gerät",
-        "description": "Gerätefunktionen anpassen. Relais werden automatisch vom Gerät erkannt — Namen und Typen können im nächsten Schritt angepasst werden.",
+        "description": "Gerätefunktionen anpassen. Kamera und erkannte Relais folgen in den nächsten Schritten. Für HTTP-API-Benutzername, Passwort oder Adresse schließen Sie diesen Dialog und wählen im Drei-Punkte-Menü des Integrationseintrags Neu konfigurieren (Reconfigure). HTTP-API- und RTSP-Kamerazugangsdaten sind getrennt.",
         "data": {
           "name": "Name",
           "enable_camera": "Kamera aktivieren",
@@ -78,7 +101,8 @@
           "mjpeg_height": "MJPEG-Höhe (Pixel)",
           "mjpeg_fps": "MJPEG-Bildrate (fps)",
           "rtsp_username": "RTSP-Benutzername",
-          "rtsp_password": "RTSP-Passwort"
+          "rtsp_password": "RTSP-Passwort",
+          "go_back": "Zum vorherigen Schritt zurückkehren"
         },
         "data_description": {
           "live_view_mode": "Auto wählt RTSP wenn RTSP-Zugangsdaten konfiguriert und gültig sind, dann MJPEG, dann nur JPEG-Schnappschüsse",
@@ -87,7 +111,8 @@
           "mjpeg_height": "Höhe des MJPEG-Streams vom Gerät (z.\u00a0B. 480)",
           "mjpeg_fps": "Bilder pro Sekunde für den MJPEG-Stream (1-15)",
           "rtsp_username": "Benutzername für den 2N-RTSP-Streamingdienst (wird separat von der HTTP-API in der Geräte-Weboberfläche unter Dienste > Streaming konfiguriert)",
-          "rtsp_password": "Passwort für das RTSP-Streaming-Konto"
+          "rtsp_password": "Passwort für das RTSP-Streaming-Konto",
+          "go_back": "Aktivieren Sie diese Option und bestätigen Sie das Formular, um zurückzukehren. Eingaben bleiben als Entwurf erhalten; Änderungen werden noch nicht gespeichert."
         }
       },
       "relay": {
@@ -97,13 +122,15 @@
           "relay_number": "Relaisnummer",
           "relay_name": "Relaisname",
           "relay_device_type": "Gerätetyp",
-          "relay_pulse_duration": "Pulsdauer (Millisekunden)"
+          "relay_pulse_duration": "Pulsdauer (Millisekunden)",
+          "go_back": "Zum vorherigen Schritt zurückkehren"
         },
         "data_description": {
           "relay_number": "Physische Relaisnummer am Gerät (automatisch erkannt)",
           "relay_name": "Anzeigename für dieses Relais in Home Assistant",
           "relay_device_type": "Tür erzeugt einen Schalter, Tor erzeugt eine Abdeckung",
-          "relay_pulse_duration": "Länge des Schaltpulses an das Relais (ms). Standard ist die am Gerät konfigurierte switchOnDuration."
+          "relay_pulse_duration": "Länge des Schaltpulses an das Relais (ms). Standard ist die am Gerät konfigurierte switchOnDuration.",
+          "go_back": "Aktivieren Sie diese Option und bestätigen Sie das Formular, um zurückzukehren. Eingaben bleiben als Entwurf erhalten; Änderungen werden noch nicht gespeichert."
         }
       }
     }

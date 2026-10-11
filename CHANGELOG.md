@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Configuration wizard
+- Show Next on intermediate forms and offer a return-to-previous-step option without discarding draft device, camera or relay settings.
+- Keep skipped camera settings and saved relay overrides when the device is unavailable.
+- Label HTTP API credentials explicitly and add connection/reauth translations and guidance in English, Czech and German.
+
 ### Authentication recovery
 - Tolerate transient authentication failures before requesting new credentials, based on savek-cc's PR #8.
 - Recreate HA-managed Digest sessions without closing the shared HTTP connector or switching to an unmanaged session.

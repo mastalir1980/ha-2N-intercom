@@ -17,6 +17,7 @@ from __future__ import annotations
 import sys
 import types
 import unittest
+import json
 
 from _stubs import (
     API_PATH,
@@ -35,6 +36,17 @@ from _stubs import (
 
 class _FormResult(dict):
     """Marker dict so tests can assert on the kind of flow result returned."""
+
+
+def _form_values(result):
+    return {
+        field.key: (
+            field.description["suggested_value"]
+            if field.description and "suggested_value" in field.description
+            else field.default
+        )
+        for field in result["data_schema"].schema
+    }
 
 
 def _install_voluptuous_stub() -> None:
@@ -119,6 +131,7 @@ def _install_homeassistant_stubs() -> None:
             data_schema=None,
             errors=None,
             description_placeholders=None,
+            last_step=None,
         ):
             return _FormResult(
                 type="form",
@@ -126,6 +139,7 @@ def _install_homeassistant_stubs() -> None:
                 data_schema=data_schema,
                 errors=errors or {},
                 description_placeholders=description_placeholders or {},
+                last_step=last_step,
             )
 
         def async_abort(self, *, reason):
@@ -347,6 +361,40 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
         # Every API the flow opens is also closed — no resource leaks.
         self.assertGreaterEqual(len(FakeAPI.instances), 1)
         self.assertTrue(all(instance.closed for instance in FakeAPI.instances))
+
+    async def test_setup_back_preserves_device_draft_and_connection_fields(self) -> None:
+        flow = self._make_flow()
+        result = await flow.async_step_user()
+        self.assertFalse(result["last_step"])
+        result = await flow.async_step_user({
+            "host": "192.0.2.20", "username": "user", "password": "original",
+        })
+        self.assertTrue(result["last_step"])
+        device = {
+            **_form_values(result),
+            "name": "Front door",
+            "enable_camera": False,
+            "called_id": "101",
+            "go_back": True,
+        }
+        result = await flow.async_step_device(device)
+        self.assertEqual(result["step_id"], "user")
+        connection = _form_values(result)
+        self.assertEqual(connection["host"], "192.0.2.20")
+        self.assertEqual(connection["password"], "original")
+        self.assertNotIn("go_back", flow._data)
+        self.assertTrue(device["go_back"])
+
+        result = await flow.async_step_user({**connection, "password": "updated"})
+        values = _form_values(result)
+        self.assertEqual(values["name"], "Front door")
+        self.assertFalse(values["enable_camera"])
+        self.assertEqual(values["called_id"], "101")
+        self.assertFalse(values["go_back"])
+        result = await flow.async_step_device(values)
+        self.assertEqual(result["type"], "create_entry")
+        self.assertEqual(result["data"]["password"], "updated")
+        self.assertNotIn("go_back", result["data"])
 
     async def test_user_step_failed_connection_keeps_form_with_error(self) -> None:
         FakeAPI.connection_result = False
@@ -782,6 +830,161 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
         flow.hass = hass or FakeHass([entry])
         return flow
 
+    def _entry_with_relays(self, camera=True):
+        entry = FakeConfigEntry(
+            "entry-1",
+            {
+                "host": "192.0.2.20", "port": 443, "username": "user",
+                "password": "secret", "enable_camera": camera,
+            },
+            options={"name": "Saved name", "scan_interval": 60},
+        )
+        entry.runtime_data = types.SimpleNamespace(
+            coordinator=types.SimpleNamespace(switch_caps={
+                "switches": [
+                    {"switch": 1, "enabled": True, "switchOnDuration": 2},
+                    {"switch": 3, "enabled": True, "switchOnDuration": 15},
+                ],
+            }),
+        )
+        return entry
+
+    async def test_backtracking_preserves_all_drafts_without_duplicate_relays(self) -> None:
+        entry = self._entry_with_relays()
+        original_options = dict(entry.options)
+        flow = self._make_options_flow(entry)
+        device = await flow.async_step_init()
+        self.assertFalse(device["last_step"])
+        camera = await flow.async_step_device({
+            **_form_values(device), "name": "New name", "scan_interval": 30,
+        })
+        self.assertFalse(camera["last_step"])
+        relay1 = await flow.async_step_camera({
+            **_form_values(camera), "mjpeg_fps": 5,
+            "rtsp_username": "stream", "rtsp_password": "stream secret",
+        })
+        self.assertFalse(relay1["last_step"])
+        relay2 = await flow.async_step_relay({
+            **_form_values(relay1), "relay_name": "Door",
+        })
+        self.assertTrue(relay2["last_step"])
+        self.assertEqual(_form_values(relay2)["relay_number"], 3)
+        relay1 = await flow.async_step_relay({
+            **_form_values(relay2), "relay_name": "Gate", "go_back": True,
+        })
+        self.assertEqual(_form_values(relay1)["relay_name"], "Door")
+        self.assertFalse(_form_values(relay1)["go_back"])
+        camera = await flow.async_step_relay({
+            **_form_values(relay1), "relay_name": "Front door", "go_back": True,
+        })
+        self.assertEqual(camera["step_id"], "camera")
+        self.assertEqual(_form_values(camera)["mjpeg_fps"], 5)
+        self.assertEqual(_form_values(camera)["rtsp_password"], "stream secret")
+        device = await flow.async_step_camera({
+            **_form_values(camera), "mjpeg_width": 640, "go_back": True,
+        })
+        self.assertEqual(_form_values(device)["name"], "New name")
+        self.assertEqual(_form_values(device)["scan_interval"], 30)
+        self.assertNotIn("go_back", _form_values(device))
+        self.assertEqual(entry.options, original_options)
+
+        camera = await flow.async_step_device(_form_values(device))
+        self.assertEqual(_form_values(camera)["mjpeg_width"], 640)
+        self.assertFalse(_form_values(camera)["go_back"])
+        relay1 = await flow.async_step_camera(_form_values(camera))
+        self.assertEqual(_form_values(relay1)["relay_name"], "Front door")
+        relay2 = await flow.async_step_relay(_form_values(relay1))
+        self.assertEqual(_form_values(relay2)["relay_name"], "Gate")
+        self.assertTrue(relay2["last_step"])
+        result = await flow.async_step_relay(_form_values(relay2))
+        self.assertEqual(result["type"], "create_entry")
+        self.assertEqual(result["data"]["name"], "New name")
+        self.assertEqual(result["data"]["mjpeg_fps"], 5)
+        self.assertEqual(result["data"]["rtsp_password"], "stream secret")
+        self.assertEqual(
+            [relay["relay_number"] for relay in result["data"]["relays"]], [1, 3]
+        )
+        self.assertNotIn("go_back", result["data"])
+        self.assertTrue(all("go_back" not in r for r in result["data"]["relays"]))
+        self.assertEqual(entry.options, original_options)
+        self.assertEqual(flow.hass.config_entries.reload_calls, [])
+
+    async def test_first_relay_returns_to_device_when_camera_disabled(self) -> None:
+        flow = self._make_options_flow(self._entry_with_relays(camera=False))
+        device = await flow.async_step_init()
+        relay = await flow.async_step_device(_form_values(device))
+        self.assertEqual(relay["step_id"], "relay")
+        device = await flow.async_step_relay({
+            **_form_values(relay), "relay_name": "Draft relay", "go_back": True,
+        })
+        self.assertEqual(device["step_id"], "device")
+        relay = await flow.async_step_device(_form_values(device))
+        self.assertEqual(_form_values(relay)["relay_name"], "Draft relay")
+
+    async def test_disabling_camera_after_going_back_keeps_camera_preferences(self) -> None:
+        entry = self._entry_with_relays()
+        entry.options.update({"rtsp_username": "old", "rtsp_password": "old secret"})
+        flow = self._make_options_flow(entry)
+        device = await flow.async_step_init()
+        camera = await flow.async_step_device(_form_values(device))
+        device = await flow.async_step_camera({
+            **_form_values(camera), "mjpeg_fps": 7, "go_back": True,
+        })
+        relay = await flow.async_step_device({
+            **_form_values(device), "enable_camera": False,
+        })
+        device = await flow.async_step_relay({
+            **_form_values(relay), "go_back": True,
+        })
+        self.assertEqual(device["step_id"], "device")
+        relay = await flow.async_step_device(_form_values(device))
+        relay = await flow.async_step_relay(_form_values(relay))
+        result = await flow.async_step_relay(_form_values(relay))
+        self.assertFalse(result["data"]["enable_camera"])
+        self.assertEqual(result["data"]["mjpeg_fps"], 7)
+        self.assertEqual(result["data"]["rtsp_password"], "old secret")
+
+    async def test_last_camera_step_can_go_back_and_clear_rtsp_credentials(self) -> None:
+        entry = self._entry_with_relays()
+        entry.runtime_data = None
+        entry.options.update({"rtsp_username": "old", "rtsp_password": "old secret"})
+        flow = self._make_options_flow(entry)
+        device = await flow.async_step_init()
+        camera = await flow.async_step_device(_form_values(device))
+        self.assertTrue(camera["last_step"])
+        values = _form_values(camera)
+        values.pop("rtsp_username")
+        values.pop("rtsp_password")
+        values["go_back"] = True
+        device = await flow.async_step_camera(values)
+        self.assertEqual(device["step_id"], "device")
+        camera = await flow.async_step_device(_form_values(device))
+        self.assertEqual(_form_values(camera)["rtsp_password"], "")
+        result = await flow.async_step_camera(_form_values(camera))
+        self.assertEqual(result["data"]["rtsp_username"], "")
+        self.assertEqual(result["data"]["rtsp_password"], "")
+
+    async def test_skipped_steps_keep_saved_settings_but_not_legacy_credentials(self) -> None:
+        entry = self._entry_with_relays(camera=False)
+        entry.runtime_data = None
+        saved_relays = [{
+            "relay_number": 1, "relay_name": "Door",
+            "relay_device_type": "door", "relay_pulse_duration": 2500,
+        }]
+        entry.options.update({
+            "rtsp_username": "stream", "rtsp_password": "stream secret",
+            "mjpeg_fps": 7, "relays": saved_relays,
+            "host": "old-host", "password": "old-password", "go_back": True,
+        })
+        flow = self._make_options_flow(entry)
+        device = await flow.async_step_init()
+        result = await flow.async_step_device(_form_values(device))
+        self.assertEqual(result["data"]["relays"], saved_relays)
+        self.assertEqual(result["data"]["rtsp_password"], "stream secret")
+        self.assertEqual(result["data"]["mjpeg_fps"], 7)
+        for key in ("host", "password", "go_back"):
+            self.assertNotIn(key, result["data"])
+
     async def test_init_redirects_to_device_step(self) -> None:
         entry = FakeConfigEntry(
             "entry-1",
@@ -1050,6 +1253,39 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
         result = await flow.async_step_device(None)
         self.assertEqual(result["type"], "form")
         self.assertEqual(result["step_id"], "device")
+
+
+class FlowTranslationTests(unittest.TestCase):
+    def test_navigation_and_http_api_forms_have_translations(self) -> None:
+        component = CONFIG_FLOW_PATH.parent
+        source = json.loads((component / "strings.json").read_text())
+        for language in ("en", "cs", "de"):
+            with self.subTest(language=language):
+                translated = json.loads(
+                    (component / "translations" / f"{language}.json").read_text()
+                )
+                for section, steps in (
+                    ("config", ("user", "device", "reconfigure", "reauth_confirm")),
+                    ("options", ("device", "camera", "relay")),
+                ):
+                    for step in steps:
+                        expected = source[section]["step"][step]
+                        actual = translated[section]["step"][step]
+                        self.assertEqual(set(actual["data"]), set(expected["data"]))
+                        self.assertTrue(actual["title"])
+                        self.assertTrue(actual["description"])
+                        # A static submit label would override HA's Next/Submit choice.
+                        self.assertNotIn("submit", actual)
+                self.assertIn(
+                    "{host}", translated["config"]["step"]["reauth_confirm"]["description"]
+                )
+                self.assertIn("invalid_auth", translated["config"]["error"])
+                for section, step in (
+                    ("config", "device"), ("options", "camera"), ("options", "relay"),
+                ):
+                    self.assertTrue(
+                        translated[section]["step"][step]["data_description"]["go_back"]
+                    )
 
 
 class ConfigFlowHelperTests(unittest.IsolatedAsyncioTestCase):

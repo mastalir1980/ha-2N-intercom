@@ -6,8 +6,8 @@
         "description": "Zadejte IP adresu a přihlašovací údaje API vašeho 2N Intercom. Protokol připojení se detekuje automaticky.",
         "data": {
           "host": "IP adresa",
-          "username": "Uživatelské jméno",
-          "password": "Heslo"
+          "username": "Uživatelské jméno HTTP API",
+          "password": "Heslo HTTP API"
         },
         "data_description": {
           "host": "IP adresa nebo hostname zařízení (např. 192.0.2.100)",
@@ -22,18 +22,41 @@
           "name": "Název",
           "enable_camera": "Povolit kameru",
           "enable_doorbell": "Povolit zvonek",
-          "called_id": "Volaný účet (peer)"
+          "called_id": "Volaný účet (peer)",
+          "go_back": "Vrátit se na předchozí krok"
         },
         "data_description": {
           "name": "Zobrazený název v Home Assistant",
           "enable_camera": "Vytvoří entitu kamery pro snímky i stream",
           "enable_doorbell": "Vytvoří entitu zvonku pro detekci zvonění",
-          "called_id": "Vyberte účet, na který se zvoní. Všechny hovory = zvonění pro všechna tlačítka."
+          "called_id": "Vyberte účet, na který se zvoní. Všechny hovory = zvonění pro všechna tlačítka.",
+          "go_back": "Zapněte tuto volbu a potvrďte formulář pro návrat. Zadané hodnoty zůstanou rozepsané; změny se zatím neuloží."
+        }
+      },
+      "reconfigure": {
+        "title": "2N Intercom - Připojení k HTTP API",
+        "description": "Změňte adresu interkomu a účet HTTP API. Tyto údaje jsou oddělené od RTSP účtu kamery. Účet v interkomu nastavíte v části Služby > HTTP API.",
+        "data": {
+          "host": "IP adresa",
+          "port": "Port",
+          "protocol": "Protokol",
+          "username": "Uživatelské jméno HTTP API",
+          "password": "Heslo HTTP API",
+          "verify_ssl": "Ověřovat TLS certifikát"
+        }
+      },
+      "reauth_confirm": {
+        "title": "2N Intercom - Přihlášení k HTTP API",
+        "description": "Aktualizujte přihlašovací údaje HTTP API pro {host}. Nezadávejte zde samostatné údaje pro RTSP streamování.",
+        "data": {
+          "username": "Uživatelské jméno HTTP API",
+          "password": "Heslo HTTP API"
         }
       }
     },
     "error": {
-      "cannot_connect": "Nepodařilo se připojit k zařízení. Zkontrolujte prosím IP adresu, port a přihlašovací údaje."
+      "cannot_connect": "Nepodařilo se připojit k zařízení. Zkontrolujte prosím IP adresu, port a přihlašovací údaje.",
+      "invalid_auth": "Přihlášení k HTTP API selhalo. Zkontrolujte přihlašovací údaje a oprávnění účtu v interkomu."
     },
     "abort": {
       "already_configured": "Toto zařízení 2N Intercom je již nakonfigurováno.",
@@ -52,7 +75,7 @@
       },
       "device": {
         "title": "Možnosti 2N Intercom - Zařízení",
-        "description": "Upravte funkce zařízení. Relé jsou automaticky detekována ze zařízení — názvy a typy lze upravit v dalším kroku.",
+        "description": "Upravte funkce zařízení. V dalších krocích následuje kamera a detekovaná relé. Pro změnu jména, hesla nebo adresy HTTP API zavřete tento dialog a použijte nabídku tří teček u položky integrace > Překonfigurovat (Reconfigure). Údaje HTTP API nejsou přihlašovací údaje RTSP kamery.",
         "data": {
           "name": "Název",
           "enable_camera": "Povolit kameru",
@@ -78,7 +101,8 @@
           "mjpeg_height": "Výška MJPEG (pixely)",
           "mjpeg_fps": "Snímky za sekundu (MJPEG)",
           "rtsp_username": "RTSP uživatelské jméno",
-          "rtsp_password": "RTSP heslo"
+          "rtsp_password": "RTSP heslo",
+          "go_back": "Vrátit se na předchozí krok"
         },
         "data_description": {
           "live_view_mode": "auto upřednostní RTSP, pak MJPEG, případně jen JPEG snímky",
@@ -87,7 +111,8 @@
           "mjpeg_height": "Výška MJPEG streamu vyžádaného od zařízení (např. 480)",
           "mjpeg_fps": "Snímky za sekundu pro MJPEG stream (1-15)",
           "rtsp_username": "Uživatelské jméno pro RTSP streamovací službu 2N (konfiguruje se samostatně v rozhraní zařízení pod Služby > Streaming)",
-          "rtsp_password": "Heslo k účtu RTSP streamovací služby"
+          "rtsp_password": "Heslo k účtu RTSP streamovací služby",
+          "go_back": "Zapněte tuto volbu a potvrďte formulář pro návrat. Zadané hodnoty zůstanou rozepsané; změny se zatím neuloží."
         }
       },
       "relay": {
@@ -97,13 +122,15 @@
           "relay_number": "Číslo relé",
           "relay_name": "Název relé",
           "relay_device_type": "Typ zařízení",
-          "relay_pulse_duration": "Doba pulsu (milisekundy)"
+          "relay_pulse_duration": "Doba pulsu (milisekundy)",
+          "go_back": "Vrátit se na předchozí krok"
         },
         "data_description": {
           "relay_number": "Fyzické číslo relé na zařízení (automaticky detekováno)",
           "relay_name": "Zobrazený název relé v Home Assistant",
           "relay_device_type": "Dveře vytvoří spínač, vrata vytvoří kryt",
-          "relay_pulse_duration": "Délka spínacího pulsu odeslaného relé (ms). Výchozí hodnota je switchOnDuration nakonfigurovaná na zařízení."
+          "relay_pulse_duration": "Délka spínacího pulsu odeslaného relé (ms). Výchozí hodnota je switchOnDuration nakonfigurovaná na zařízení.",
+          "go_back": "Zapněte tuto volbu a potvrďte formulář pro návrat. Zadané hodnoty zůstanou rozepsané; změny se zatím neuloží."
         }
       }
     }

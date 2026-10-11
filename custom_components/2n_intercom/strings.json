@@ -6,8 +6,8 @@
         "description": "Enter the IP address and API credentials of your 2N Intercom. The connection protocol is detected automatically.",
         "data": {
           "host": "IP Address",
-          "username": "Username",
-          "password": "Password"
+          "username": "HTTP API username",
+          "password": "HTTP API password"
         },
         "data_description": {
           "host": "IP address or hostname of the intercom (e.g., 192.0.2.100)",
@@ -22,18 +22,41 @@
           "name": "Name",
           "enable_camera": "Enable Camera",
           "enable_doorbell": "Enable Doorbell",
-          "called_id": "Ringing account (peer)"
+          "called_id": "Ringing account (peer)",
+          "go_back": "Return to the previous step"
         },
         "data_description": {
           "name": "Displayed name in Home Assistant",
           "enable_camera": "Create the camera entity for snapshots and streaming",
           "enable_doorbell": "Create the doorbell entity for ring detection",
-          "called_id": "Select which account should ring. Choose All calls to ring on every button."
+          "called_id": "Select which account should ring. Choose All calls to ring on every button.",
+          "go_back": "Enable this option and submit the form to go back. Entered values are kept as a draft; nothing is saved yet."
+        }
+      },
+      "reconfigure": {
+        "title": "2N Intercom - HTTP API connection",
+        "description": "Change the intercom address and HTTP API account. These credentials are separate from the camera's RTSP account. Configure the account on the intercom under Services > HTTP API.",
+        "data": {
+          "host": "IP address",
+          "port": "Port",
+          "protocol": "Protocol",
+          "username": "HTTP API username",
+          "password": "HTTP API password",
+          "verify_ssl": "Verify TLS certificate"
+        }
+      },
+      "reauth_confirm": {
+        "title": "2N Intercom - HTTP API authentication",
+        "description": "Update the HTTP API credentials for {host}. Do not enter the separate RTSP streaming credentials here.",
+        "data": {
+          "username": "HTTP API username",
+          "password": "HTTP API password"
         }
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to the device. Please check the IP address, port, and credentials."
+      "cannot_connect": "Failed to connect to the device. Please check the IP address, port, and credentials.",
+      "invalid_auth": "HTTP API authentication failed. Check the account credentials and permissions on the intercom."
     },
     "abort": {
       "already_configured": "This 2N Intercom device is already configured.",
@@ -56,7 +79,7 @@
       },
       "device": {
         "title": "2N Intercom Options - Device",
-        "description": "Update device features. Relays are auto-detected from the device — override names and types in the next step.",
+        "description": "Update device features. Camera and detected relays follow in the next steps. To change the HTTP API username, password or address, close this dialog and use the integration entry's three-dot menu > Reconfigure. HTTP API credentials are not the RTSP camera credentials.",
         "data": {
           "name": "Name",
           "enable_camera": "Enable Camera",
@@ -82,7 +105,8 @@
           "mjpeg_height": "MJPEG height (pixels)",
           "mjpeg_fps": "MJPEG frame rate (fps)",
           "rtsp_username": "RTSP username",
-          "rtsp_password": "RTSP password"
+          "rtsp_password": "RTSP password",
+          "go_back": "Return to the previous step"
         },
         "data_description": {
           "live_view_mode": "auto picks RTSP when RTSP credentials are configured and valid, then MJPEG, then JPEG snapshots only",
@@ -91,7 +115,8 @@
           "mjpeg_height": "Height of the MJPEG stream requested from the device (e.g. 480)",
           "mjpeg_fps": "Frames per second for the MJPEG stream (1-15)",
           "rtsp_username": "Username for the 2N RTSP streaming service (configured separately from the HTTP API in the device web UI under Services > Streaming)",
-          "rtsp_password": "Password for the RTSP streaming service account"
+          "rtsp_password": "Password for the RTSP streaming service account",
+          "go_back": "Enable this option and submit the form to go back. Entered values are kept as a draft; nothing is saved yet."
         }
       },
       "relay": {
@@ -101,13 +126,15 @@
           "relay_number": "Relay Number",
           "relay_name": "Relay Name",
           "relay_device_type": "Device Type",
-          "relay_pulse_duration": "Pulse Duration (milliseconds)"
+          "relay_pulse_duration": "Pulse Duration (milliseconds)",
+          "go_back": "Return to the previous step"
         },
         "data_description": {
           "relay_number": "Physical relay number on the device (auto-detected)",
           "relay_name": "Displayed name for this relay in Home Assistant",
           "relay_device_type": "Door creates a switch entity, gate creates a cover entity",
-          "relay_pulse_duration": "Trigger pulse length sent to the relay (ms). Default is the device-configured switchOnDuration."
+          "relay_pulse_duration": "Trigger pulse length sent to the relay (ms). Default is the device-configured switchOnDuration.",
+          "go_back": "Enable this option and submit the form to go back. Entered values are kept as a draft; nothing is saved yet."
         }
       }
     }

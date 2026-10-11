@@ -82,6 +82,14 @@ The integration supports the modern HA flows:
 
 For per-relay or device-feature changes, use the regular **Configure** (Options) button on the integration card.
 
+Options remain a step-by-step wizard. To go back, enable **Return to the previous
+step** and submit the form (required fields must be valid). Previous inputs stay
+in the draft; returning does not save or reload the integration. Finish the last
+step with that option disabled to apply the changes.
+
+The **HTTP API username/password** are under **⋮ → Reconfigure**, not the camera
+options. **RTSP username/password** in camera options are a separate account.
+
 ## Services
 
 | Service | Purpose |
