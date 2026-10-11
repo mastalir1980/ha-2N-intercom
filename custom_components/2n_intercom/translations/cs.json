@@ -22,13 +22,15 @@
           "name": "Název",
           "enable_camera": "Povolit kameru",
           "enable_doorbell": "Povolit zvonek",
-          "called_id": "Volaný účet (peer)"
+          "called_id": "Volaný účet (peer)",
+          "go_back": "Zpět na předchozí krok"
         },
         "data_description": {
           "name": "Zobrazený název v Home Assistant",
           "enable_camera": "Vytvoří entitu kamery pro snímky i stream",
           "enable_doorbell": "Vytvoří entitu zvonku pro detekci zvonění",
-          "called_id": "Vyberte účet, na který se zvoní. Všechny hovory = zvonění pro všechna tlačítka."
+          "called_id": "Vyberte účet, na který se zvoní. Všechny hovory = zvonění pro všechna tlačítka.",
+          "go_back": "Zaškrtněte a odešlete pro návrat do nastavení připojení bez uložení. Zadané hodnoty zůstanou zachovány."
         }
       },
       "reconfigure": {
@@ -95,7 +97,8 @@
           "mjpeg_height": "Výška MJPEG (pixely)",
           "mjpeg_fps": "Snímky za sekundu (MJPEG)",
           "rtsp_username": "RTSP uživatelské jméno",
-          "rtsp_password": "RTSP heslo"
+          "rtsp_password": "RTSP heslo",
+          "go_back": "Zpět na předchozí krok"
         },
         "data_description": {
           "live_view_mode": "auto upřednostní RTSP, pak MJPEG, případně jen JPEG snímky",
@@ -104,7 +107,8 @@
           "mjpeg_height": "Výška MJPEG streamu vyžádaného od zařízení (např. 480)",
           "mjpeg_fps": "Snímky za sekundu pro MJPEG stream (1-15)",
           "rtsp_username": "Uživatelské jméno pro RTSP streamovací službu 2N (konfiguruje se samostatně v rozhraní zařízení pod Služby > Streaming)",
-          "rtsp_password": "Heslo k účtu RTSP streamovací služby"
+          "rtsp_password": "Heslo k účtu RTSP streamovací služby",
+          "go_back": "Zaškrtněte a odešlete pro návrat do nastavení zařízení bez uložení. Zadané hodnoty zůstanou zachovány."
         }
       },
       "relay": {
@@ -114,13 +118,15 @@
           "relay_number": "Číslo relé",
           "relay_name": "Název relé",
           "relay_device_type": "Typ zařízení",
-          "relay_pulse_duration": "Doba pulsu (milisekundy)"
+          "relay_pulse_duration": "Doba pulsu (milisekundy)",
+          "go_back": "Zpět na předchozí krok"
         },
         "data_description": {
           "relay_number": "Fyzické číslo relé na zařízení (automaticky detekováno)",
           "relay_name": "Zobrazený název relé v Home Assistant",
           "relay_device_type": "Dveře vytvoří spínač, vrata vytvoří kryt",
-          "relay_pulse_duration": "Délka spínacího pulsu odeslaného relé (ms). Výchozí hodnota je switchOnDuration nakonfigurovaná na zařízení."
+          "relay_pulse_duration": "Délka spínacího pulsu odeslaného relé (ms). Výchozí hodnota je switchOnDuration nakonfigurovaná na zařízení.",
+          "go_back": "Zaškrtněte a odešlete pro návrat na předchozí krok bez uložení. Zadané hodnoty zůstanou zachovány."
         }
       }
     }

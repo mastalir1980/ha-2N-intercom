@@ -22,13 +22,15 @@
           "name": "Name",
           "enable_camera": "Enable Camera",
           "enable_doorbell": "Enable Doorbell",
-          "called_id": "Ringing account (peer)"
+          "called_id": "Ringing account (peer)",
+          "go_back": "Back to the previous step"
         },
         "data_description": {
           "name": "Displayed name in Home Assistant",
           "enable_camera": "Create the camera entity for snapshots and streaming",
           "enable_doorbell": "Create the doorbell entity for ring detection",
-          "called_id": "Select which account should ring. Choose All calls to ring on every button."
+          "called_id": "Select which account should ring. Choose All calls to ring on every button.",
+          "go_back": "Check and submit to return to the connection settings without saving. Values entered here are kept."
         }
       },
       "reconfigure": {
@@ -99,7 +101,8 @@
           "mjpeg_height": "MJPEG height (pixels)",
           "mjpeg_fps": "MJPEG frame rate (fps)",
           "rtsp_username": "RTSP username",
-          "rtsp_password": "RTSP password"
+          "rtsp_password": "RTSP password",
+          "go_back": "Back to the previous step"
         },
         "data_description": {
           "live_view_mode": "auto picks RTSP when RTSP credentials are configured and valid, then MJPEG, then JPEG snapshots only",
@@ -108,7 +111,8 @@
           "mjpeg_height": "Height of the MJPEG stream requested from the device (e.g. 480)",
           "mjpeg_fps": "Frames per second for the MJPEG stream (1-15)",
           "rtsp_username": "Username for the 2N RTSP streaming service (configured separately from the HTTP API in the device web UI under Services > Streaming)",
-          "rtsp_password": "Password for the RTSP streaming service account"
+          "rtsp_password": "Password for the RTSP streaming service account",
+          "go_back": "Check and submit to return to the device settings without saving. Values entered here are kept."
         }
       },
       "relay": {
@@ -118,13 +122,15 @@
           "relay_number": "Relay Number",
           "relay_name": "Relay Name",
           "relay_device_type": "Device Type",
-          "relay_pulse_duration": "Pulse Duration (milliseconds)"
+          "relay_pulse_duration": "Pulse Duration (milliseconds)",
+          "go_back": "Back to the previous step"
         },
         "data_description": {
           "relay_number": "Physical relay number on the device (auto-detected)",
           "relay_name": "Displayed name for this relay in Home Assistant",
           "relay_device_type": "Door creates a switch entity, gate creates a cover entity",
-          "relay_pulse_duration": "Trigger pulse length sent to the relay (ms). Default is the device-configured switchOnDuration."
+          "relay_pulse_duration": "Trigger pulse length sent to the relay (ms). Default is the device-configured switchOnDuration.",
+          "go_back": "Check and submit to return to the previous step without saving. Values entered here are kept."
         }
       }
     }

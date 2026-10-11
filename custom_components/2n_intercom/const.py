@@ -15,6 +15,11 @@ CONF_RELAYS = "relays"
 CONF_CALLED_ID = "called_id"
 CALLED_ID_ALL = "__all__"
 
+# Form-only navigation control (never persisted): when the user submits a
+# step with this checked, the flow returns to the previous step instead of
+# advancing. HA data-entry flows have no native "Back" button.
+CONF_GO_BACK = "go_back"
+
 # General tuning keys
 CONF_SCAN_INTERVAL = "scan_interval"
 
