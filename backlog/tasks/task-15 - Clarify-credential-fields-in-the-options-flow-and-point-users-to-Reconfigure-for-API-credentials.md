@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-11 18:43'
-updated_date: '2026-10-11 18:57'
+updated_date: '2026-10-11 19:47'
 labels:
   - config-flow
   - ux
@@ -38,12 +38,12 @@ Facts for the help text (from README "RTSP authentication" and docs/API_REFERENC
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 RTSP username/password help text states in plain language: the fields are optional, they are only used for the RTSP (H.264) video stream, where on the intercom the RTSP account is created, that the API account does not work here, and that leaving them empty means MJPEG is used
-- [ ] #2 The Configure dialog (first options step description) tells the user that IP address, port and API username/password are changed via ⋮ → Reconfigure, not here
-- [ ] #3 API credential fields in the setup, reconfigure and reauth flows are labelled as API credentials (e.g. "API username"/"API password") with help text naming the intercom web UI section where the HTTP API account is managed, so they are clearly distinct from the RTSP pair
-- [ ] #4 The RTSP password field is masked (password-type text selector) and the stored value is not displayed in clear text when the options dialog is reopened; leaving it unchanged keeps the stored password, and clearing it is still possible
-- [ ] #5 Connection identity stays in `entry.data` and is not added to the options flow
-- [ ] #6 All changed texts are updated in `strings.json` and `translations/{en,de,cs}.json` (Czech and German reviewed for clarity, not machine-literal); README options table and RTSP section match the new wording
+- [x] #1 RTSP username/password help text states in plain language: the fields are optional, they are only used for the RTSP (H.264) video stream, where on the intercom the RTSP account is created, that the API account does not work here, and that leaving them empty means MJPEG is used
+- [x] #2 The Configure dialog (first options step description) tells the user that IP address, port and API username/password are changed via ⋮ → Reconfigure, not here
+- [x] #3 API credential fields in the setup, reconfigure and reauth flows are labelled as API credentials (e.g. "API username"/"API password") with help text naming the intercom web UI section where the HTTP API account is managed, so they are clearly distinct from the RTSP pair
+- [x] #4 The RTSP password field is masked (password-type text selector) and the stored value is not displayed in clear text when the options dialog is reopened; leaving it unchanged keeps the stored password, and clearing it is still possible
+- [x] #5 Connection identity stays in `entry.data` and is not added to the options flow
+- [x] #6 All changed texts are updated in `strings.json` and `translations/{en,de,cs}.json` (Czech and German reviewed for clarity, not machine-literal); README options table and RTSP section match the new wording
 - [ ] #7 Unit tests cover RTSP password masking and keep/clear behaviour; full unit suite and `validate.py` green; E2E wip run green
 <!-- AC:END -->
 
@@ -58,3 +58,9 @@ Facts for the help text (from README "RTSP authentication" and docs/API_REFERENC
 6. Update strings.json and translations/{en,de,cs}.json with reviewed Czech and German; README options table and RTSP section updated to match.
 7. Unit tests for password masking and keep/clear behaviour; full unit suite, validate.py and e2e wip run green.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented on branch task-14-15-options-flow-ux (commit 6ac5ad2). RTSP password is a password-type TextSelector, never pre-filled; empty on submit keeps the stored password, clearing the username removes the credential pair. Unit evidence: OptionsFlowRtspCredentialsTests (5 tests: masking, keep, replace, clear, stays-empty) — 467 tests green, validate.py green. E2E test_40 additionally asserts the password selector type and no suggested_value on real HA (passed 21:37). AC#7 pending: a full e2e wip run is not yet green end-to-end because a parallel session (branch task-4-8-9-access-control-ring-snapshot) shares this checkout and the staging HA — it switched the checkout mid-run (wrong ref deployed) and its config-flow runs leave expected auto-detect ERROR lines (verified-HTTPS rung against a self-signed cert) that fail test_no_integration_errors_in_log in fresh-bootstrap windows. Not caused by this change; needs one clean wip run after the parallel session settles.
+<!-- SECTION:NOTES:END -->

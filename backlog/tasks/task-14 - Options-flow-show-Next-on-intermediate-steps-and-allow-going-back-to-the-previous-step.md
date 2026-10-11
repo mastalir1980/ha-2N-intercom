@@ -3,11 +3,11 @@ id: TASK-14
 title: >-
   Options flow: show Next on intermediate steps and allow going back to the
   previous step
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-11 18:42'
-updated_date: '2026-10-11 18:57'
+updated_date: '2026-10-11 19:47'
 labels:
   - config-flow
   - ux
@@ -36,13 +36,13 @@ Reconfigure and reauth are single-step flows and are out of scope.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 In the options flow, every step that is followed by another step shows "Next"; the step that saves the options shows "Submit" (asserted via `last_step` in unit tests for camera on/off and 0/1/2 detected relays)
-- [ ] #2 In the initial setup flow, the `user` step shows "Next" and the final `device` step shows "Submit"
-- [ ] #3 From every options-flow step after the first (camera, each relay) the user can return to the previous step without leaving the flow; values already entered in this flow session are pre-filled when going back and forward again
-- [ ] #4 Going back never persists partial options: options are saved only by the final step, and a relay screen revisited after going back is not counted twice
-- [ ] #5 Going back from the `device` step of the initial setup flow to the `user` step is possible and keeps host/port/username pre-filled; connection is re-validated on the next submit
-- [ ] #6 Any new form fields or menu options are translated in `strings.json` and all `translations/{en,de,cs}.json`; `validate.py` and the full unit test suite are green
-- [ ] #7 E2E test drives the options flow through the HA flow REST API on staging, asserts the `last_step` values and a back navigation, and leaves the saved options unchanged (flow aborted or original options restored); no relay switching
+- [x] #1 In the options flow, every step that is followed by another step shows "Next"; the step that saves the options shows "Submit" (asserted via `last_step` in unit tests for camera on/off and 0/1/2 detected relays)
+- [x] #2 In the initial setup flow, the `user` step shows "Next" and the final `device` step shows "Submit"
+- [x] #3 From every options-flow step after the first (camera, each relay) the user can return to the previous step without leaving the flow; values already entered in this flow session are pre-filled when going back and forward again
+- [x] #4 Going back never persists partial options: options are saved only by the final step, and a relay screen revisited after going back is not counted twice
+- [x] #5 Going back from the `device` step of the initial setup flow to the `user` step is possible and keeps host/port/username pre-filled; connection is re-validated on the next submit
+- [x] #6 Any new form fields or menu options are translated in `strings.json` and all `translations/{en,de,cs}.json`; `validate.py` and the full unit test suite are green
+- [x] #7 E2E test drives the options flow through the HA flow REST API on staging, asserts the `last_step` values and a back navigation, and leaves the saved options unchanged (flow aborted or original options restored); no relay switching
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -57,3 +57,15 @@ Reconfigure and reauth are single-step flows and are out of scope.
 7. Translations for the new go_back field in strings.json + en/de/cs; validate.py + full unit suite green.
 8. E2E test driving the options flow via the HA flow REST API on staging: asserts last_step values and a back navigation, leaves saved options unchanged; no relay switching.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented on branch task-14-15-options-flow-ux (commit d01afac). Back navigation is modelled as a 'go_back' checkbox on every step after the first (per the plan's recorded trade-off: no extra menu screens). Unit evidence: OptionsFlowNavigationTests (8 tests incl. last_step matrix camera on/off x 0/1/2 relays, back+prefill, no double-count) and ConfigFlowTests::test_user_step_shows_next_device_step_shows_submit / test_device_step_go_back_returns_to_user_prefilled — 467 tests green. validate.py + py_compile green. E2E: e2e/tests/test_40_options_flow.py ran against staging HA + real intercom on 2026-10-11 21:37 and PASSED (last_step asserted against device ground truth, back navigation camera->device exercised, options unchanged afterwards, no relay switching).
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Options and setup flows now show Next/Submit correctly via last_step and support back navigation through a go_back checkbox with session-value prefill; relay inputs are keyed by relay number so revisiting replaces instead of duplicating. Verified by 8 new unit tests, full suite (467), validate.py, and a passing E2E options-flow test on staging (21:37 run).
+<!-- SECTION:FINAL_SUMMARY:END -->
