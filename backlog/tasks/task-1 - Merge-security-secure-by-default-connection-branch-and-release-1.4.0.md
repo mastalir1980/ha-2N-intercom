@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-08-30 09:27'
-updated_date: '2026-10-11 18:28'
+updated_date: '2026-10-11 18:30'
 labels:
   - security
   - release
@@ -45,4 +45,8 @@ The branch security/secure-by-default-connection implements security items S1-S3
 Pre-release inspection found that allow_insecure was exposed but not forwarded to reconfigure, reauth, or directory API clients. Complete the option wiring and regression coverage before publishing; keep behavioral opt-in in entry.options and connection identity in entry.data.
 
 Release validation 2026-10-11: 452 unittest tests passed; validate.py passed with manifest 1.4.0; py_compile and Pyright passed (0 errors). Read-only staging E2E report e2e/reports/20261011-202652: 11 passed, 2 skipped (disabled SIP sensor, physical relay test intentionally excluded). An initial SSH no-route failure was transient; independent SSH/HTTP checks and the full retry succeeded. Added request-path and config-flow regressions for secure defaults, reconfigure/reauth/directory opt-in propagation, and option persistence. Merge and published tag/release criteria remain pending until verified remotely.
+
+GitHub HACS validation passed. Hassfest exposed a pre-existing invalid translation placeholder: single quotes around {reason} in invalid_hangup_reason. Removed only those quotes in strings.json and all EN/CS/DE translations to unblock release validation; the separate CONFIG_SCHEMA warning is not part of TASK-1.
+
+Final release-tree verification after the translation fix: staging E2E report 20261011-202945 passed (11 passed, 2 intentionally skipped); its prerequisite full unittest suite, validate.py, and py_compile also passed.
 <!-- SECTION:NOTES:END -->
