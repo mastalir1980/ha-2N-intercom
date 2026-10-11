@@ -83,6 +83,13 @@ Prefer HTTPS with certificate verification. Factory self-signed certificates use
 
 Upgrading does not change saved connection settings. Reconfigure existing HTTP entries to HTTPS where possible. HTTP Basic users must either switch to HTTPS/Digest or explicitly enable the insecure opt-in.
 
+An isolated authentication failure refreshes the Digest session without immediately
+asking for credentials again. Three consecutive failed poll updates trigger reauth;
+a successful update resets the counter. During startup, authentication retries
+happen within the same setup attempt so an invalid stored password still triggers
+reauth instead of leaving the integration in an endless setup-retry loop.
+Session recovery preserves Home Assistant's shared HTTP connector.
+
 The same username and password must work for every service group the integration touches. **Don't try to "simplify" `_async_request`** by hard-coding one scheme — the dual-auth path exists exactly because the device exposes the choice per service group.
 
 #### RTSP authentication

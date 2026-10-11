@@ -7,6 +7,7 @@ import sys
 import types
 import unittest
 from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, patch
 
 from _stubs import (
     API_PATH,
@@ -48,11 +49,15 @@ def _install_homeassistant_stubs() -> None:
     class ConfigEntryNotReady(Exception):
         pass
 
+    class ConfigEntryAuthFailed(Exception):
+        pass
+
     class ServiceValidationError(HomeAssistantError):
         """Stub for bad-input service errors."""
 
     exceptions.HomeAssistantError = HomeAssistantError
     exceptions.ConfigEntryNotReady = ConfigEntryNotReady
+    exceptions.ConfigEntryAuthFailed = ConfigEntryAuthFailed
     exceptions.ServiceValidationError = ServiceValidationError
     sys.modules["homeassistant.exceptions"] = exceptions
 
@@ -73,7 +78,10 @@ def _install_homeassistant_stubs() -> None:
             self.last_update_success = True
 
         async def async_config_entry_first_refresh(self):
-            self.data = await self._async_update_data()
+            try:
+                self.data = await self._async_update_data()
+            except UpdateFailed as err:
+                raise ConfigEntryNotReady() from err
             return self.data
 
     class UpdateFailed(Exception):
@@ -247,6 +255,100 @@ class FakeAPI:
 
     async def async_close(self):
         return None
+
+
+class AuthenticationSetupTests(unittest.IsolatedAsyncioTestCase):
+    """Exercise authentication recovery through the config-entry setup path."""
+
+    def setUp(self) -> None:
+        self.init_module = load_init_module()
+        self.api_module = sys.modules["custom_components.2n_intercom.api"]
+        self.entry = FakeConfigEntry(
+            "entry-auth",
+            {
+                "host": "intercom.local",
+                "port": 443,
+                "username": "user",
+                "password": "secret",
+                "verify_ssl": True,
+            },
+        )
+        self.hass = FakeHass([self.entry])
+
+    async def test_invalid_stored_password_triggers_reauth_during_setup(self) -> None:
+        api = FakeAPI()
+        api.async_get_call_status = AsyncMock(
+            side_effect=self.api_module.TwoNAuthenticationError("invalid credentials")
+        )
+        api.async_reset_session = AsyncMock()
+        with patch.object(self.init_module, "TwoNIntercomAPI", return_value=api):
+            with self.assertRaises(
+                sys.modules["homeassistant.exceptions"].ConfigEntryAuthFailed
+            ):
+                await self.init_module.async_setup_entry(self.hass, self.entry)
+
+        self.assertEqual(api.async_get_call_status.await_count, 3)
+        self.assertEqual(api.async_reset_session.await_count, 3)
+        self.assertIsNone(self.entry.runtime_data)
+        self.assertEqual(self.hass.config_entries.forwarded, [])
+
+    async def test_transient_auth_error_does_not_abort_setup(self) -> None:
+        api = FakeAPI()
+        api.async_get_call_status = AsyncMock(
+            side_effect=[
+                self.api_module.TwoNAuthenticationError("stale nonce"),
+                {"state": "idle", "sessions": []},
+            ],
+        )
+        api.async_reset_session = AsyncMock()
+        with patch.object(self.init_module, "TwoNIntercomAPI", return_value=api):
+            self.assertTrue(
+                await self.init_module.async_setup_entry(self.hass, self.entry)
+            )
+        try:
+            self.assertEqual(api.async_get_call_status.await_count, 2)
+            self.assertEqual(api.async_reset_session.await_count, 1)
+            self.assertEqual(self.entry.runtime_data.coordinator._auth_error_count, 0)
+            self.assertEqual(len(self.hass.config_entries.forwarded), 1)
+        finally:
+            await self.init_module.async_unload_entry(self.hass, self.entry)
+
+    async def test_session_recovery_reuses_ha_factory_and_connection_settings(self) -> None:
+        coordinator = self.init_module.TwoNIntercomCoordinator
+        with (
+            patch.object(coordinator, "async_initialize_static_caches", new=AsyncMock()),
+            patch.object(coordinator, "async_start_log_listener", new=AsyncMock()),
+            patch.object(coordinator, "_refresh_secondary_cache", return_value={}),
+            patch.object(self.api_module.TwoNIntercomAPI, "async_get_system_info", return_value={}),
+            patch.object(
+                self.api_module.TwoNIntercomAPI, "async_get_call_status",
+                return_value={"state": "idle", "sessions": []},
+            ),
+            patch.object(
+                self.init_module, "async_create_clientsession",
+                wraps=self.init_module.async_create_clientsession,
+            ) as create_session,
+        ):
+            await self.init_module.async_setup_entry(self.hass, self.entry)
+            api = self.entry.runtime_data.api
+            old_session = await api.async_get_session()
+            await api.async_reset_session()
+            replacement = await api.async_get_session()
+
+        self.assertEqual(create_session.call_count, 2)
+        first_call, second_call = create_session.call_args_list
+        self.assertEqual(first_call.args, (self.hass,))
+        self.assertEqual(second_call.args, (self.hass,))
+        self.assertTrue(first_call.kwargs["verify_ssl"])
+        self.assertTrue(second_call.kwargs["verify_ssl"])
+        self.assertIsNot(
+            first_call.kwargs["middlewares"][0],
+            second_call.kwargs["middlewares"][0],
+        )
+        self.assertTrue(old_session.closed)
+        self.assertFalse(replacement.closed)
+        self.assertFalse(api._owns_session)
+        await self.init_module.async_unload_entry(self.hass, self.entry)
 
 
 class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):

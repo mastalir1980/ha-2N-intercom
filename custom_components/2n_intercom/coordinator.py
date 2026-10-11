@@ -74,12 +74,7 @@ if TYPE_CHECKING:
 MAX_RETRIES = 5
 # Maximum delay between retries (seconds)
 MAX_BACKOFF_DELAY = 60
-# Consecutive auth failures tolerated before triggering HA's reauth flow.
-# A single 401 can come from a stale digest nonce (aiohttp DigestAuthMiddleware
-# caches nonce/nc across the long-lived session and the 2N firmware rotates
-# nonces over time), a brief device recovery, or a garbled response. Only a
-# sustained run indicates the stored credentials actually stopped working —
-# matches the platinum reolink integration's NUM_CRED_ERRORS pattern.
+# A transient 401 must not immediately trigger HA's reauth flow.
 NUM_AUTH_ERRORS = 3
 # Snapshot cache duration (seconds)
 SNAPSHOT_CACHE_DURATION = 1
@@ -790,6 +785,23 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
 
         return overrides
 
+    async def async_config_entry_first_refresh(self) -> None:
+        """Consume auth retries within setup, before this coordinator is discarded."""
+        for attempt in range(NUM_AUTH_ERRORS):
+            previous_auth_errors = self._auth_error_count
+            try:
+                await super().async_config_entry_first_refresh()
+            except ConfigEntryAuthFailed:
+                raise
+            except ConfigEntryNotReady:
+                if (
+                    self._auth_error_count == previous_auth_errors
+                    or attempt == NUM_AUTH_ERRORS - 1
+                ):
+                    raise
+            else:
+                return
+
     async def _async_update_data(self) -> TwoNIntercomData:
         """Fetch data from API."""
         try:
@@ -868,27 +880,11 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             )
             
         except TwoNAuthenticationError as err:
-            # Tolerate a short run of 401s before surfacing reauth. A single
-            # 401 is frequently transient (stale digest nonce, brief device
-            # recovery, garbled response) and clears on the next tick once
-            # aiohttp's DigestAuthMiddleware renegotiates; the user's stored
-            # credentials are still correct in that case. Only when we see
-            # NUM_AUTH_ERRORS in a row without an intervening success do we
-            # raise ConfigEntryAuthFailed, which registers via
-            # config_flow.async_step_reauth to prompt for new credentials.
-            #
-            # Reset the HTTP session proactively so the next poll rebuilds the
-            # DigestAuthMiddleware from scratch — this turns "wait for the
-            # middleware to notice the stale challenge" into a deterministic
-            # fresh handshake on the next attempt.
-            try:
-                await self.api.async_reset_session()
-            except Exception as reset_err:  # pylint: disable=broad-except
-                _LOGGER.debug("Session reset after auth error failed: %s", reset_err)
+            await self.api.async_reset_session()
             self._auth_error_count += 1
             if self._auth_error_count < NUM_AUTH_ERRORS:
                 _LOGGER.warning(
-                    "Authentication error %s/%s (will retry next poll): %s",
+                    "Authentication error %s/%s (will retry): %s",
                     self._auth_error_count,
                     NUM_AUTH_ERRORS,
                     err,

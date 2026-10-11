@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 import logging
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 from urllib.parse import quote, urlencode
 
@@ -381,6 +381,7 @@ class TwoNIntercomAPI:
         rtsp_username: str | None = None,
         rtsp_password: str | None = None,
         allow_insecure: bool = False,
+        session_factory: Callable[[], aiohttp.ClientSession] | None = None,
     ) -> None:
         """Initialize the API client."""
         self.host = host
@@ -396,6 +397,7 @@ class TwoNIntercomAPI:
         self.allow_insecure = allow_insecure
         self._session: aiohttp.ClientSession | None = session
         self._owns_session: bool = session is None
+        self._session_factory = session_factory
         self._base_url = f"{protocol}://{host}:{port}"
         self._camera_capabilities = CameraCapabilities()
         self._camera_transport_info = CameraTransportInfo(
@@ -408,12 +410,14 @@ class TwoNIntercomAPI:
     async def async_get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session.
 
-        When a session was injected via ``__init__`` (the HA-managed path),
-        it is returned as-is.  A fallback self-managed session is created
-        only when no session was injected (e.g. during config-flow
-        validation where no HA session helper is available).
+        Reuse the injected session, or its factory when it needs replacing.
+        Config-flow clients without a factory own their fallback session.
         """
         if self._session is None or self._session.closed:
+            if self._session_factory is not None:
+                self._session = self._session_factory()
+                self._owns_session = False
+                return self._session
             self._session = aiohttp.ClientSession(
                 connector=aiohttp.TCPConnector(ssl=self.verify_ssl),
                 middlewares=(
@@ -644,27 +648,14 @@ class TwoNIntercomAPI:
             self._session = None
 
     async def async_reset_session(self) -> None:
-        """Drop the current HTTP session so the next request rebuilds it.
-
-        The aiohttp ``DigestAuthMiddleware`` attached to the session caches
-        the server's challenge (realm, nonce, opaque) and an increasing nc
-        counter for the life of the session. When the device ages out a
-        nonce, the cached state is stale and every subsequent request sees
-        401 until the middleware renegotiates. Rebuilding the session is a
-        deterministic reset of that state — the next call goes through a
-        fresh 401→challenge→response handshake with a new nonce.
-
-        Safe for both ownership modes: HA-managed sessions from
-        ``async_create_clientsession`` tolerate being closed early (the
-        lifecycle helper is idempotent on an already-closed session), and
-        the next ``async_get_session`` will fall back to an owned session
-        with the same DigestAuthMiddleware configuration.
-        """
+        """Discard cached Digest state without closing HA's shared connector."""
         session = self._session
         self._session = None
-        self._owns_session = True
         if session is not None and not session.closed:
-            await session.close()
+            if self._owns_session:
+                await session.close()
+            else:
+                session.detach()
 
     async def async_connect(self) -> bool:
         """
