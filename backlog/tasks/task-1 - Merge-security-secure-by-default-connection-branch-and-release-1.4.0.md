@@ -1,11 +1,11 @@
 ---
 id: TASK-1
 title: Merge security/secure-by-default-connection branch and release 1.4.0
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-08-30 09:27'
-updated_date: '2026-10-11 18:30'
+updated_date: '2026-10-11 18:32'
 labels:
   - security
   - release
@@ -24,10 +24,10 @@ The branch security/secure-by-default-connection implements security items S1-S3
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Branch merged to main with all tests passing (python3 -m unittest discover -s tests -t tests)
+- [x] #1 Branch merged to main with all tests passing (python3 -m unittest discover -s tests -t tests)
 - [x] #2 validate.py passes
 - [x] #3 manifest.json version bumped to 1.4.0 and CHANGELOG.md updated
-- [ ] #4 GitHub release/tag 1.4.0 created
+- [x] #4 GitHub release/tag 1.4.0 created
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -49,4 +49,12 @@ Release validation 2026-10-11: 452 unittest tests passed; validate.py passed wit
 GitHub HACS validation passed. Hassfest exposed a pre-existing invalid translation placeholder: single quotes around {reason} in invalid_hangup_reason. Removed only those quotes in strings.json and all EN/CS/DE translations to unblock release validation; the separate CONFIG_SCHEMA warning is not part of TASK-1.
 
 Final release-tree verification after the translation fix: staging E2E report 20261011-202945 passed (11 passed, 2 intentionally skipped); its prerequisite full unittest suite, validate.py, and py_compile also passed.
+
+Published artifacts: https://github.com/mastalir1980/ha-2N-intercom/pull/15 and https://github.com/mastalir1980/ha-2N-intercom/releases/tag/v1.4.0. Release is public (not draft or prerelease). Unrelated local files remain untouched and uncommitted.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Released 1.4.0 with verified-TLS-first discovery, guarded plaintext Basic auth, complete opt-in persistence, translations, and upgrade guidance. Verified by 452 unit tests, validate.py, py_compile, Pyright, HACS/hassfest, and read-only staging E2E (11 passed, 2 skipped; report 20261011-202945). PR #15 merged to main as f3eacea7f110ac538f604566d6a5421e645a953e. Published GitHub release v1.4.0 and verified its tag targets that merge commit and its manifest contains 1.4.0. Completion metadata is recorded after publication so merge/release acceptance criteria reflect observed results, not anticipated actions.
+<!-- SECTION:FINAL_SUMMARY:END -->
