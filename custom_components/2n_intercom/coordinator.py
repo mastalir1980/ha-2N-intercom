@@ -74,6 +74,8 @@ if TYPE_CHECKING:
 MAX_RETRIES = 5
 # Maximum delay between retries (seconds)
 MAX_BACKOFF_DELAY = 60
+# A transient 401 must not immediately trigger HA's reauth flow.
+NUM_AUTH_ERRORS = 3
 # Snapshot cache duration (seconds)
 SNAPSHOT_CACHE_DURATION = 1
 # Doorbell pulse duration (seconds)
@@ -139,6 +141,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         # DataUpdateCoordinator serializes update calls - only one _async_update_data
         # runs at a time
         self._retry_count = 0
+        self._auth_error_count = 0
         self._snapshot_cache: bytes | None = None
         self._snapshot_cache_time: datetime | None = None
         self._snapshot_cache_size: tuple[int | None, int | None] | None = None
@@ -782,6 +785,23 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
 
         return overrides
 
+    async def async_config_entry_first_refresh(self) -> None:
+        """Consume auth retries within setup, before this coordinator is discarded."""
+        for attempt in range(NUM_AUTH_ERRORS):
+            previous_auth_errors = self._auth_error_count
+            try:
+                await super().async_config_entry_first_refresh()
+            except ConfigEntryAuthFailed:
+                raise
+            except ConfigEntryNotReady:
+                if (
+                    self._auth_error_count == previous_auth_errors
+                    or attempt == NUM_AUTH_ERRORS - 1
+                ):
+                    raise
+            else:
+                return
+
     async def _async_update_data(self) -> TwoNIntercomData:
         """Fetch data from API."""
         try:
@@ -828,8 +848,9 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             # Get current call status
             call_status = await self.api.async_get_call_status()
 
-            # Reset retry count on successful update
+            # Reset retry / auth-failure counters on successful update
             self._retry_count = 0
+            self._auth_error_count = 0
 
             # Baseline state capture — ring detection is event-driven via
             # CallStateChanged / CallSessionStateChanged subscriptions;
@@ -859,12 +880,21 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             )
             
         except TwoNAuthenticationError as err:
-            # Authentication errors require user intervention. Raising
-            # ConfigEntryAuthFailed triggers HA's reauth flow (registered in
-            # config_flow.async_step_reauth), which is the canonical 2026.4+
-            # path — replaces the removed hass.components.persistent_notification
-            # accessor.
-            _LOGGER.error("Authentication failed: %s", err)
+            await self.api.async_reset_session()
+            self._auth_error_count += 1
+            if self._auth_error_count < NUM_AUTH_ERRORS:
+                _LOGGER.warning(
+                    "Authentication error %s/%s (will retry): %s",
+                    self._auth_error_count,
+                    NUM_AUTH_ERRORS,
+                    err,
+                )
+                raise UpdateFailed(f"Authentication error: {err}") from err
+            _LOGGER.error(
+                "Authentication failed after %s consecutive attempts: %s",
+                self._auth_error_count,
+                err,
+            )
             raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
             
         except (TwoNConnectionError, ConnectionError, TimeoutError) as err:

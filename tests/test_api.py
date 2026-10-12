@@ -1175,6 +1175,87 @@ class SessionOwnershipTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(session)
         self.assertTrue(api._owns_session)
 
+    async def test_reset_preserves_shared_connector_and_uses_factory(self) -> None:
+        aiohttp = self.api_module.aiohttp
+        connector = aiohttp.TCPConnector(ssl=False)
+        unrelated_session = aiohttp.ClientSession(connector=connector)
+        sessions = []
+
+        def create_session():
+            session = aiohttp.ClientSession(connector=connector)
+            sessions.append(session)
+            return session
+
+        api = self.api_module.TwoNIntercomAPI(
+            "intercom.local", "user", "secret",
+            session=create_session(), session_factory=create_session,
+        )
+
+        for _ in range(3):
+            old_session = await api.async_get_session()
+            await api.async_reset_session()
+            self.assertTrue(old_session.closed)
+            self.assertFalse(connector.closed)
+            self.assertFalse(unrelated_session.closed)
+            self.assertIsNone(api._session)
+
+            replacement = await api.async_get_session()
+            self.assertIsNot(replacement, old_session)
+            self.assertIs(replacement.connector, connector)
+            self.assertFalse(api._owns_session)
+
+        self.assertEqual(len(sessions), 4)
+
+    async def test_reset_closes_owned_connector_and_recreates_session(self) -> None:
+        api = self.api_module.TwoNIntercomAPI("intercom.local", "user", "secret")
+        old_session = await api.async_get_session()
+        old_connector = old_session.connector
+
+        await api.async_reset_session()
+
+        self.assertTrue(old_connector.closed)
+        self.assertTrue(old_session.closed)
+        replacement = await api.async_get_session()
+        self.assertIsNot(replacement, old_session)
+        self.assertTrue(api._owns_session)
+        await api.async_close()
+        self.assertTrue(replacement.closed)
+
+    async def test_closed_injected_session_is_replaced_by_factory(self) -> None:
+        aiohttp = self.api_module.aiohttp
+        old_session = aiohttp.ClientSession()
+        replacement = aiohttp.ClientSession()
+        api = self.api_module.TwoNIntercomAPI(
+            "intercom.local", "user", "secret",
+            session=old_session, session_factory=lambda: replacement,
+        )
+        old_session.detach()
+
+        self.assertIs(await api.async_get_session(), replacement)
+        self.assertFalse(api._owns_session)
+
+    async def test_reset_is_safe_without_an_open_session(self) -> None:
+        api = self.api_module.TwoNIntercomAPI("intercom.local", "user", "secret")
+        await api.async_reset_session()
+        self.assertIsNone(api._session)
+
+        session = await api.async_get_session()
+        await session.close()
+        await api.async_reset_session()
+        await api.async_reset_session()
+        self.assertIsNone(api._session)
+
+    async def test_session_factory_failure_is_not_silenced(self) -> None:
+        def create_session():
+            raise RuntimeError("session creation failed")
+
+        api = self.api_module.TwoNIntercomAPI(
+            "intercom.local", "user", "secret", session_factory=create_session,
+        )
+        with self.assertRaisesRegex(RuntimeError, "session creation failed"):
+            await api.async_get_session()
+        self.assertIsNone(api._session)
+
 
 class PureHelperTests(unittest.TestCase):
     """Tests for pure helper functions in api.py."""
