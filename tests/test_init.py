@@ -16,6 +16,7 @@ from _stubs import (
     INIT_PATH,
     ensure_package,
     install_api_stubs,
+    install_dt_util_stub,
     load_module,
 )
 
@@ -120,6 +121,7 @@ def _install_homeassistant_stubs() -> None:
 
 def load_init_module():
     install_api_stubs()
+    install_dt_util_stub()
     _install_homeassistant_stubs()
     ensure_package("custom_components")
     ensure_package("custom_components.2n_intercom")
@@ -1260,3 +1262,4 @@ class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):
         hass = FakeHass([entry])
         # Should not raise
         await init_module.async_update_options(hass, entry)
+

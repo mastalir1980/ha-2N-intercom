@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 import types
 import unittest
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from _stubs import (
     API_PATH,
@@ -14,6 +14,7 @@ from _stubs import (
     INIT_PATH,
     ensure_package,
     install_api_stubs,
+    install_dt_util_stub,
     load_module,
 )
 
@@ -109,6 +110,7 @@ def _install_homeassistant_stubs() -> None:
 
 def load_diagnostics_module():
     install_api_stubs()
+    install_dt_util_stub()
     _install_homeassistant_stubs()
     ensure_package("custom_components")
     ensure_package("custom_components.2n_intercom")
@@ -136,6 +138,9 @@ class FakeCoordinator:
         self.motion_detection_available = False
         self.motion_detected = False
         self.last_motion_time = None
+        self.log_caps = None
+        self.subscribed_log_events = ()
+        self.last_access_event = None
 
     @property
     def camera_transport_info(self):
@@ -246,6 +251,41 @@ class DiagnosticsTests(unittest.IsolatedAsyncioTestCase):
             result["coordinator"]["loaded_platforms"],
             ["camera", "binary_sensor", "lock", "sensor"],
         )
+
+    async def test_diagnostics_includes_access_control_without_identities(self) -> None:
+        diag_module = self.diag_module
+        coordinator_module = sys.modules["custom_components.2n_intercom.coordinator"]
+
+        coordinator = FakeCoordinator()
+        coordinator.log_caps = frozenset({"CardEntered", "CallStateChanged"})
+        coordinator.subscribed_log_events = ("CallStateChanged", "CardEntered")
+        coordinator.last_access_event = coordinator_module.AccessEvent(
+            event_type="CardEntered",
+            timestamp=datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc),
+            credential_type="card",
+            access_point=0,
+            granted=True,
+            user_uuid="abc",
+            user_name="Alice",
+        )
+        entry = FakeConfigEntry()
+        entry.runtime_data = coordinator_module.TwoNIntercomRuntimeData(
+            coordinator=coordinator,
+            api=types.SimpleNamespace(),
+            loaded_platforms=["camera"],
+        )
+
+        result = await diag_module.async_get_config_entry_diagnostics(None, entry)
+
+        access = result["access_control"]
+        self.assertEqual(access["log_caps_events"], ["CallStateChanged", "CardEntered"])
+        self.assertEqual(access["subscribed_events"], ["CallStateChanged", "CardEntered"])
+        event = access["last_access_event"]
+        self.assertEqual(event["event_type"], "CardEntered")
+        self.assertTrue(event["granted"])
+        self.assertEqual(event["timestamp"], "2026-01-02T03:04:05+00:00")
+        self.assertEqual(event["user_uuid"], "**REDACTED**")
+        self.assertEqual(event["user_name"], "**REDACTED**")
 
 
 if __name__ == "__main__":

@@ -35,6 +35,9 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 - **`2n_intercom.answer_call`** and **`2n_intercom.hangup_call`** services that target a config entry and (optionally) a specific session id, with `reason` selector (`normal`/`rejected`/`busy`)
 - Diagnostic sensors: SIP registration status, call state with `active_session_id` attribute
 
+### Access control
+- **Access-control events** (card, PIN code, mobile key, fingerprint, authenticated/rejected user, access taken/blocked/limited, API access) are subscribed via the log channel — only those the device lists in `/api/log/caps`. The latest event (type, credential, access point, granted/denied, user name resolved from the directory) is kept by the coordinator and shown in diagnostics. Card numbers, PIN codes and mobile-key ids are never stored
+
 ### Door / Gate / Relay control
 - **Switch** entities for door relays (momentary)
 - **Cover** entities for gate relays (garage-door style)
@@ -53,7 +56,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 
 | Category | Status | Notes |
 |---|---|---|
-| **Done** | JPEG snapshot, native MJPEG live view, RTSP stream source (when licensed), event-driven ring/switch/IO/phone/config state, backup polling safety net, relay switch/cover control with real device state, SIP/call diagnostic sensors, answer/hangup services, reauth and reconfigure flows, HomeKit bridge mapping | All verified against 2N IP Verso 2.50.0.76.2 |
+| **Done** | JPEG snapshot, native MJPEG live view, RTSP stream source (when licensed), event-driven ring/switch/IO/phone/config state, backup polling safety net, relay switch/cover control with real device state, SIP/call diagnostic sensors, answer/hangup services, access-control events, reauth and reconfigure flows, HomeKit bridge mapping | All verified against 2N IP Verso 2.50.0.76.2 |
 | **Out of fork scope** | Two-way audio, multi-tenant directory UX, keypad workflow, lift control, mass-notify | Not needed for a single-family-house deployment |
 | **License-dependent** | Automation API, Audio Test, NFC, Noise Detection, SMTP, FTP, SNMP, TR069, Lift Control | Only available when the device license exposes them; not planned in this fork |
 
@@ -284,7 +287,9 @@ The integration negotiates Basic vs Digest per request — see the **Authenticat
 | `/api/system/info` | Device identity |
 | `/api/call/status` | Baseline call state (safety-net poll) |
 | `/api/call/answer`, `/api/call/hangup` | Service backends |
+| `/api/log/caps` | Which log events the device supports (access-control subscription) |
 | `/api/log/subscribe`, `/api/log/pull`, `/api/log/unsubscribe` | Push-driven event stream |
+| `/api/dir/query` | Ringing-account peers, user names for access events |
 | `/api/switch/caps`, `/api/switch/status`, `/api/switch/ctrl` | Relay control + cached state |
 | `/api/io/caps`, `/api/io/status` | Cached input state |
 | `/api/phone/status` | SIP registration sensor |
@@ -296,7 +301,7 @@ The integration negotiates Basic vs Digest per request — see the **Authenticat
 
 The integration uses two data channels:
 
-- **Event subscriptions (primary)** — `/api/log/subscribe` + `/api/log/pull` long-poll loop. Subscribes to `CallStateChanged`, `CallSessionStateChanged`, `SwitchStateChanged`, `InputChanged`, `OutputChanged`, `RegistrationStateChanged`, `ConfigurationChanged`, `CapabilitiesChanged`, `DeviceState`, and (when available) `MotionDetected`. State changes arrive within ~1 second. The listener auto-resubscribes with exponential backoff on failures and forces a full baseline refresh after each reconnect
+- **Event subscriptions (primary)** — `/api/log/subscribe` + `/api/log/pull` long-poll loop. Subscribes to `CallStateChanged`, `CallSessionStateChanged`, `SwitchStateChanged`, `InputChanged`, `OutputChanged`, `RegistrationStateChanged`, `ConfigurationChanged`, `CapabilitiesChanged`, `DeviceState`, (when available) `MotionDetected`, and the access-control events plus `DirectoryChanged` that the device lists in `/api/log/caps`. State changes arrive within ~1 second. The listener auto-resubscribes with exponential backoff on failures and forces a full baseline refresh after each reconnect
 - **Backup polling (safety net)** — the coordinator polls status endpoints (`switch/status`, `io/status`, `phone/status`, `call/status`, `switch/caps`) at the configured interval (default 60 seconds). This catches any events missed during subscription gaps but does not perform ring detection — ring detection is exclusively event-driven
 - **Static caps** — `switch/caps`, `io/caps`, and camera transport info are fetched once at setup and cached. Switch caps are also refreshed on `ConfigurationChanged` / `CapabilitiesChanged` events and on every poll cycle as a safety net
 

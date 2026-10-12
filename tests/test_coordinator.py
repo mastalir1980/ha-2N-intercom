@@ -14,6 +14,7 @@ from _stubs import (
     COORDINATOR_PATH,
     ensure_package,
     install_api_stubs,
+    install_dt_util_stub,
     load_module,
 )
 
@@ -73,6 +74,7 @@ def _install_homeassistant_stubs() -> None:
 
 def load_coordinator_module():
     install_api_stubs()
+    install_dt_util_stub()
     _install_homeassistant_stubs()
     ensure_package("custom_components")
     ensure_package("custom_components.2n_intercom")
