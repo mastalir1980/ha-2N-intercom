@@ -42,3 +42,31 @@ hangup_call:
             - normal
             - rejected
             - busy
+
+grant_access:
+  name: Grant access
+  description: Open an access point through the 2N access control on behalf of a directory user. The user's access rights apply and the access is recorded in the device log.
+  fields:
+    config_entry_id:
+      name: Config entry ID
+      description: Target a specific 2N Intercom config entry when more than one is loaded.
+      example: "0123456789abcdef0123456789abcdef"
+      selector:
+        text:
+    access_point:
+      name: Access point
+      description: "Access point to open: 0 = entry, 1 = exit."
+      default: "0"
+      example: "0"
+      selector:
+        select:
+          translation_key: access_point
+          options:
+            - "0"
+            - "1"
+    user:
+      name: User
+      description: UUID of the directory user to grant access for. Defaults to the user set in the integration options.
+      example: "01234567-89AB-CDEF-0123-456789ABCDEF"
+      selector:
+        text:

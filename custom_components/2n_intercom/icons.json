@@ -37,6 +37,7 @@
   },
   "services": {
     "answer_call": "mdi:phone-in-talk",
-    "hangup_call": "mdi:phone-hangup"
+    "hangup_call": "mdi:phone-hangup",
+    "grant_access": "mdi:door-open"
   }
 }

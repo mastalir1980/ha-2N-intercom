@@ -201,7 +201,7 @@ def main() -> int:
         print("\nKey features:")
         print("  • Native MJPEG live view (no ffmpeg) with RTSP fallback")
         print("  • Event-driven state updates with backup polling safety net")
-        print("  • answer_call / hangup_call services targeting a config entry")
+        print("  • answer_call / hangup_call / grant_access services targeting a config entry")
         print("  • Real-state diagnostic sensors (SIP, call state, IO, relay)")
         print("  • Reauth and reconfigure flows (HA 2026.4+ compliant)")
         print("  • Switch + cover relay entities")

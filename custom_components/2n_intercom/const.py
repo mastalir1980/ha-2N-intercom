@@ -14,6 +14,8 @@ CONF_ALLOW_INSECURE = "allow_insecure"
 CONF_RELAYS = "relays"
 CONF_CALLED_ID = "called_id"
 CALLED_ID_ALL = "__all__"
+# Default directory user (UUID) for the grant_access service.
+CONF_GRANT_ACCESS_USER = "grant_access_user"
 
 # Form-only navigation control (never persisted): when the user submits a
 # step with this checked, the flow returns to the previous step instead of
@@ -107,6 +109,11 @@ CREDENTIAL_CODE = "code"
 CREDENTIAL_MOBILE_KEY = "mobile_key"
 CREDENTIAL_FINGERPRINT = "fingerprint"
 CREDENTIAL_API = "api"
+
+# /api/accesspoint/grantaccess access point ids.
+ACCESS_POINT_ENTRY = 0
+ACCESS_POINT_EXIT = 1
+ACCESS_POINTS = (ACCESS_POINT_ENTRY, ACCESS_POINT_EXIT)
 
 # Platforms — the actual platform list is built dynamically by
 # ``__init__._get_platforms()`` based on whether the entry has relays

@@ -92,14 +92,16 @@
           "enable_camera": "Povolit kameru",
           "enable_doorbell": "Povolit zvonek",
           "scan_interval": "Záložní interval dotazování (sekundy)",
-          "called_id": "Volaný účet (peer)"
+          "called_id": "Volaný účet (peer)",
+          "grant_access_user": "Výchozí uživatel pro udělení přístupu"
         },
         "data_description": {
           "name": "Zobrazený název v Home Assistant",
           "enable_camera": "Vytvoří entitu kamery",
           "enable_doorbell": "Vytvoří entitu zvonku",
           "scan_interval": "Záložní interval dotazování (2-600 s). Události přinášejí aktualizace v reálném čase; dotazování slouží jen jako záchranná síť. Výchozích 60 s vyhovuje většině instalací.",
-          "called_id": "Vyberte účet, na který se zvoní. Všechny hovory = zvonění pro všechna tlačítka."
+          "called_id": "Vyberte účet, na který se zvoní. Všechny hovory = zvonění pro všechna tlačítka.",
+          "grant_access_user": "Uživatel z adresáře (UUID), jehož jménem služba grant_access otevře dveře, pokud volání uživatele neuvádí. Zařízení uplatní jeho přístupová práva a průchod zapíše do logu. Ponechte prázdné, pokud má být uživatel uveden v každém volání."
         }
       },
       "camera": {
@@ -172,6 +174,12 @@
         "door": "Dveře (momentální spínač)",
         "gate": "Vrata (garážová vrata)"
       }
+    },
+    "access_point": {
+      "options": {
+        "0": "Vstup (0)",
+        "1": "Výstup (1)"
+      }
     }
   },
   "entity": {
@@ -232,6 +240,27 @@
     },
     "invalid_hangup_reason": {
       "message": "Neplatný důvod zavěšení {reason}. Platné hodnoty: {valid}."
+    },
+    "grant_access_no_user": {
+      "message": "Chybí uživatel pro udělení přístupu. Uveďte user ve volání služby nebo nastavte výchozího uživatele v možnostech integrace."
+    },
+    "grant_access_invalid_access_point": {
+      "message": "Neplatný přístupový bod {access_point}. Použijte 0 (vstup) nebo 1 (výstup)."
+    },
+    "grant_access_denied": {
+      "message": "Zařízení 2N odepřelo přístup na přístupovém bodu {access_point} (důvod: {reason})."
+    },
+    "grant_access_unauthorized": {
+      "message": "API účet 2N nesmí udělit přístup na přístupovém bodu {access_point}. Povolte tomuto účtu oprávnění \"Access Control - Control\" ve skupině služeb API Access Control."
+    },
+    "grant_access_ap_disabled": {
+      "message": "Zařízení 2N odmítlo žádost o udělení přístupu pro přístupový bod {access_point}; přístupový bod je možná vypnutý: {error}"
+    },
+    "grant_access_unsupported": {
+      "message": "Zařízení 2N nepodporuje udělení přístupu na přístupovém bodu {access_point}: {error}"
+    },
+    "grant_access_failed": {
+      "message": "Udělení přístupu na přístupovém bodu {access_point} selhalo: {error}"
     }
   },
   "services": {
@@ -264,6 +293,24 @@
         "reason": {
           "name": "Důvod",
           "description": "Důvod zavěšení odeslaný zařízení."
+        }
+      }
+    },
+    "grant_access": {
+      "name": "Udělit přístup",
+      "description": "Otevře přístupový bod přes řízení přístupu 2N jménem uživatele z adresáře. Na rozdíl od přímého sepnutí relé se uplatní přístupová práva uživatele a průchod se zapíše do logu zařízení.",
+      "fields": {
+        "config_entry_id": {
+          "name": "ID konfigurace",
+          "description": "Cílová konfigurace 2N Intercom, pokud je načteno více zařízení."
+        },
+        "access_point": {
+          "name": "Přístupový bod",
+          "description": "Přístupový bod k otevření: 0 = vstup, 1 = výstup."
+        },
+        "user": {
+          "name": "Uživatel",
+          "description": "UUID uživatele z adresáře, kterému se přístup udělí. Výchozí je uživatel nastavený v možnostech integrace."
         }
       }
     }

@@ -37,6 +37,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 - Diagnostic sensors: SIP registration status, call state with `active_session_id` attribute
 
 ### Access control
+- **`2n_intercom.grant_access`** service — opens an access point through the device's access control on behalf of a directory user (see [Services](#services))
 - **Access-control events** (card, PIN code, mobile key, fingerprint, authenticated/rejected user, access taken/blocked/limited, API access) are subscribed via the log channel — only those the device lists in `/api/log/caps`. The latest event (type, credential, access point, granted/denied, user name resolved from the directory) is kept by the coordinator and shown in diagnostics. Card numbers, PIN codes and mobile-key ids are never stored
 
 ### Door / Gate / Relay control
@@ -57,7 +58,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 
 | Category | Status | Notes |
 |---|---|---|
-| **Done** | JPEG snapshot, native MJPEG live view, RTSP stream source (when licensed), event-driven ring/switch/IO/phone/config state, backup polling safety net, relay switch/cover control with real device state, SIP/call diagnostic sensors, answer/hangup services, access-control events, last-ring image, reauth and reconfigure flows, HomeKit bridge mapping | All verified against 2N IP Verso 2.50.0.76.2 |
+| **Done** | JPEG snapshot, native MJPEG live view, RTSP stream source (when licensed), event-driven ring/switch/IO/phone/config state, backup polling safety net, relay switch/cover control with real device state, SIP/call diagnostic sensors, answer/hangup/grant_access services, access-control events, last-ring image, reauth and reconfigure flows, HomeKit bridge mapping | All verified against 2N IP Verso 2.50.0.76.2 |
 | **Out of fork scope** | Two-way audio, multi-tenant directory UX, keypad workflow, lift control, mass-notify | Not needed for a single-family-house deployment |
 | **License-dependent** | Automation API, Audio Test, NFC, Noise Detection, SMTP, FTP, SNMP, TR069, Lift Control | Only available when the device license exposes them; not planned in this fork |
 
@@ -181,7 +182,7 @@ After initial setup, open the integration's **Options** (Settings → Devices & 
 
 The options flow has up to three steps:
 
-1. **Device** — name, feature toggles, backup polling interval, ringing account
+1. **Device** — name, feature toggles, backup polling interval, ringing account, default grant-access user
 2. **Camera** *(only when camera is enabled)* — live view mode, RTSP credentials, MJPEG resolution/fps, camera source
 3. **Relay** *(one per auto-detected relay)* — name, device type (door/gate), pulse duration
 
@@ -194,6 +195,7 @@ Intermediate steps show **Next**; the last step shows **Submit**. To revisit a s
 | Device | `enable_doorbell` | bool | `true` | Toggle doorbell entity |
 | Device | `scan_interval` | 2-600 (s) | 60 | Backup polling interval. Events deliver real-time updates; polling only runs as a safety net |
 | Device | `called_id` | string | `All calls` | Ringing account / peer filter |
+| Device | `grant_access_user` | directory user (UUID) | *(empty)* | Default user for `2n_intercom.grant_access` when the call does not pass `user`. Picked from the device directory; a UUID can also be typed in |
 | Camera | `live_view_mode` | `auto` \| `rtsp` \| `mjpeg` \| `jpeg_only` | `auto` | Camera live view transport. `auto` picks RTSP if licensed and RTSP credentials are set, then MJPEG, then snapshots |
 | Camera | `rtsp_username` | string | *(empty)* | Optional. RTSP server username — created on the intercom under Services → Streaming → RTSP Server → User Database; the HTTP API account does **not** work here. Empty = RTSP is never tried, MJPEG is used |
 | Camera | `rtsp_password` | string | *(empty)* | Optional. RTSP server password (masked field, never shown when the dialog is reopened — leave empty to keep the stored password; clear the username to remove the credential pair) |
@@ -241,8 +243,9 @@ Resulting entities:
 |---|---|
 | `2n_intercom.answer_call` | Answer the active call session (or a specific `session_id`) |
 | `2n_intercom.hangup_call` | Hang up the active call session (or a specific `session_id`) with optional `reason` (`normal` / `rejected` / `busy`) |
+| `2n_intercom.grant_access` | Open an access point (`access_point`: `0` = entry, default; `1` = exit) on behalf of a directory `user` (UUID) |
 
-Both services target a config entry. From the UI use the **Target → Integration** picker; from YAML use `data.config_entry_id`. Pair `hangup_call` with `sensor.<intercom>_call_state`'s `active_session_id` attribute to terminate the exact session that triggered an automation.
+All services target a config entry. From the UI use the **Target → Integration** picker; from YAML use `data.config_entry_id`. Pair `hangup_call` with `sensor.<intercom>_call_state`'s `active_session_id` attribute to terminate the exact session that triggered an automation.
 
 Example actionable-notification snippet:
 
@@ -251,6 +254,25 @@ Example actionable-notification snippet:
   data:
     session_id: "{{ state_attr('sensor.home_intercom_call_state', 'active_session_id') }}"
     reason: normal
+```
+
+### Grant access vs. switch entities
+
+`grant_access` calls `/api/accesspoint/grantaccess`. Unlike the relay switch/cover entities (which drive `/api/switch/ctrl` directly), the device treats it as a real access attempt: **the user's access rights apply** (time profiles, blocked access points) and **the access is recorded in the device's access log** under that user (`ApiAccessRequested`). Use it when you need an audit trail of who opened the door from Home Assistant.
+
+Requirements:
+
+- **User** — every call needs a directory user UUID: pass `user` in the call or set the default **grant-access user** in the options flow (Device step). Without either the service fails with a clear error.
+- **Device privilege** — the HTTP API account needs the **Access Control - Control** privilege of the **API Access Control** service group (Services → HTTP API). This is separate from the Switch privilege used by the relay entities; without it the service reports that the account may not grant access.
+- The access point must be enabled on the device.
+
+The service never reports success when the door did not open: a denial (`accessGranted: false`, e.g. `invalidCredential`, `accessBlocked`, `invalidAp`) raises an error including the device's reason.
+
+```yaml
+- service: 2n_intercom.grant_access
+  data:
+    access_point: 0
+    user: "01234567-89AB-CDEF-0123-456789ABCDEF"
 ```
 
 ## Automation Examples
@@ -291,7 +313,8 @@ The integration negotiates Basic vs Digest per request — see the **Authenticat
 | `/api/call/answer`, `/api/call/hangup` | Service backends |
 | `/api/log/caps` | Which log events the device supports (access-control subscription) |
 | `/api/log/subscribe`, `/api/log/pull`, `/api/log/unsubscribe` | Push-driven event stream |
-| `/api/dir/query` | Ringing-account peers, user names for access events |
+| `/api/dir/query` | Ringing-account peers, grant-access users, user names for access events |
+| `/api/accesspoint/grantaccess` | `grant_access` service backend |
 | `/api/switch/caps`, `/api/switch/status`, `/api/switch/ctrl` | Relay control + cached state |
 | `/api/io/caps`, `/api/io/status` | Cached input state |
 | `/api/phone/status` | SIP registration sensor |
@@ -313,6 +336,7 @@ The integration uses two data channels:
 - **Door opening** — trigger relay via switch entity from automations, dashboards, or HomeKit
 - **Gate control** — garage-door-style open/close via cover entity
 - **Call management** — answer or reject incoming calls from automations using the `answer_call` / `hangup_call` services
+- **Audited door opening** — open the door as a specific directory user with `grant_access`, so the access shows up in the device's access log
 - **Multi-button setups** — filter doorbell events by ringing account (peer) to distinguish front door from side entrance
 - **HomeKit bridge** — expose camera as video doorbell, relays as switches/garage doors in Apple Home
 

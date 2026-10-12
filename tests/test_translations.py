@@ -52,14 +52,44 @@ class TranslationConsistencyTests(unittest.TestCase):
                         set(placeholder.findall(english[key]["message"])),
                     )
 
-    def test_last_ring_is_translated(self) -> None:
+    def test_grant_access_and_last_ring_are_translated(self) -> None:
+        source = (INTEGRATION_DIR / "__init__.py").read_text(encoding="utf-8")
+        used = set(re.findall(r'"(grant_access_[a-z_]+)"', source)) - {
+            "grant_access_user"
+        }
+        self.assertEqual(
+            used,
+            {
+                "grant_access_no_user",
+                "grant_access_invalid_access_point",
+                "grant_access_denied",
+                "grant_access_unauthorized",
+                "grant_access_ap_disabled",
+                "grant_access_unsupported",
+                "grant_access_failed",
+            },
+        )
         for lang, data in self.languages.items():
             with self.subTest(lang=lang):
+                self.assertTrue(used <= set(data["exceptions"]))
+                self.assertIn("grant_access", data["services"])
+                self.assertEqual(
+                    set(data["services"]["grant_access"]["fields"]),
+                    {"config_entry_id", "access_point", "user"},
+                )
                 self.assertIn("last_ring", data["entity"]["image"])
+                self.assertEqual(
+                    set(data["selector"]["access_point"]["options"]), {"0", "1"}
+                )
+                self.assertIn(
+                    "grant_access_user",
+                    data["options"]["step"]["device"]["data"],
+                )
 
     def test_icons_cover_new_entities_and_services(self) -> None:
         icons = _load("icons.json")
         self.assertEqual(icons["entity"]["image"]["last_ring"]["default"], "mdi:doorbell-video")
+        self.assertEqual(icons["services"]["grant_access"], "mdi:door-open")
         self.assertEqual(set(icons["services"]), set(self.strings["services"]))
 
 

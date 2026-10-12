@@ -96,14 +96,16 @@
           "enable_camera": "Enable Camera",
           "enable_doorbell": "Enable Doorbell",
           "scan_interval": "Backup polling interval (seconds)",
-          "called_id": "Ringing account (peer)"
+          "called_id": "Ringing account (peer)",
+          "grant_access_user": "Default user for grant access"
         },
         "data_description": {
           "name": "Displayed name in Home Assistant",
           "enable_camera": "Create the camera entity",
           "enable_doorbell": "Create the doorbell entity",
           "scan_interval": "Backup polling interval (2-600 s). Events deliver real-time updates; polling only runs as a safety net. Default 60 s is fine for most setups.",
-          "called_id": "Select which account should ring. Choose All calls to ring on every button."
+          "called_id": "Select which account should ring. Choose All calls to ring on every button.",
+          "grant_access_user": "Directory user (UUID) on whose behalf the grant_access service opens the door when the call does not name one. The device applies this user's access rights and logs the access. Leave empty to require the user in every call."
         }
       },
       "camera": {
@@ -176,6 +178,12 @@
         "door": "Door (momentary switch)",
         "gate": "Gate (garage door opener)"
       }
+    },
+    "access_point": {
+      "options": {
+        "0": "Entry (0)",
+        "1": "Exit (1)"
+      }
     }
   },
   "entity": {
@@ -236,6 +244,27 @@
     },
     "invalid_hangup_reason": {
       "message": "Invalid hangup reason {reason}. Valid values: {valid}."
+    },
+    "grant_access_no_user": {
+      "message": "No user for grant access. Pass user in the service call or set a default user in the integration options."
+    },
+    "grant_access_invalid_access_point": {
+      "message": "Invalid access point {access_point}. Use 0 (entry) or 1 (exit)."
+    },
+    "grant_access_denied": {
+      "message": "The 2N device denied access on access point {access_point} (reason: {reason})."
+    },
+    "grant_access_unauthorized": {
+      "message": "The 2N API account may not grant access on access point {access_point}. Enable the \"Access Control - Control\" privilege of the API Access Control service for this account."
+    },
+    "grant_access_ap_disabled": {
+      "message": "The 2N device rejected the grant access request for access point {access_point}; the access point may be disabled: {error}"
+    },
+    "grant_access_unsupported": {
+      "message": "The 2N device does not support grant access on access point {access_point}: {error}"
+    },
+    "grant_access_failed": {
+      "message": "Grant access on access point {access_point} failed: {error}"
     }
   },
   "services": {
@@ -268,6 +297,24 @@
         "reason": {
           "name": "Reason",
           "description": "Hangup reason sent to the device."
+        }
+      }
+    },
+    "grant_access": {
+      "name": "Grant access",
+      "description": "Open an access point through the 2N access control on behalf of a directory user. The user's access rights apply and the access is recorded in the device log, unlike switching a relay directly.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config entry ID",
+          "description": "Target a specific 2N Intercom config entry when more than one is loaded."
+        },
+        "access_point": {
+          "name": "Access point",
+          "description": "Access point to open: 0 = entry, 1 = exit."
+        },
+        "user": {
+          "name": "User",
+          "description": "UUID of the directory user to grant access for. Defaults to the user set in the integration options."
         }
       }
     }
