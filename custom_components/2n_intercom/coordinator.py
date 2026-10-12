@@ -82,6 +82,7 @@ DOORBELL_PULSE_DURATION = 1
 LOG_LISTENER_INITIAL_BACKOFF = 5
 LOG_LISTENER_MAX_BACKOFF = 60
 LOG_LISTENER_PULL_ERROR_DELAY = 1
+LOG_LISTENER_IDLE_DELAY = 1
 
 
 @dataclass
@@ -517,9 +518,13 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
                 if hasattr(self, "async_update_listeners"):
                     self.async_update_listeners()
 
-            # Yield to the loop; the device blocks server-side via timeout=1
-            # so this does not become a busy-loop on the success path.
-            await asyncio.sleep(0)
+            # Some 2N firmware returns from log/pull immediately even when
+            # timeout=1 is requested. Without a real delay on empty pulls,
+            # that behavior turns this listener into a tight busy-loop.
+            if events:
+                await asyncio.sleep(0)
+            else:
+                await asyncio.sleep(LOG_LISTENER_IDLE_DELAY)
 
     async def _async_log_listener_loop(self) -> None:
         """Subscribe to call log events with resilient retry/backoff."""

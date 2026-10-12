@@ -6,6 +6,7 @@ import asyncio
 import sys
 import types
 import unittest
+from unittest.mock import AsyncMock, patch
 
 from _stubs import (
     API_PATH,
@@ -818,6 +819,43 @@ class LogListenerTests(unittest.IsolatedAsyncioTestCase):
             await c._async_run_log_subscription(42)
 
         self.assertTrue(c._ring_detected)
+
+    async def _sleeps_for_pulls(self, pulls: list[list[dict]]) -> list[float]:
+        """Run the pull loop over ``pulls`` and return the sleep delays used."""
+        coord_mod = sys.modules["custom_components.2n_intercom.coordinator"]
+        c = self.coordinator_module.TwoNIntercomCoordinator(
+            types.SimpleNamespace(), None
+        )
+        remaining = list(pulls)
+
+        class FakeAPI:
+            async def async_pull_log(self, sub_id, timeout=1):
+                events = remaining.pop(0)
+                if not remaining:
+                    c._log_listener_stopped = True
+                return events
+
+        c.api = FakeAPI()
+        sleep = AsyncMock()
+        with patch.object(coord_mod.asyncio, "sleep", sleep):
+            await c._async_run_log_subscription(42)
+        return [call.args[0] for call in sleep.await_args_list]
+
+    async def test_empty_pull_waits_idle_delay(self) -> None:
+        coord_mod = sys.modules["custom_components.2n_intercom.coordinator"]
+        self.assertEqual(coord_mod.LOG_LISTENER_IDLE_DELAY, 1)
+
+        delays = await self._sleeps_for_pulls([[], []])
+
+        self.assertEqual(delays, [coord_mod.LOG_LISTENER_IDLE_DELAY] * 2)
+
+    async def test_pull_with_events_only_yields(self) -> None:
+        coord_mod = sys.modules["custom_components.2n_intercom.coordinator"]
+        event = {"event": "KeyPressed", "params": {"key": "1"}}
+
+        delays = await self._sleeps_for_pulls([[event], [event], []])
+
+        self.assertEqual(delays, [0, 0, coord_mod.LOG_LISTENER_IDLE_DELAY])
 
     async def test_log_listener_loop_resubscribes_on_failure(self) -> None:
         class FakeAPI:
