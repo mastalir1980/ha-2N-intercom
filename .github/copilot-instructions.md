@@ -59,6 +59,16 @@ on Jan's Mac) implement those tasks.
 | `diagnostics.py` | Redacted diagnostics |
 | `const.py` | Constants and defaults |
 
+## Headless mode (Copilot CLI on Jan's VM)
+
+When you run headless via `tools/coder/` (TASK-23), the orchestrator's prompt applies on top of this file:
+nobody can answer questions, so stop with a `.agent-stop` file instead of guessing; you cannot reach Home
+Assistant or the intercom, so **do not run `e2e/e2e.sh`** — E2E runs on the Pi as the PR check `e2e-pi` after the
+orchestrator pushes; you cannot push (no token) and must not edit `.github/`, `e2e/ci/`, `e2e/scripts/`,
+`e2e/run.sh`, `e2e/nightly.sh`, `e2e/e2e.sh`, `e2e/staging/`, `tools/coder/`, `CLAUDE.md` or `backlog/config.yml`
+(the patch is rejected). Leave the task *In Progress*; criteria are ticked and Done set during review after
+`e2e-pi` is green. Commit your work locally with `TASK-<id>: …` messages.
+
 ## Working with the backlog
 
 - Tasks are Backlog.md files in `backlog/tasks/`. Use only the `backlog` CLI (`backlog task list --plain`,
