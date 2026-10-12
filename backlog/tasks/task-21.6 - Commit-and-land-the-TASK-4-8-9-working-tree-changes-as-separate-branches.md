@@ -1,11 +1,11 @@
 ---
 id: TASK-21.6
 title: Commit and land the TASK-4/8/9 working-tree changes as separate branches
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 12:16'
+updated_date: '2026-10-12 12:18'
 labels:
   - git
   - access-control
@@ -31,10 +31,10 @@ The access-control, grant_access and ring-snapshot work (TASK-4 Done, TASK-8 In 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The current working-tree state is committed immediately to a backup branch (`wip/task-4-8-9-backup`) and pushed, before any other subtask touches the tree
-- [ ] #2 The work is split into `task-4-…`, `task-8-…`, `task-9-…` branches (dependency order 4 -> 9 -> 8 or as the code requires), each rebased on the then-current main
-- [ ] #3 Each branch: unit suite + `validate.py` green, E2E test for the feature in `e2e/tests/` (incl. `test_50_access_control.py`), `bash e2e/e2e.sh wip` green; no relay tests
-- [ ] #4 TASK-8 is finished per its own acceptance criteria before its branch merges
+- [x] #1 The current working-tree state is committed immediately to a backup branch (`wip/task-4-8-9-backup`) and pushed, before any other subtask touches the tree
+- [x] #2 The work is split into `task-4-…`, `task-8-…`, `task-9-…` branches (dependency order 4 -> 9 -> 8 or as the code requires), each rebased on the then-current main
+- [x] #3 Each branch: unit suite + `validate.py` green, E2E test for the feature in `e2e/tests/` (incl. `test_50_access_control.py`), `bash e2e/e2e.sh wip` green; no relay tests
+- [x] #4 TASK-8 is finished per its own acceptance criteria before its branch merges
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -77,4 +77,12 @@ Step 2, branch 3 of 3 (task-8) 2026-10-12: task-8-grant-access from origin/main 
 task-8 relay E2E: report 20261012-124448 at 3670c44 with --relays: passed (15 passed, 2 skipped); test_relay_roundtrip[1] passed. But test_grant_access_is_logged_by_device SKIPPED: E2E_GRANT_USER_UUID not set in e2e/.env on the Pi, so TASK-8 AC6 is NOT verified yet. Needs a rerun with the UUID set.
 
 task-8 relay E2E rerun: report 20261012-131421 at 3670c44 (--relays, E2E_GRANT_USER_UUID set) passed 16, skipped 1 (SIP sensor). test_grant_access_is_logged_by_device passed -> TASK-8 AC6 checked, TASK-8 Done (AC4 of this task satisfied).
+
+Merged by Jan (--no-ff): task-4 as 3c55e54, task-9 as 4e4a3cf, task-8 as c827471. E2E per branch was run by Jan with e2e.sh run --ref <branch> (agreed substitute for e2e.sh wip): 20261012-123306 (task-4), 20261012-123947 (task-9), 20261012-131421 (task-8, --relays, Jan's run). Backup branch wip/task-4-8-9-backup (91a58b8) and the merged task branches are kept; deletion belongs to TASK-21.7 and needs Jan's explicit OK.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Backed up the TASK-4/8/9 work as wip/task-4-8-9-backup (91a58b8), then split it into task-4-access-control-events, task-9-last-ring-image and task-8-grant-access, each built on the then-current main (4 -> 9 -> 8) by removing the other tasks' hunks from the cherry-picked tree; the final tree equals 91a58b8 rebased on main. Each branch: unit suite (528 / 539 / 563 OK), validate.py, py_compile and CI green, E2E test_50 green on the real device (incl. the relay grant_access test for TASK-8). All three merged into main by Jan.
+<!-- SECTION:FINAL_SUMMARY:END -->
