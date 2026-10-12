@@ -66,6 +66,8 @@ def _get_platforms(entry: TwoNIntercomConfigEntry | ConfigEntry) -> list[str]:
 
     if _get_option(entry, CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA):
         platforms.append("camera")
+        # "Last ring" snapshot image — needs the camera, so it follows it.
+        platforms.append("image")
 
     if _get_option(entry, CONF_ENABLE_DOORBELL, DEFAULT_ENABLE_DOORBELL):
         platforms.append("binary_sensor")
@@ -407,6 +409,9 @@ async def async_setup_entry(
         scan_interval=scan_interval,
         called_id=str(_get_option(entry, CONF_CALLED_ID) or "") or None,
         config_entry=entry,
+        ring_snapshot_enabled=bool(
+            _get_option(entry, CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA)
+        ),
     )
 
     # Resolve static device descriptors (system info, switch/io caps, camera

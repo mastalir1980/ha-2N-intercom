@@ -26,6 +26,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 - **Native MJPEG live view** via `/api/camera/snapshot?...&fps=<n>` — served through Home Assistant's `MjpegCamera`, no ffmpeg/HLS round-trip
 - **RTSP stream source** when the device exposes it — requires separate RTSP credentials configured in the options flow (the 2N RTSP server has its own user database independent of the HTTP API accounts)
 - **Credentials are passed to `MjpegCamera` separately** — they never appear in the URL exposed to logs, diagnostics, or dashboards
+- **Last-ring image** (`image.<intercom>_last_ring`) — a JPEG captured from the configured camera source the moment the doorbell rings, so you can see who rang even after they left. A failed capture keeps the previous image. Created only when the camera is enabled
 - HomeKit-compatible video doorbell
 
 ### Doorbell and call lifecycle
@@ -56,7 +57,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 
 | Category | Status | Notes |
 |---|---|---|
-| **Done** | JPEG snapshot, native MJPEG live view, RTSP stream source (when licensed), event-driven ring/switch/IO/phone/config state, backup polling safety net, relay switch/cover control with real device state, SIP/call diagnostic sensors, answer/hangup services, access-control events, reauth and reconfigure flows, HomeKit bridge mapping | All verified against 2N IP Verso 2.50.0.76.2 |
+| **Done** | JPEG snapshot, native MJPEG live view, RTSP stream source (when licensed), event-driven ring/switch/IO/phone/config state, backup polling safety net, relay switch/cover control with real device state, SIP/call diagnostic sensors, answer/hangup services, access-control events, last-ring image, reauth and reconfigure flows, HomeKit bridge mapping | All verified against 2N IP Verso 2.50.0.76.2 |
 | **Out of fork scope** | Two-way audio, multi-tenant directory UX, keypad workflow, lift control, mass-notify | Not needed for a single-family-house deployment |
 | **License-dependent** | Automation API, Audio Test, NFC, Noise Detection, SMTP, FTP, SNMP, TR069, Lift Control | Only available when the device license exposes them; not planned in this fork |
 
@@ -225,6 +226,7 @@ Options flow (after setup):
 Resulting entities:
 
 - `camera.home_intercom_camera`
+- `image.home_intercom_last_ring` *(snapshot taken at the last ring)*
 - `binary_sensor.home_intercom_doorbell`
 - `binary_sensor.home_intercom_input_1` *(real device input)*
 - `binary_sensor.home_intercom_relay_1_active` *(real cached relay state)*
@@ -362,6 +364,7 @@ custom_components/2n_intercom/
 ├── const.py                 # Constants
 ├── entity.py                # Shared TwoNIntercomEntity base
 ├── camera.py                # MjpegCamera-based camera platform
+├── image.py                 # Last-ring snapshot image
 ├── binary_sensor.py         # Doorbell + input + relay-active sensors
 ├── sensor.py                # SIP registration + call state diagnostic sensors
 ├── switch.py                # Door relay platform

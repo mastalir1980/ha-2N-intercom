@@ -202,6 +202,11 @@
       "camera": {
         "name": "Camera"
       }
+    },
+    "image": {
+      "last_ring": {
+        "name": "Last ring"
+      }
     }
   },
   "exceptions": {

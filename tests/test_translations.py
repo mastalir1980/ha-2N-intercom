@@ -52,8 +52,14 @@ class TranslationConsistencyTests(unittest.TestCase):
                         set(placeholder.findall(english[key]["message"])),
                     )
 
-    def test_icons_cover_services(self) -> None:
+    def test_last_ring_is_translated(self) -> None:
+        for lang, data in self.languages.items():
+            with self.subTest(lang=lang):
+                self.assertIn("last_ring", data["entity"]["image"])
+
+    def test_icons_cover_new_entities_and_services(self) -> None:
         icons = _load("icons.json")
+        self.assertEqual(icons["entity"]["image"]["last_ring"]["default"], "mdi:doorbell-video")
         self.assertEqual(set(icons["services"]), set(self.strings["services"]))
 
 

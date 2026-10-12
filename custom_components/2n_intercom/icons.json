@@ -28,6 +28,11 @@
       "camera": {
         "default": "mdi:doorbell-video"
       }
+    },
+    "image": {
+      "last_ring": {
+        "default": "mdi:doorbell-video"
+      }
     }
   },
   "services": {

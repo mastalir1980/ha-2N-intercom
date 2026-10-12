@@ -85,6 +85,14 @@ async def async_get_config_entry_diagnostics(
                 else None
             ),
         },
+        "ring_snapshot": {
+            "captured": coordinator.ring_snapshot is not None,
+            "time": (
+                coordinator.ring_snapshot_time.isoformat()
+                if coordinator.ring_snapshot_time is not None
+                else None
+            ),
+        },
         "camera_transport": {
             "requested_mode": transport.requested_mode,
             "selected_mode": transport.selected_mode,
