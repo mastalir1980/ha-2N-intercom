@@ -37,7 +37,7 @@ GitHub Copilot has its own copy of these rules in `.github/copilot-instructions.
 
 Work on this repo is split between two agents:
 
-| | Claude (Cowork) | GitHub Copilot (VS Code agent mode on Jan's Mac) |
+| | Claude (Cowork) | GitHub Copilot (VS Code agent mode on Jan's Mac, or headless Copilot CLI on the VM — `tools/coder/`) |
 |---|---|---|
 | Role | Analyst / tech lead | Programmer |
 | Does | Analysis, investigation of bugs and 2N/HA behaviour, design decisions, writing and splitting Backlog tasks, implementation plans, E2E report triage, review of Copilot's diffs | Implements tasks from the Backlog, writes unit + E2E tests, runs validation and `e2e.sh wip`, updates docs |
@@ -157,6 +157,11 @@ Never run `e2e/e2e.sh relays`, `--relays` or `reset-entry` unless Jan asks in th
 ## Definition of done for a task
 
 Copilot executes this list; Claude checks it during review. A task is not done without a green `e2e.sh wip`.
+For headless runs on the VM (`tools/coder/`, TASK-23) the E2E gate is the PR check `e2e-pi` instead of `e2e.sh wip`;
+the coder leaves the task *In Progress* and Claude ticks criteria / sets Done during review once `e2e-pi` is green.
+A task is ready for the headless coder when it is *To Do*, assigned `@copilot`, its dependencies are Done and it meets
+the definition of ready above. Its PRs carry the label `agent`; the coder never merges. Changes to `tools/coder/` need
+Jan's review like `.github/` and `e2e/ci/`.
 
 1. Backlog workflow above (`backlog instructions task-execution` / `task-finalization`).
 2. Unit tests added in the style of `tests/test_*.py`; full suite + `validate.py` green.

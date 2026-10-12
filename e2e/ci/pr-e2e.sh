@@ -77,7 +77,8 @@ sleep "${E2E_SETTLE_SECONDS:-20}"
 
 echo "==> [3/4] E2E tests (read-only, no relays)"
 STAGE="e2e"
-(cd "$WORK/src/e2e" && sandbox "$VENV/bin/python" -m pytest -p no:cacheprovider \
+# -m "not relay": defence in depth on top of the read-only 2N account (the marker comes from the branch)
+(cd "$WORK/src/e2e" && sandbox "$VENV/bin/python" -m pytest -p no:cacheprovider -m "not relay" \
    --junitxml="$REPORT/junit.xml") > "$REPORT/pytest.log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ]; then STATUS="passed"; elif [ "$rc" -eq 1 ]; then STATUS="failed"; else STATUS="error"; fi
