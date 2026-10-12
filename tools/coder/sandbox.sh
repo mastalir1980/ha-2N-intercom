@@ -47,12 +47,20 @@ case "${1:-}" in
     [ -r "$COPILOT_TOKEN_FILE" ] || die "missing $COPILOT_TOKEN_FILE (sudo ha2n-coder-set-token copilot)"
     cat > "$WORK/prompt.md"
     [ -s "$WORK/prompt.md" ] || die "empty prompt"
+    MODEL_ARGS=()   # optional, root-owned: /etc/ha2n-coder/model holds one model id (else Copilot's default)
+    if [ -r /etc/ha2n-coder/model ]; then
+      m="$(tr -d '[:space:]' < /etc/ha2n-coder/model)"
+      [[ "$m" =~ ^[A-Za-z0-9._-]{1,64}$ ]] || die "invalid model id in /etc/ha2n-coder/model"
+      MODEL_ARGS=(--model "$m"); echo "model: $m"
+    else
+      echo "model: Copilot default"
+    fi
     cd "$SRC" || exit 1
     rm -f .agent-stop
     # Clean environment: only what Copilot needs. No repo token exists for this user at all.
     env -i HOME="$HOME" PATH="$PATH" LANG=C.UTF-8 TERM=dumb \
       COPILOT_GITHUB_TOKEN="$(cat "$COPILOT_TOKEN_FILE")" \
-      timeout "${COPILOT_TIMEOUT:-50m}" copilot -p "$(cat "$WORK/prompt.md")" -s --no-ask-user \
+      timeout "${COPILOT_TIMEOUT:-50m}" copilot -p "$(cat "$WORK/prompt.md")" -s --no-ask-user "${MODEL_ARGS[@]}" \
         --allow-all-tools --deny-tool 'shell(git push)' --deny-tool 'shell(gh)' --deny-tool 'url'
     rc=$?
     if [ -f .agent-stop ]; then
