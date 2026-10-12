@@ -1,11 +1,11 @@
 ---
 id: TASK-21.5
 title: Rebase mastalir1980-revize-pull-requestu onto main and land it
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 11:22'
+updated_date: '2026-10-12 11:24'
 labels:
   - git
   - config-flow
@@ -42,7 +42,7 @@ Conflicts measured with `git merge-tree`: 8 hunks against main, 59 against main+
 - [x] #3 Setup-wizard back navigation lands as a second branch/PR, sharing the TASK-14 back-navigation helper/constants; strings and all three translations stay in sync
 - [x] #4 Version stays 1.4.x (no version/CHANGELOG bump outside a release task)
 - [x] #5 Each PR: unit suite + `validate.py` green, `bash e2e/e2e.sh wip` green
-- [ ] #6 `origin/mastalir1980-revize-pull-requestu` is deleted after both PRs are merged (with Jan's OK)
+- [x] #6 `origin/mastalir1980-revize-pull-requestu` is deleted after both PRs are merged (with Jan's OK)
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -70,4 +70,12 @@ Branch B task-21.5-setup-wizard-back (from main 2d07e3b): analysis of 8dd8b6c vs
 Branch B changes: config_flow.py user step drops CONF_SERIAL_NUMBER from the draft and resets _default_device_name when the (re)connected host reports no serial/variant (unique id then falls back to host, as for a fresh setup). config.error.invalid_auth added to strings.json + en/cs/de (text taken from 8dd8b6c). README (setup wizard + options flow) and INSTALLATION document the 'Back to the previous step' option. Tests: test_go_back_to_other_host_drops_previous_device_identity, ConfigFlowErrorStringsTests (every errors['base'] key in config_flow.py exists in config.error of all four string files); both fail on main, pass on the branch. Suite 485 OK, validate.py + py_compile OK, version 1.4.0, no CHANGELOG. Follow-up (not fixed, pre-existing): running tests/test_config_flow.py alone fails at import because config_flow.py imports .coordinator at module level and the test loader does not stub it; the full discover run works because other modules load coordinator first (8dd8b6c had moved the import under TYPE_CHECKING).
 
 Branch A merged into main by Jan as 2d07e3b (AC1). Branch B E2E report 20261012-122042 (Jan, on the Pi): passed, deployed_sha 980277c, 12 passed / 5 skipped (SIP sensor disabled, relays, test_50 TASK-8/9 not deployed), nothing pruned. hassfest + HACS GitHub Actions green on task-21.5-setup-wizard-back. AC3/AC4/AC5 checked. Remaining: AC6 (delete origin/mastalir1980-revize-pull-requestu) only after B is merged and with Jan's explicit OK; task stays In Progress until then.
+
+Branch B merged by Jan as 9a3f5d1. origin/mastalir1980-revize-pull-requestu deleted with Jan's explicit OK (was 8dd8b6c); the local branch of the same name is kept as a restore point.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed the work from origin/mastalir1980-revize-pull-requestu on top of main in two PRs. Part A (task-21.5-auth-recovery, merge 2d07e3b): cherry-picked e42bb45, fe158c1 (CONFIG_SCHEMA only; placeholder part already in main) and 46d6350 — tolerate up to 3 consecutive auth failures before reauth, recreate HA-managed Digest sessions via a session factory without closing the shared connector, auth retries within first refresh. Part B (task-21.5-setup-wizard-back, merge 9a3f5d1): TASK-14 already provided the setup/options back navigation, so only the remaining 8dd8b6c fixes were ported — stale serial/default name cleared on going back to another host, missing invalid_auth string (en/cs/de), README/INSTALLATION docs. Not ported by Jan's decision: keeping saved options for skipped options-flow steps. Version stays 1.4.0; CHANGELOG text for the release task is in the notes. Unit suite, validate.py, hassfest/HACS CI and Pi E2E (20261012-121220, 20261012-122042) green. Follow-up: tests/test_config_flow.py fails when run alone (module-level .coordinator import).
+<!-- SECTION:FINAL_SUMMARY:END -->
