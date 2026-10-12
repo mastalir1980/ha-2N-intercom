@@ -1,11 +1,11 @@
 ---
 id: TASK-21.4
 title: Push and merge task-14-15-options-flow-ux
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 07:12'
+updated_date: '2026-10-12 10:55'
 labels:
   - git
   - config-flow
@@ -37,7 +37,18 @@ TASK-14/15 (options-flow Next/Submit labels, back navigation, clearer credential
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. In the worktree: `git rebase origin/main`; resolve `backlog/` overlaps by keeping main's copies plus the TASK-14/15 files.
-2. Push, run E2E on the ref, Claude reviews, Jan merges.
-3. `git worktree remove /private/tmp/ha2n-t1415`.
+1. In /private/tmp/ha2n-t1415: move the untracked, obsolete e2e/ copy aside (it would block the rebase now that main tracks e2e/), git rebase origin/main.
+2. Check backlog overlaps (TASK-14/15 files, config.yml).
+3. Unit suite, validate.py, py_compile, JSON check; push to origin.
+4. Jan runs e2e.sh run --ref task-14-15-options-flow-ux on the Pi (test_40 must run, not skip), Jan merges --no-ff.
+5. git worktree remove /private/tmp/ha2n-t1415 after the merge.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+- Untracked e2e/ in the worktree (older subset of main's e2e/: no orphan pruning, no test_50, test_40 without skip; reports 20261011-213353 failed / 20261012-084900 deploy error) moved to /private/tmp/ha2n-t1415-e2e-untracked-backup, not deleted. Contains only symlinks to the main tree's .env/.venv, no secret copies.
+- git rebase origin/main (0828af0): clean, no conflicts. d01afac->d08492d, 6ac5ad2->9ecd973, 2f87eeb->bad0011.
+- Backlog: config.yml identical to main after rebase; TASK-14/15 files only on this branch, no duplicates.
+- Unit suite 469 OK, validate.py OK, py_compile OK, strings/translations JSON valid. Pushed origin/task-14-15-options-flow-ux (new on origin).
+<!-- SECTION:NOTES:END -->
