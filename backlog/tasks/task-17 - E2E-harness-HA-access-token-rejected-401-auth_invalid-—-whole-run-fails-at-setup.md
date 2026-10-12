@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-11 19:23'
-updated_date: '2026-10-11 19:48'
+updated_date: '2026-10-12 18:38'
 labels:
   - e2e
   - env
@@ -47,6 +47,8 @@ Reproduce: regenerate/refresh the staging HA long-lived access token, update e2e
 
 <!-- SECTION:NOTES:BEGIN -->
 Root cause was contention between two parallel e2e sessions sharing the staging HA plus stale renamed containers (hash-prefixed ha-staging leftovers) blocking compose recreate. Fixed by: removing stale containers, graceful compose down, wiping root-owned .storage via a throwaway container (documented permission pitfall), clearing HA_TOKEN/HA_E2E_PASSWORD in .env and re-running bootstrap. Token valid afterwards.
+
+Recurred 2026-10-12: Mac e2e/.env had a stale HA_TOKEN and HA_E2E_PASSWORD (staging was re-onboarded from the Pi side since 2026-10-11); bootstrap failed with auth_invalid / login invalid_auth. Fixed by copying both values from the Pi's e2e/.env (without printing). AC #2 (fail-fast pre-flight token check) is still open and would have turned this into a clear message.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

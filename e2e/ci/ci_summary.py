@@ -4,8 +4,10 @@
     ci_summary.py <report-dir> [<env-file>]
 
 The repo is public, so job logs and summaries are readable by anyone. Only status, versions,
-counts and failing test names + first line of the message go out, with every value from the
-env file, IPv4/IPv6 addresses, MAC addresses, hostnames and 2N serial numbers masked.
+counts and failing test names + first line of the message go out. The free-text messages are
+masked: the sensitive values from the env file, IPv4/IPv6 and MAC addresses, LAN hostnames,
+2N serial numbers and anything that looks like key=secret. Versions and counts come from
+known fields and are not masked.
 Full logs stay on the Pi in <report-dir>.
 """
 
@@ -27,21 +29,27 @@ PATTERNS = [
 ]
 
 
+SECRET_KEYS = ("INTERCOM_HOST", "INTERCOM_USER", "INTERCOM_PASSWORD", "HA_TOKEN", "HA_E2E_PASSWORD")
+
+
 def env_secrets(env_file: Path | None) -> list[str]:
+    """Values of the sensitive keys only (not every setting, e.g. not 'https' or '1')."""
     if not env_file or not env_file.is_file():
         return []
     vals = []
     for line in env_file.read_text().splitlines():
-        if "=" in line and not line.lstrip().startswith("#"):
-            v = line.split("=", 1)[1].split(" #", 1)[0].strip().strip("'\"")
-            if len(v) >= 4 and v.lower() not in {"true", "false", "https", "http"}:
+        key, sep, raw = line.partition("=")
+        if sep and key.strip() in SECRET_KEYS:
+            v = raw.split(" #", 1)[0].strip().strip("'\"")
+            if v:
                 vals.append(v)
     return sorted(vals, key=len, reverse=True)
 
 
 def scrub(text: str, secrets: list[str]) -> str:
+    """Mask secrets as whole words (a user 'test' must not turn 'tests' into garbage)."""
     for s in secrets:
-        text = text.replace(s, "«redacted»")
+        text = re.sub(rf"(?<![\w.-]){re.escape(s)}(?![\w-])", "«redacted»", text)
     for p in PATTERNS:
         text = p.sub("«redacted»", text)
     return text
@@ -87,11 +95,11 @@ def main(report: Path, env_file: Path | None) -> str:
                 if bad is not None:
                     msg = (bad.get("message") or "").splitlines()[0][:200] if bad.get("message") else ""
                     name = f"{case.get('classname', '')}::{case.get('name', '')}".strip(":")
-                    bad_lines.append(f"- `{name}` — {msg}")
+                    bad_lines.append(f"- `{name}` — {scrub(msg, secrets)}")
             if bad_lines:
                 out += ["", "**Failing tests**", *bad_lines]
     out += ["", f"Full report stays on the Pi: `reports/{report.name}`"]
-    return scrub("\n".join(out), secrets)
+    return "\n".join(out)
 
 
 if __name__ == "__main__":
