@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 10:55'
+updated_date: '2026-10-12 11:01'
 labels:
   - git
   - config-flow
@@ -28,9 +28,9 @@ TASK-14/15 (options-flow Next/Submit labels, back navigation, clearer credential
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Branch is pushed to origin and rebased on current `main` (after project files, e2e and busy-loop subtasks)
-- [ ] #2 The `backlog/` files from this branch merge cleanly with the ones already on main (no duplicate TASK-14/15 files, `config.yml` identical or reconciled)
-- [ ] #3 Unit suite + `validate.py` green; `bash e2e/e2e.sh run --ref origin/task-14-15-options-flow-ux` green including `test_40_options_flow.py`
+- [x] #1 Branch is pushed to origin and rebased on current `main` (after project files, e2e and busy-loop subtasks)
+- [x] #2 The `backlog/` files from this branch merge cleanly with the ones already on main (no duplicate TASK-14/15 files, `config.yml` identical or reconciled)
+- [x] #3 Unit suite + `validate.py` green; `bash e2e/e2e.sh run --ref origin/task-14-15-options-flow-ux` green including `test_40_options_flow.py`
 - [ ] #4 Merged `--no-ff` into `main` by Jan; the `/private/tmp/ha2n-t1415` worktree is removed
 <!-- AC:END -->
 
@@ -51,4 +51,6 @@ TASK-14/15 (options-flow Next/Submit labels, back navigation, clearer credential
 - git rebase origin/main (0828af0): clean, no conflicts. d01afac->d08492d, 6ac5ad2->9ecd973, 2f87eeb->bad0011.
 - Backlog: config.yml identical to main after rebase; TASK-14/15 files only on this branch, no duplicates.
 - Unit suite 469 OK, validate.py OK, py_compile OK, strings/translations JSON valid. Pushed origin/task-14-15-options-flow-ux (new on origin).
+
+E2E report 20261012-120017 (Jan, on the Pi): passed, ref task-14-15-options-flow-ux, deployed_sha 421dc3b, 12 passed / 5 skipped. test_40_options_flow ran and PASSED (Next/Submit last_step, go_back, masked RTSP password, options unchanged). Skips: SIP sensor disabled, relays, test_50 TASK-8/9 features not deployed. Warnings only InsecureRequestWarning from the E2E 2N client (self-signed device cert). AC1-3 checked; AC4 after Jan's --no-ff merge + worktree removal.
 <!-- SECTION:NOTES:END -->
