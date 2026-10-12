@@ -27,6 +27,10 @@ install -d -o "$CI_USER" -g "$CI_USER" -m 0750 "$CI_HOME" "$CI_HOME/reports"
 echo "==> /usr/local/sbin/ha2n-staging (root-owned)"
 install -o root -g root -m 0755 "$SRC/ha2n-staging" /usr/local/sbin/ha2n-staging
 
+echo "==> /usr/local/lib/ha2n-ci/job-started.sh (runner gate, root-owned)"
+install -d -o root -g root -m 0755 /usr/local/lib/ha2n-ci
+install -o root -g root -m 0755 "$SRC/job-started-hook.sh" /usr/local/lib/ha2n-ci/job-started.sh
+
 echo "==> /etc/ha2n-ci"
 install -d -o root -g root -m 0755 /etc/ha2n-ci
 cat > /etc/ha2n-ci/staging.conf <<CONF
@@ -48,6 +52,10 @@ if grep -Eiq 'privileged|docker\.sock|network_mode|pid:|cap_add|devices:|/:/' "$
 fi
 install -o root -g root -m 0644 "$SRC/../staging/docker-compose.yml" /etc/ha2n-ci/staging-compose.yml
 install -d -o "$STAGING_USER" -g "$STAGING_USER" -m 0700 "$STAGING_HOME/.ha2n-ci"
+if [ ! -f /etc/ha2n-ci/allowed-actors ]; then
+  printf '%s\n' mastalir1980 > /etc/ha2n-ci/allowed-actors
+fi
+chown root:root /etc/ha2n-ci/allowed-actors; chmod 0644 /etc/ha2n-ci/allowed-actors
 if [ ! -f /etc/ha2n-ci/e2e.env ]; then
   { echo "# E2E settings for the Pi CI runner. Readable by $CI_USER only (and root)."
     echo "# Use the READ-ONLY 2N account here (Monitoring, no Control) — see e2e/ci/README.md."
@@ -71,6 +79,21 @@ python3 -c 'import ensurepip' 2>/dev/null || apt-get install -y python3-venv
 sudo -u "$CI_USER" -H "$CI_HOME/venv/bin/pip" install -q --upgrade pip
 # via stdin: $SRC is in the staging user's home, which ha2n-ci cannot read (0700 on Bookworm)
 sudo -u "$CI_USER" -H "$CI_HOME/venv/bin/pip" install -q -r /dev/stdin < "$SRC/../requirements.txt"
+
+RUNNER_DIR="$CI_HOME/actions-runner"
+if [ -f "$RUNNER_DIR/.runner" ]; then
+  echo "==> runner found: enabling the job-started gate"
+  HOOK_LINE=ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/lib/ha2n-ci/job-started.sh
+  touch "$RUNNER_DIR/.env"
+  grep -qxF "$HOOK_LINE" "$RUNNER_DIR/.env" || echo "$HOOK_LINE" >> "$RUNNER_DIR/.env"
+  # root-owned so a job cannot switch the gate off for the next job
+  chown root:"$CI_USER" "$RUNNER_DIR/.env"; chmod 0644 "$RUNNER_DIR/.env"
+  for svc in /etc/systemd/system/actions.runner.*.service; do
+    [ -e "$svc" ] && systemctl restart "$(basename "$svc")" && echo "    restarted $(basename "$svc")"
+  done
+else
+  echo "==> no runner registered yet — after registering, run this script again to enable the gate"
+fi
 
 echo "==> self-check"
 sudo -u "$CI_USER" sudo -n -u "$STAGING_USER" /usr/local/sbin/ha2n-staging status

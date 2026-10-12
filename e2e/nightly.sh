@@ -28,6 +28,10 @@ MAIN_SHA="$(git rev-parse --short origin/main)"
 # origin/main always runs first, the rest in alphabetical order.
 ALL_BRANCHES="$(git for-each-ref --format='%(refname:short)' refs/remotes/origin \
   | grep -v -e '^origin/HEAD$' | sort)"
+# Which branches the nightly run deploys. Default: main only. Branch/PR testing is done by the
+# Pi CI runner (e2e/ci/), which checks who wrote the PR; this script runs with full docker rights
+# and must not deploy code from anyone's branch. Override e.g. E2E_NIGHTLY_BRANCHES='^origin/(main|task-.*)$'
+ALL_BRANCHES="$(grep -E "${E2E_NIGHTLY_BRANCHES:-^origin/main\$}" <<<"$ALL_BRANCHES" || true)"
 BRANCHES="$( { grep -x 'origin/main' <<<"$ALL_BRANCHES"; grep -vx 'origin/main' <<<"$ALL_BRANCHES"; } || true)"
 echo "branches under watch: $(echo "$BRANCHES" | tr '\n' ' ')"
 

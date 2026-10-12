@@ -25,6 +25,7 @@ stavíme jinde:
 | Žádný docker pro `ha2n-ci` | produkční HA na stejném Pi | Uživatel runneru není ve skupině `docker`. Na staging se dostane jen přes `/usr/local/sbin/ha2n-staging`. |
 | Pevný helper | staging, prod, zámek | `ha2n-staging` je ve vlastnictví root a běží přes sudoers jako staging uživatel. Odmítne nehex SHA, commity mimo větve repa (forky), deploy bez zámku a cokoli mimo `ha-staging`. Změna helperu se projeví až po ručním `install-pi.sh`. |
 | Compose a deploy mimo dosah větve | produkční HA a hostitel | Helper používá vlastní compose `/etc/ha2n-ci/staging-compose.yml` (root, kontrolovaný při instalaci), ne `~/ha-staging/docker-compose.yml`. Před deployem staging zastaví a soubory maže a rozbaluje v jednorázovém kontejneru, který vidí jen `config/`. Symlink, který tam nechal kód z předchozí větve, tak nedosáhne na hostitele. |
+| Brána na Pi (job hook) | proti cizím workflow | Runner před každým jobem spustí `/usr/local/lib/ha2n-ci/job-started.sh` (root). Povolí jen `e2e-pi.yml` z `main`, událost `pull_request_target` nebo `workflow_dispatch`, PR z tohoto repa do `main` a autora i spouštěče ze seznamu `/etc/ha2n-ci/allowed-actors`. Workflow přidané ve forku nebo na jiné větvi Pi odmítne, i když na GitHubu někdo klikne na *Approve and run*. |
 | Workflow z `main` | integritu checku | `pull_request_target` bere workflow a `e2e/ci/*` vždy z `main`. Spustí se jen pro PR z větví tohoto repa a jen pro lidi v `E2E_PI_ACTORS`. |
 | Očištěný výstup | data z domácí sítě | Do veřejného logu jde jen stav, verze a názvy padlých testů. IP, MAC, hostname, sériová čísla a hodnoty z `e2e.env` se maskují. |
 | Sdílený zámek | staging | Mac, noční běh (Hermes) i CI používají jeden zámek `~/ha-staging/.e2e.lock`, takže dva deploye se nikdy nepřekryjí. |
@@ -90,11 +91,27 @@ exit
 cd /var/lib/ha2n-ci/actions-runner && sudo ./svc.sh install ha2n-ci && sudo ./svc.sh start
 ```
 
+Pak **znovu spusť `sudo bash e2e/ci/install-pi.sh`**. Skript runner najde, zapne v jeho `.env`
+bránu (`ACTIONS_RUNNER_HOOK_JOB_STARTED`), převede `.env` na roota a službu restartuje.
+
 ### 5. Nastavení repa na GitHubu
 - **Settings → Secrets and variables → Actions → Variables:** `E2E_PI_ACTORS` = `["mastalir1980"]`
   (později přidat účet agenta),
 - **Settings → Actions → General → Fork pull request workflows:** *Require approval for all external contributors*
   (nejpřísnější volba).
+  U cizího PR, který mění `.github/`, nikdy neklikej na *Approve and run* (brána na Pi ho stejně odmítne).
+- **Settings → Rules → Rulesets → New branch ruleset** pro `main`: *Restrict deletions*, *Block force
+  pushes*, *Require a pull request before merging* + *Require review from Code Owners*.
+  `.github/CODEOWNERS` pak u změn v `.github/`, `e2e/ci/`, `e2e/scripts/`, `e2e/run.sh`,
+  `e2e/nightly.sh` a `e2e/staging/` vyžaduje tvoje schválení. Plně to začne fungovat, až agent
+  pushuje pod vlastním účtem.
+- Seznam povolených lidí je na dvou místech a musí sedět: proměnná `E2E_PI_ACTORS` na GitHubu
+  a `/etc/ha2n-ci/allowed-actors` na Pi. Rozhoduje to na Pi.
+- **Registrační token** vezmi v UI (platí 1 hodinu) a předej ho jednorázově. Na Pi nedávej `gh`
+  přihlášené tvým účtem: agent na Pi by měl admin práva k repu.
+
+**Noční běh** (`nightly.sh`) od teď nasazuje jen `main` (proměnná `E2E_NIGHTLY_BRANCHES`).
+Běží s plnými právy dockeru, takže nesmí nasazovat cizí větve. PR a větve testuje runner.
 
 ## První experiment
 1. Před testem si poznamenej start produkční HA: `docker inspect -f '{{.State.StartedAt}}' homeassistant`.

@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-12 17:50'
-updated_date: '2026-10-12 18:02'
+updated_date: '2026-10-12 18:18'
 labels:
   - e2e
   - ci
@@ -17,14 +17,9 @@ references:
   - e2e/nightly.sh
   - e2e/tests/conftest.py
 modified_files:
-  - .github/workflows/e2e-pi.yml
-  - e2e/ci/ha2n-staging
-  - e2e/ci/pr-e2e.sh
-  - e2e/ci/install-pi.sh
-  - e2e/ci/ci_summary.py
-  - e2e/ci/README.md
-  - e2e/scripts/lock.sh
-  - e2e/run.sh
+  - e2e/ci/job-started-hook.sh
+  - .github/CODEOWNERS
+  - e2e/nightly.sh
 priority: high
 type: task
 ordinal: 29000
@@ -64,4 +59,6 @@ First building block of an autonomous pipeline: a coding agent on a separate VM 
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-12 (Claude): implemented in working tree (not committed): .github/workflows/e2e-pi.yml, e2e/ci/{ha2n-staging,pr-e2e.sh,install-pi.sh,ci_summary.py,README.md}, e2e/scripts/lock.sh, lock in e2e/run.sh, pointers in e2e/README.md, CLAUDE.md, .github/copilot-instructions.md. Static checks: bash -n + shellcheck (warning level) clean, actionlint clean except the custom runner label, ci_summary redaction self-test, lock.sh and helper lock/unlock/validation simulated locally; helper deploy (docker) not runnable off the Pi. Independent security review applied: root-owned compose (/etc/ha2n-ci/staging-compose.yml), stop + remove/extract inside a throwaway container (symlink escape to prod), atomic stale-lock break with mtime fallback, per-PR concurrency group, base.ref == default branch guard, unlock before logs + INT/TERM trap, requirements via stdin (0700 homes). Accepted residual risk for phase 1: branch code shares the runner uid (can fake the check) -> e2e-pi alone never justifies auto-merge. Remaining: Jan installs on the Pi, read-only 2N account + reset-entry, runner registration, E2E_PI_ACTORS, first experiment (AC #7).
+
+2026-10-12 (Claude), part 2 after Jan asked how to stop others' commits from reaching the runner: added e2e/ci/job-started-hook.sh (runner ACTIONS_RUNNER_HOOK_JOB_STARTED gate, root-owned; allows only e2e-pi.yml@main, pull_request_target/workflow_dispatch, same-repo PR into main, author+actor in /etc/ha2n-ci/allowed-actors; fails closed) — simulated 8 cases OK; install-pi.sh installs it and, when a runner is registered, enables it in a root-owned runner .env and restarts the service; .github/CODEOWNERS for CI-relevant paths; nightly.sh deploys only origin/main by default (E2E_NIGHTLY_BRANCHES) because it runs with full docker rights and the old deploy.sh; README: fork approval, ruleset on main, token from UI, no gh with Jan's account on the Pi. To verify on first run: GITHUB_WORKFLOW_REF is present in the hook env (if not, the gate refuses everything and the job log says so).
 <!-- SECTION:NOTES:END -->
