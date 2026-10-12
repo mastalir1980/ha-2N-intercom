@@ -34,7 +34,7 @@ def _diagnostics(ha, entry_id: str) -> dict:
 
 def test_subscribed_access_events_match_device_log_caps(ha, entry, twon):
     if "access_control" not in _diagnostics(ha, entry["entry_id"]):
-        pytest.skip("deployed integration has no access_control diagnostics (TASK-8 not deployed)")
+        pytest.skip("deployed integration has no access_control diagnostics (TASK-4 not deployed)")
     device_supported = ACCESS_EVENTS & set(twon.log_caps())
 
     def subscribed():
@@ -74,7 +74,7 @@ def test_grant_access_is_logged_by_device(ha, entry, twon):
         pytest.skip("E2E_GRANT_USER_UUID not set")
     services = {s.get("domain"): s.get("services", {}) for s in ha.get_json("/api/services")}
     if "grant_access" not in services.get("2n_intercom", {}):
-        pytest.skip("deployed integration has no grant_access service (TASK-4 not deployed)")
+        pytest.skip("deployed integration has no grant_access service (TASK-8 not deployed)")
     if "ApiAccessRequested" not in twon.log_caps():
         pytest.skip("device does not report ApiAccessRequested in log/caps")
 

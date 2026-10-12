@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 07:58'
+updated_date: '2026-10-12 11:34'
 labels:
   - git
   - access-control
@@ -56,4 +56,15 @@ Step 1 (backup) done 2026-10-12:
 - Steps 2-3 not started (blocked by TASK-21.5 dependency and Jan's review).
 
 E2E deferred: Jan will run e2e.sh externally (instruction 2026-10-12).
+
+Step 2, branch 1 of 3 (task-4) done 2026-10-12:
+- Worktree ../ha2n-t216 from origin/main 29c6773; cherry-pick -n 91a58b8 had only two trivial union conflicts (coordinator.py: LOG_LISTENER_IDLE_DELAY + access constants/AccessEvent; config_flow.py imports: CONF_GO_BACK + CONF_GRANT_ACCESS_USER). Combined tree: 563 tests OK.
+- Split by stripping hunks from the combined tree: minus TASK-8 (grant_access service, GrantAccessResult/async_grant_access/TwoNDeviceRejectedError, grant-user option in options flow, services.yaml, access_point selector, grant_access_* strings, README grant sections, validate.py feature line) = 4+9 tree (539 tests OK); minus TASK-9 (image.py, ring snapshot capture/fields/properties in coordinator, image platform + ring_snapshot_enabled in __init__, diagnostics ring_snapshot, entity.image strings/icon, README image lines) = TASK-4 tree.
+- Branch task-4-access-control-events = 90e7fd7 (pushed). 528 tests OK, validate.py OK, py_compile OK. In test_coordinator_access.py the combined RingSnapshotTests.test_update_data_carries_event_state is replaced on this branch by UpdateDataTests.test_update_data_carries_access_event (access part only); task-9 restores the combined test.
+- Also fixed the swapped TASK labels in e2e/tests/test_50_access_control.py skip messages (access_control = TASK-4, grant_access = TASK-8).
+- docs/API_REFERENCE.md already covers all three features (landed with TASK-21.1); no docs change.
+- Intermediate trees kept as patches against 29c6773 in the agent session files (4+9 tree 0a40ec8, full tree 3c70f9a) for task-9 / task-8.
+- Pending: E2E run by Jan (e2e.sh run --ref task-4-access-control-events; expect test_50 access_control part to run, image/grant skipped), review, merge.
+
+task-4 E2E: report 20261012-123306 passed at 81d8787 (13 passed, 4 skipped). test_subscribed_access_events_match_device_log_caps ran for the first time and passed (HA subscription = device log/caps). Skips as expected: SIP sensor disabled, relays, image (TASK-9 not deployed), grant_access (relay). Warnings only InsecureRequestWarning from the E2E client.
 <!-- SECTION:NOTES:END -->

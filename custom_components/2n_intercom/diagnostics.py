@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 # Credentials for the device web API and RTSP. Host/port are intentionally NOT
 # redacted because they're load-bearing for any meaningful triage.
 TO_REDACT_ENTRY = {CONF_USERNAME, CONF_PASSWORD, CONF_RTSP_USERNAME, CONF_RTSP_PASSWORD}
+# Directory identities on access events are personal data, not triage data.
+TO_REDACT_ACCESS_EVENT = {"user_uuid", "user_name"}
 
 
 async def async_get_config_entry_diagnostics(
@@ -30,6 +32,8 @@ async def async_get_config_entry_diagnostics(
     runtime: TwoNIntercomRuntimeData = entry.runtime_data
     coordinator = runtime.coordinator
     transport = coordinator.camera_transport_info
+    last_access_event = coordinator.last_access_event
+    log_caps = coordinator.log_caps
 
     return {
         "entry": {
@@ -67,6 +71,17 @@ async def async_get_config_entry_diagnostics(
             "last_motion_time": (
                 coordinator.last_motion_time.isoformat()
                 if coordinator.last_motion_time is not None
+                else None
+            ),
+        },
+        "access_control": {
+            "log_caps_events": sorted(log_caps) if log_caps is not None else None,
+            "subscribed_events": list(coordinator.subscribed_log_events),
+            "last_access_event": (
+                async_redact_data(
+                    last_access_event.as_dict(), TO_REDACT_ACCESS_EVENT
+                )
+                if last_access_event is not None
                 else None
             ),
         },

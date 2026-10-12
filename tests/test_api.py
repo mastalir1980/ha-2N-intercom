@@ -2214,5 +2214,85 @@ class SelectLiveViewModeEdgeCases(unittest.TestCase):
         )
 
 
+
+class AccessControlApiTests(unittest.IsolatedAsyncioTestCase):
+    """Tests for log caps and directory users (TASK-4)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.api_module = load_api_module()
+
+    def _make_api(self, response_payload=None, status=200):
+        return AdditionalApiMethodTests._make_api(self, response_payload, status)
+
+    # -- /api/log/caps -------------------------------------------------
+
+    async def test_get_log_caps_returns_event_names(self) -> None:
+        api = self._make_api({
+            "success": True,
+            "result": {"events": ["CardEntered", " CodeEntered ", "", 5, "CallStateChanged"]},
+        })
+        caps = await api.async_get_log_caps()
+        self.assertEqual(caps, ["CardEntered", "CodeEntered", "CallStateChanged"])
+        self.assertEqual(api.requests[0]["path"], "/api/log/caps")
+        self.assertEqual(api.requests[0]["method"], "GET")
+
+    async def test_get_log_caps_device_error_returns_none(self) -> None:
+        api = self._make_api({"success": False, "error": {"code": 2, "description": "invalid path"}})
+        self.assertIsNone(await api.async_get_log_caps())
+
+    async def test_get_log_caps_without_events_list_returns_none(self) -> None:
+        api = self._make_api({"success": True, "result": {"events": "CardEntered"}})
+        self.assertIsNone(await api.async_get_log_caps())
+
+    async def test_get_log_caps_auth_failure_raises(self) -> None:
+        api = self._make_api({"success": False}, status=401)
+        with self.assertRaises(self.api_module.TwoNAuthenticationError):
+            await api.async_get_log_caps()
+
+    # -- directory users ------------------------------------------------
+
+    def test_extract_directory_users_handles_result_shapes(self) -> None:
+        extract = self.api_module.extract_directory_users
+        payload = {
+            "series": "1",
+            "users": [
+                {"uuid": "01234567-89AB-CDEF-0123-456789ABCDEF", "name": " Alice "},
+                {"uuid": "", "name": "No uuid"},
+                {"name": "Missing uuid"},
+                "garbage",
+                {"uuid": "A6543210-68FF-18CA-3210-FEDCBA987654"},
+            ],
+        }
+        self.assertEqual(
+            extract(payload),
+            [
+                {"uuid": "01234567-89AB-CDEF-0123-456789ABCDEF", "name": "Alice"},
+                {"uuid": "A6543210-68FF-18CA-3210-FEDCBA987654", "name": ""},
+            ],
+        )
+        self.assertEqual(extract([{"uuid": "x", "name": "y"}]), [{"uuid": "x", "name": "y"}])
+        self.assertEqual(extract(None), [])
+        self.assertEqual(extract({"users": "nope"}), [])
+
+    async def test_get_directory_users_queries_dir(self) -> None:
+        api = self._make_api({
+            "success": True,
+            "result": {"series": "1", "users": [{"uuid": "U-1", "name": "Bob"}]},
+        })
+        users = await api.async_get_directory_users()
+        self.assertEqual(users, [{"uuid": "U-1", "name": "Bob"}])
+        self.assertEqual(api.requests[0]["path"], "/api/dir/query")
+
+    def test_coerce_bool(self) -> None:
+        coerce = self.api_module.coerce_bool
+        self.assertIs(coerce(True), True)
+        self.assertIs(coerce("false"), False)
+        self.assertIs(coerce(" TRUE "), True)
+        self.assertIs(coerce(1), True)
+        self.assertIsNone(coerce("maybe"))
+        self.assertIsNone(coerce(None))
+        self.assertIsNone(coerce(5))
+
 if __name__ == "__main__":
     unittest.main()

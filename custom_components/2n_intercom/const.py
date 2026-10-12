@@ -83,6 +83,31 @@ CAMERA_SOURCES = ["internal", "external"]
 CAMERA_MJPEG_FPS_MIN = 1
 CAMERA_MJPEG_FPS_MAX = 15
 
+# Access control — log events from the 2N HTTP API manual (5.10.1 api log
+# caps). The coordinator subscribes only to the subset the device reports
+# in /api/log/caps, because support depends on model, hardware and licence.
+ACCESS_LOG_EVENTS = (
+    "CardEntered",
+    "CodeEntered",
+    "MobKeyEntered",
+    "FingerEntered",
+    "UserAuthenticated",
+    "UserRejected",
+    "AccessTaken",
+    "AccessBlocked",
+    "AccessLimited",
+    "ApiAccessRequested",
+)
+# Signals a directory change; used to invalidate the uuid -> name cache.
+DIRECTORY_CHANGED_EVENT = "DirectoryChanged"
+
+# Credential types exposed on parsed access events.
+CREDENTIAL_CARD = "card"
+CREDENTIAL_CODE = "code"
+CREDENTIAL_MOBILE_KEY = "mobile_key"
+CREDENTIAL_FINGERPRINT = "fingerprint"
+CREDENTIAL_API = "api"
+
 # Platforms — the actual platform list is built dynamically by
 # ``__init__._get_platforms()`` based on whether the entry has relays
 # configured. There is no static module-level PLATFORMS constant.

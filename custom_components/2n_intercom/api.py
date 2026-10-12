@@ -40,6 +40,7 @@ SWITCH_CAPS_PATH = "/api/switch/caps"
 SWITCH_STATUS_PATH = "/api/switch/status"
 IO_CAPS_PATH = "/api/io/caps"
 IO_STATUS_PATH = "/api/io/status"
+LOG_CAPS_PATH = "/api/log/caps"
 RTSP_PROBE_TIMEOUT = 3
 
 _RESOLUTION_RE = re.compile(r"^\s*(\d+)\s*x\s*(\d+)\s*$")
@@ -152,6 +153,33 @@ def log_device_error(
     )
 
 
+def extract_directory_users(payload: Any) -> list[dict[str, str]]:
+    """Return ``[{"uuid": ..., "name": ...}]`` from a dir/query result.
+
+    ``/api/dir/query`` answers ``{"series": ..., "users": [...]}``; older
+    callers of :meth:`TwoNIntercomAPI.async_get_directory` may also hand
+    over a bare list. UUIDs are returned exactly as the device reports them
+    (the docs show uppercase here but lowercase in log events), so callers
+    matching against log events must compare case-insensitively.
+    """
+    if isinstance(payload, dict):
+        raw_users = payload.get("users")
+    else:
+        raw_users = payload
+    if not isinstance(raw_users, list):
+        return []
+
+    users: list[dict[str, str]] = []
+    for user in raw_users:
+        if not isinstance(user, dict):
+            continue
+        uuid = str(user.get("uuid") or "").strip()
+        if not uuid:
+            continue
+        users.append({"uuid": uuid, "name": str(user.get("name") or "").strip()})
+    return users
+
+
 @dataclass(frozen=True)
 class CameraResolution:
     """Normalized camera resolution."""
@@ -222,6 +250,21 @@ def _coerce_int(value: Any) -> int | None:
         return value
     if isinstance(value, str) and value.strip().isdigit():
         return int(value.strip())
+    return None
+
+
+def coerce_bool(value: Any) -> bool | None:
+    """Coerce a 2N boolean (JSON bool or "true"/"false" string)."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("true", "1"):
+            return True
+        if normalized in ("false", "0"):
+            return False
+    if isinstance(value, int):
+        return bool(value) if value in (0, 1) else None
     return None
 
 
@@ -875,6 +918,28 @@ class TwoNIntercomAPI:
     async def async_get_io_status(self) -> dict[str, Any]:
         """Get IO status from /api/io/status."""
         return await self._async_get_result_dict(IO_STATUS_PATH, "io status")
+
+    async def async_get_log_caps(self) -> list[str] | None:
+        """Return the log event names the device supports (/api/log/caps).
+
+        Returns ``None`` when the device rejects the request or answers
+        without an ``events`` list, so callers can tell "unknown" apart
+        from "supports nothing". Transport errors propagate like the
+        other ``_async_get_result_dict`` callers.
+        """
+        result = await self._async_get_result_dict(LOG_CAPS_PATH, "log caps")
+        events = result.get("events")
+        if not isinstance(events, list):
+            return None
+        return [
+            event.strip()
+            for event in events
+            if isinstance(event, str) and event.strip()
+        ]
+
+    async def async_get_directory_users(self) -> list[dict[str, str]]:
+        """Return directory users as ``[{"uuid", "name"}]``."""
+        return extract_directory_users(await self.async_get_directory())
 
     async def _async_call_action(
         self,
@@ -1847,3 +1912,4 @@ class TwoNConnectionError(Exception):
 
 class TwoNAPIError(Exception):
     """Generic API error."""
+

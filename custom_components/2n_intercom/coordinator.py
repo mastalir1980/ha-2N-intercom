@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import timedelta, datetime
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant
@@ -14,17 +16,26 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
+from homeassistant.util import dt as dt_util
 
 from .api import (
     CameraTransportInfo,
     TwoNAuthenticationError,
     TwoNConnectionError,
     TwoNIntercomAPI,
+    coerce_bool,
 )
 from .const import (
+    ACCESS_LOG_EVENTS,
     CALLED_ID_ALL,
     CAMERA_SOURCES,
     CONF_CAMERA_SOURCE,
+    CREDENTIAL_API,
+    CREDENTIAL_CARD,
+    CREDENTIAL_CODE,
+    CREDENTIAL_FINGERPRINT,
+    CREDENTIAL_MOBILE_KEY,
+    DIRECTORY_CHANGED_EVENT,
     CONF_LIVE_VIEW_MODE,
     CONF_MJPEG_FPS,
     CONF_MJPEG_HEIGHT,
@@ -85,6 +96,67 @@ LOG_LISTENER_INITIAL_BACKOFF = 5
 LOG_LISTENER_MAX_BACKOFF = 60
 LOG_LISTENER_PULL_ERROR_DELAY = 1
 LOG_LISTENER_IDLE_DELAY = 1
+# Minimum seconds between dir/query refreshes triggered by unknown user uuids
+DIRECTORY_REFRESH_MIN_INTERVAL = 60
+# How many access sessions remember the credential type of their *Entered event
+ACCESS_SESSION_MEMORY = 16
+
+# Events the listener always subscribes to. Optional events (MotionDetected,
+# access control, DirectoryChanged) are added only when the device supports
+# them, so one unsupported event never breaks the whole subscription.
+BASE_LOG_EVENTS = (
+    "CallStateChanged",
+    "CallSessionStateChanged",
+    "SwitchStateChanged",
+    "InputChanged",
+    "OutputChanged",
+    "RegistrationStateChanged",
+    "ConfigurationChanged",
+    "CapabilitiesChanged",
+    "DeviceState",
+)
+
+# Credential-presentation events and the credential type they represent.
+_CREDENTIAL_EVENTS = {
+    "CardEntered": CREDENTIAL_CARD,
+    "CodeEntered": CREDENTIAL_CODE,
+    "MobKeyEntered": CREDENTIAL_MOBILE_KEY,
+    "FingerEntered": CREDENTIAL_FINGERPRINT,
+    "ApiAccessRequested": CREDENTIAL_API,
+}
+# AccessLimited ``type`` values (card/code/finger) mapped to credential types.
+_ACCESS_LIMITED_TYPES = {
+    "card": CREDENTIAL_CARD,
+    "code": CREDENTIAL_CODE,
+    "finger": CREDENTIAL_FINGERPRINT,
+}
+
+
+@dataclass(frozen=True)
+class AccessEvent:
+    """Parsed access-control log event.
+
+    Secrets carried by some 2N events (``code``, card ``uid``, mobile key
+    ``authid``) are deliberately never stored.
+    """
+
+    event_type: str
+    timestamp: datetime
+    credential_type: str | None = None
+    access_point: int | None = None
+    direction: str | None = None
+    granted: bool | None = None
+    reason: str | None = None
+    state: str | None = None
+    user_uuid: str | None = None
+    user_name: str | None = None
+    session: str | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return a JSON-serialisable representation."""
+        data = asdict(self)
+        data["timestamp"] = self.timestamp.isoformat()
+        return data
 
 
 @dataclass
@@ -101,6 +173,7 @@ class TwoNIntercomData:
     switch_status: dict[str, Any]
     io_caps: dict[str, Any]
     io_status: dict[str, Any]
+    last_access_event: AccessEvent | None = None
 
 
 class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type: ignore[misc]
@@ -162,6 +235,17 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         self._system_caps: dict[str, str] = {}
         self._motion_detected = False
         self._last_motion_time: datetime | None = None
+        # Access control (log events + directory name cache)
+        self._log_caps: frozenset[str] | None = None
+        self._subscribed_log_events: tuple[str, ...] = ()
+        self._log_resubscribe_requested = False
+        self._last_access_event: AccessEvent | None = None
+        self._access_session_credentials: OrderedDict[
+            tuple[int | None, str], str
+        ] = OrderedDict()
+        self._directory_names: dict[str, str] = {}
+        self._directory_refresh_task: asyncio.Task[None] | None = None
+        self._directory_last_refresh: float | None = None
 
     @staticmethod
     def _normalize_peer(peer: str | None) -> str | None:
@@ -365,13 +449,282 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         return False  # async task handles notification
 
     async def _async_refresh_caps_from_event(self) -> None:
-        """Refresh switch and IO caps, then notify listeners."""
+        """Refresh switch, IO and log caps, then notify listeners."""
         await self._refresh_secondary_cache(
             "_switch_caps", "async_get_switch_caps", "switch caps",
         )
         await self._refresh_secondary_cache(
             "_io_caps", "async_get_io_caps", "io caps",
         )
+        await self._async_refresh_log_caps()
+        if (
+            self._log_subscription_id is not None
+            and tuple(self._build_log_event_list()) != self._subscribed_log_events
+        ):
+            self._log_resubscribe_requested = True
+        if hasattr(self, "async_update_listeners"):
+            self.async_update_listeners()
+
+    # ------------------------------------------------------------------
+    # Log caps / subscription list
+    # ------------------------------------------------------------------
+
+    async def _async_refresh_log_caps(self) -> None:
+        """Fetch /api/log/caps; keep the previous value on any failure."""
+        fetcher: Callable[[], Awaitable[list[str] | None]] | None = getattr(
+            self.api, "async_get_log_caps", None
+        )
+        if not callable(fetcher):
+            return
+        try:
+            caps = await fetcher()
+        except Exception as err:  # pylint: disable=broad-except
+            _LOGGER.debug("Failed to fetch log caps: %s", err)
+            return
+        if isinstance(caps, (list, tuple, set, frozenset)):
+            self._log_caps = frozenset(
+                str(event) for event in caps if isinstance(event, str)
+            )
+        else:
+            _LOGGER.debug("Device did not report log caps; access events disabled")
+
+    def _build_log_event_list(self) -> list[str]:
+        """Return the events to subscribe to, limited to what the device supports.
+
+        Access-control events and DirectoryChanged are only added when
+        /api/log/caps lists them. Without caps they are skipped entirely:
+        subscribing to an unsupported event could break the subscription.
+        """
+        log_events = list(BASE_LOG_EVENTS)
+        if self.motion_detection_available:
+            log_events.append("MotionDetected")
+        if self._log_caps:
+            log_events.extend(
+                event
+                for event in (*ACCESS_LOG_EVENTS, DIRECTORY_CHANGED_EVENT)
+                if event in self._log_caps
+            )
+        return log_events
+
+    # ------------------------------------------------------------------
+    # Access control events
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _event_timestamp(event: dict[str, Any]) -> datetime:
+        """Return the tz-aware event time from ``utcTime`` (fallback: now)."""
+        utc_time = event.get("utcTime")
+        if isinstance(utc_time, (int, float)) and not isinstance(utc_time, bool):
+            try:
+                return dt_util.utc_from_timestamp(utc_time)
+            except (OverflowError, OSError, ValueError):
+                pass
+        return dt_util.utcnow()
+
+    @staticmethod
+    def _optional_str(params: dict[str, Any], key: str) -> str | None:
+        value = params.get(key)
+        if value is None or isinstance(value, (dict, list)):
+            return None
+        normalized = str(value).strip()
+        return normalized or None
+
+    @staticmethod
+    def _optional_int(value: Any) -> int | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.strip().isdigit():
+            return int(value.strip())
+        return None
+
+    def _remember_session_credential(
+        self, access_point: int | None, session: str | None, credential: str
+    ) -> None:
+        if session is None:
+            return
+        key = (access_point, session)
+        self._access_session_credentials[key] = credential
+        self._access_session_credentials.move_to_end(key)
+        while len(self._access_session_credentials) > ACCESS_SESSION_MEMORY:
+            self._access_session_credentials.popitem(last=False)
+
+    def _session_credential(
+        self, access_point: int | None, session: str | None
+    ) -> str | None:
+        if session is None:
+            return None
+        return self._access_session_credentials.get((access_point, session))
+
+    def _process_access_event(self, event_name: str, event: dict[str, Any]) -> bool:
+        """Parse an access-control log event into ``_last_access_event``.
+
+        Field names follow the 2N HTTP API manual (api/log/pull). Returns
+        False — without raising — for malformed payloads so one bad event
+        never breaks the subscription.
+        """
+        params = event.get("params")
+        if params is None:
+            params = {}
+        if not isinstance(params, dict):
+            _LOGGER.debug("Ignoring %s event with malformed params", event_name)
+            return False
+
+        access_point = self._optional_int(params.get("ap"))
+        session = self._optional_str(params, "session")
+        direction = self._optional_str(params, "direction")
+        if direction is not None:
+            direction = direction.lower()
+        uuid = self._optional_str(params, "uuid")
+        user_uuid = uuid.lower() if uuid is not None else None
+        credential_type: str | None = None
+        granted: bool | None = None
+        reason: str | None = None
+        state: str | None = None
+
+        if event_name in _CREDENTIAL_EVENTS:
+            granted = coerce_bool(params.get("valid"))
+            if granted is None:
+                _LOGGER.debug("Ignoring %s event without a valid flag", event_name)
+                return False
+            credential_type = _CREDENTIAL_EVENTS[event_name]
+            if event_name == "CodeEntered":
+                reason = self._optional_str(params, "reason")
+            self._remember_session_credential(access_point, session, credential_type)
+        elif event_name == "UserAuthenticated":
+            granted = True
+            credential_type = self._session_credential(access_point, session)
+        elif event_name == "UserRejected":
+            granted = False
+            reason = self._optional_str(params, "reason")
+            credential_type = self._session_credential(access_point, session)
+        elif event_name == "AccessTaken":
+            credential_type = self._session_credential(access_point, session)
+        elif event_name in ("AccessBlocked", "AccessLimited"):
+            state = (self._optional_str(params, "state") or "").lower() or None
+            if state not in ("in", "out"):
+                _LOGGER.debug("Ignoring %s event with unknown state", event_name)
+                return False
+            # "in" = blocking starts (access denied); "out" = blocking ends.
+            granted = False if state == "in" else None
+            if event_name == "AccessLimited":
+                limited_type = (self._optional_str(params, "type") or "").lower()
+                credential_type = _ACCESS_LIMITED_TYPES.get(limited_type)
+        else:  # pragma: no cover - guarded by ACCESS_LOG_EVENTS dispatch
+            return False
+
+        user_name = self._resolve_user_name(
+            user_uuid, self._optional_str(params, "name")
+        )
+        self._last_access_event = AccessEvent(
+            event_type=event_name,
+            timestamp=self._event_timestamp(event),
+            credential_type=credential_type,
+            access_point=access_point,
+            direction=direction,
+            granted=granted,
+            reason=reason,
+            state=state,
+            user_uuid=user_uuid,
+            user_name=user_name,
+            session=session,
+        )
+        return True
+
+    def _resolve_user_name(
+        self, user_uuid: str | None, event_name: str | None
+    ) -> str | None:
+        """Return the display name for a user uuid.
+
+        Order: the event's own ``name`` param, then the dir/query cache. An
+        unknown uuid schedules a throttled background directory refresh that
+        back-fills the name into the latest event.
+        """
+        if user_uuid is None:
+            return event_name
+        if event_name:
+            self._directory_names[user_uuid] = event_name
+            return event_name
+        cached = self._directory_names.get(user_uuid)
+        if cached is not None:
+            return cached
+        self._schedule_directory_refresh()
+        return None
+
+    def _schedule_directory_refresh(self) -> None:
+        task = self._directory_refresh_task
+        if task is not None and not task.done():
+            return
+        now = time.monotonic()
+        if (
+            self._directory_last_refresh is not None
+            and now - self._directory_last_refresh < DIRECTORY_REFRESH_MIN_INTERVAL
+        ):
+            return
+        self._directory_last_refresh = now
+        self._directory_refresh_task = self.hass.async_create_task(
+            self._async_refresh_directory_names()
+        )
+
+    async def _async_refresh_directory_names(self) -> None:
+        """Reload the uuid -> name cache from /api/dir/query."""
+        fetcher: Callable[[], Awaitable[list[dict[str, str]]]] | None = getattr(
+            self.api, "async_get_directory_users", None
+        )
+        if not callable(fetcher):
+            return
+        try:
+            users = await fetcher()
+        except Exception as err:  # pylint: disable=broad-except
+            _LOGGER.debug("Failed to refresh directory names: %s", err)
+            return
+
+        names: dict[str, str] = {}
+        for user in users or []:
+            if not isinstance(user, dict):
+                continue
+            uuid = str(user.get("uuid") or "").strip().lower()
+            name = str(user.get("name") or "").strip()
+            if uuid and name:
+                names[uuid] = name
+        self._directory_names = names
+        _LOGGER.debug("Directory name cache refreshed (%d users)", len(names))
+
+        event = self._last_access_event
+        if (
+            event is not None
+            and event.user_name is None
+            and event.user_uuid is not None
+            and event.user_uuid in names
+        ):
+            self._last_access_event = replace(
+                event, user_name=names[event.user_uuid]
+            )
+            self._publish_event_state()
+
+    def _process_directory_changed_event(self) -> bool:
+        """Invalidate the name cache; the next unknown uuid reloads it."""
+        self._directory_names = {}
+        self._directory_last_refresh = None
+        return False
+
+    def _publish_event_state(self) -> None:
+        """Push event-driven state into ``self.data`` and notify listeners."""
+        current: TwoNIntercomData | None = self.data  # type: ignore[has-type]
+        if current is not None:
+            self.data = replace(
+                current,
+                last_ring_time=self._last_ring_time,
+                active_session_id=self._active_session_id,
+                available=True,
+                phone_status=self._phone_status or {},
+                switch_caps=self._switch_caps or {},
+                switch_status=self._switch_status or {},
+                io_caps=self._io_caps or {},
+                io_status=self._io_status or {},
+                last_access_event=self._last_access_event,
+            )
         if hasattr(self, "async_update_listeners"):
             self.async_update_listeners()
 
@@ -400,6 +753,10 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
 
         if event_name == "MotionDetected":
             return self._process_motion_event(event)
+        if event_name in ACCESS_LOG_EVENTS:
+            return self._process_access_event(event_name, event)
+        if event_name == DIRECTORY_CHANGED_EVENT:
+            return self._process_directory_changed_event()
 
         if event_name == "SwitchStateChanged":
             return self._process_switch_state_event(event.get("params") or {})
@@ -490,6 +847,15 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
     async def _async_run_log_subscription(self, subscription_id: int) -> None:
         """Drain events for an established subscription until it errors out."""
         while not self._log_listener_stopped:
+            if self._log_resubscribe_requested:
+                # The supported event set changed; let the outer loop
+                # unsubscribe and resubscribe with the new list.
+                self._log_resubscribe_requested = False
+                _LOGGER.debug(
+                    "Log caps changed; resubscribing log subscription %s",
+                    subscription_id,
+                )
+                return
             try:
                 events = await self.api.async_pull_log(subscription_id, timeout=1)
             except Exception as err:  # pylint: disable=broad-except
@@ -504,22 +870,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
                 updated = self._process_log_event(event) or updated
 
             if updated:
-                current: TwoNIntercomData | None = self.data  # type: ignore[has-type]
-                if current is not None:
-                    self.data = TwoNIntercomData(
-                        call_status=current.call_status,
-                        last_ring_time=self._last_ring_time,
-                        caller_info=current.caller_info,
-                        active_session_id=self._active_session_id,
-                        available=True,
-                        phone_status=self._phone_status or {},
-                        switch_caps=self._switch_caps or {},
-                        switch_status=self._switch_status or {},
-                        io_caps=self._io_caps or {},
-                        io_status=self._io_status or {},
-                    )
-                if hasattr(self, "async_update_listeners"):
-                    self.async_update_listeners()
+                self._publish_event_state()
 
             # Some 2N firmware returns from log/pull immediately even when
             # timeout=1 is requested. Without a real delay on empty pulls,
@@ -535,20 +886,12 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         while not self._log_listener_stopped:
             subscription_id: int | None = None
             try:
-                log_events = [
-                    "CallStateChanged",
-                    "CallSessionStateChanged",
-                    "SwitchStateChanged",
-                    "InputChanged",
-                    "OutputChanged",
-                    "RegistrationStateChanged",
-                    "ConfigurationChanged",
-                    "CapabilitiesChanged",
-                    "DeviceState",
-                ]
-                if self.motion_detection_available:
-                    log_events.append("MotionDetected")
+                await self._async_refresh_log_caps()
+                log_events = self._build_log_event_list()
+                self._log_resubscribe_requested = False
                 subscription_id = await self.api.async_subscribe_log(log_events)
+                if subscription_id is not None:
+                    self._subscribed_log_events = tuple(log_events)
             except Exception as err:  # pylint: disable=broad-except
                 _LOGGER.debug("Log subscription failed: %s", err)
 
@@ -877,6 +1220,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
                 switch_status=switch_status,
                 io_caps=io_caps,
                 io_status=io_status,
+                last_access_event=self._last_access_event,
             )
             
         except TwoNAuthenticationError as err:
@@ -1047,6 +1391,21 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
     def last_motion_time(self) -> datetime | None:
         """Return the timestamp of the last motion detection start."""
         return self._last_motion_time
+
+    @property
+    def last_access_event(self) -> AccessEvent | None:
+        """Return the most recent parsed access-control event."""
+        return self._last_access_event
+
+    @property
+    def log_caps(self) -> frozenset[str] | None:
+        """Return the log events the device reported in /api/log/caps."""
+        return self._log_caps
+
+    @property
+    def subscribed_log_events(self) -> tuple[str, ...]:
+        """Return the events of the currently active log subscription."""
+        return self._subscribed_log_events
 
     @property
     def camera_transport_info(self) -> CameraTransportInfo:

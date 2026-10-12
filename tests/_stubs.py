@@ -46,6 +46,8 @@ BINARY_SENSOR_PATH = INTEGRATION_DIR / "binary_sensor.py"
 CONFIG_FLOW_PATH = INTEGRATION_DIR / "config_flow.py"
 COVER_PATH = INTEGRATION_DIR / "cover.py"
 SWITCH_PATH = INTEGRATION_DIR / "switch.py"
+IMAGE_PATH = INTEGRATION_DIR / "image.py"
+DIAGNOSTICS_PATH = INTEGRATION_DIR / "diagnostics.py"
 
 
 def ensure_package(name: str) -> types.ModuleType:
@@ -140,3 +142,34 @@ def install_api_stubs() -> None:
 
     async_timeout.timeout = timeout
     sys.modules["async_timeout"] = async_timeout
+
+
+def install_dt_util_stub() -> types.ModuleType:
+    """Register a minimal ``homeassistant.util.dt`` (tz-aware helpers)."""
+
+    from datetime import datetime, timezone
+
+    ensure_package("homeassistant")
+    util = ensure_package("homeassistant.util")
+    existing = sys.modules.get("homeassistant.util.dt")
+    if existing is not None:
+        return existing
+
+    dt_module = types.ModuleType("homeassistant.util.dt")
+    dt_module.UTC = timezone.utc
+
+    def utcnow() -> datetime:
+        return datetime.now(timezone.utc)
+
+    def now() -> datetime:
+        return datetime.now(timezone.utc)
+
+    def utc_from_timestamp(timestamp: float) -> datetime:
+        return datetime.fromtimestamp(timestamp, timezone.utc)
+
+    dt_module.utcnow = utcnow
+    dt_module.now = now
+    dt_module.utc_from_timestamp = utc_from_timestamp
+    util.dt = dt_module  # type: ignore[attr-defined]
+    sys.modules["homeassistant.util.dt"] = dt_module
+    return dt_module
