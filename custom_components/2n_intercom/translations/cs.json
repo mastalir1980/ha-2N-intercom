@@ -6,13 +6,13 @@
         "description": "Zadejte IP adresu a přihlašovací údaje API vašeho 2N Intercom. Protokol připojení se detekuje automaticky.",
         "data": {
           "host": "IP adresa",
-          "username": "Uživatelské jméno",
-          "password": "Heslo"
+          "username": "API uživatelské jméno",
+          "password": "API heslo"
         },
         "data_description": {
           "host": "IP adresa nebo hostname zařízení (např. 192.0.2.100)",
-          "username": "Přihlašovací jméno zařízení pro API",
-          "password": "Přihlašovací heslo zařízení"
+          "username": "Uživatelské jméno HTTP API účtu interkomu — spravuje se ve webovém rozhraní zařízení pod Services > HTTP API > Accounts",
+          "password": "Heslo HTTP API účtu interkomu"
         }
       },
       "device": {
@@ -22,13 +22,15 @@
           "name": "Název",
           "enable_camera": "Povolit kameru",
           "enable_doorbell": "Povolit zvonek",
-          "called_id": "Volaný účet (peer)"
+          "called_id": "Volaný účet (peer)",
+          "go_back": "Zpět na předchozí krok"
         },
         "data_description": {
           "name": "Zobrazený název v Home Assistant",
           "enable_camera": "Vytvoří entitu kamery pro snímky i stream",
           "enable_doorbell": "Vytvoří entitu zvonku pro detekci zvonění",
-          "called_id": "Vyberte účet, na který se zvoní. Všechny hovory = zvonění pro všechna tlačítka."
+          "called_id": "Vyberte účet, na který se zvoní. Všechny hovory = zvonění pro všechna tlačítka.",
+          "go_back": "Zaškrtněte a odešlete pro návrat do nastavení připojení bez uložení. Zadané hodnoty zůstanou zachovány."
         }
       },
       "reconfigure": {
@@ -38,14 +40,28 @@
           "host": "IP adresa",
           "port": "Port",
           "protocol": "Protokol",
-          "username": "Uživatel",
-          "password": "Heslo",
+          "username": "API uživatelské jméno",
+          "password": "API heslo",
           "verify_ssl": "Ověřovat TLS certifikát",
           "allow_insecure": "Povolit nezabezpečené připojení"
         },
         "data_description": {
           "verify_ssl": "Ověřovat HTTPS certifikát zařízení. Vypněte jen pro tovární self-signed certifikát.",
-          "allow_insecure": "Povolit odeslání přihlašovacích údajů přes HTTP Basic po nešifrovaném HTTP. Zapněte pouze tehdy, pokud zařízení nezvládá HTTPS ani Digest."
+          "allow_insecure": "Povolit odeslání přihlašovacích údajů přes HTTP Basic po nešifrovaném HTTP. Zapněte pouze tehdy, pokud zařízení nezvládá HTTPS ani Digest.",
+          "username": "Uživatelské jméno HTTP API účtu interkomu — spravuje se ve webovém rozhraní zařízení pod Services > HTTP API > Accounts",
+          "password": "Heslo HTTP API účtu interkomu"
+        }
+      },
+      "reauth_confirm": {
+        "title": "2N Intercom - Opětovné ověření",
+        "description": "Uložené API přihlašovací údaje pro {host} přestaly fungovat. Zadejte aktuální přihlašovací údaje HTTP API interkomu.",
+        "data": {
+          "username": "API uživatelské jméno",
+          "password": "API heslo"
+        },
+        "data_description": {
+          "username": "Uživatelské jméno HTTP API účtu interkomu — spravuje se ve webovém rozhraní zařízení pod Services > HTTP API > Accounts",
+          "password": "Heslo HTTP API účtu interkomu"
         }
       }
     },
@@ -69,7 +85,7 @@
       },
       "device": {
         "title": "Možnosti 2N Intercom - Zařízení",
-        "description": "Upravte funkce zařízení. Relé jsou automaticky detekována ze zařízení — názvy a typy lze upravit v dalším kroku.",
+        "description": "Upravte funkce zařízení. Relé jsou automaticky detekována ze zařízení — názvy a typy lze upravit v dalším kroku. IP adresu, port a API přihlašovací údaje zde neměníte — použijte ⋮ > Znovu nakonfigurovat na kartě integrace.",
         "data": {
           "name": "Název",
           "enable_camera": "Povolit kameru",
@@ -95,7 +111,8 @@
           "mjpeg_height": "Výška MJPEG (pixely)",
           "mjpeg_fps": "Snímky za sekundu (MJPEG)",
           "rtsp_username": "RTSP uživatelské jméno",
-          "rtsp_password": "RTSP heslo"
+          "rtsp_password": "RTSP heslo",
+          "go_back": "Zpět na předchozí krok"
         },
         "data_description": {
           "live_view_mode": "auto upřednostní RTSP, pak MJPEG, případně jen JPEG snímky",
@@ -103,8 +120,9 @@
           "mjpeg_width": "Šířka MJPEG streamu vyžádaného od zařízení (např. 640)",
           "mjpeg_height": "Výška MJPEG streamu vyžádaného od zařízení (např. 480)",
           "mjpeg_fps": "Snímky za sekundu pro MJPEG stream (1-15)",
-          "rtsp_username": "Uživatelské jméno pro RTSP streamovací službu 2N (konfiguruje se samostatně v rozhraní zařízení pod Služby > Streaming)",
-          "rtsp_password": "Heslo k účtu RTSP streamovací služby"
+          "rtsp_username": "Volitelné — používá se jen pro video stream RTSP (H.264). Účet vytvořte na interkomu pod Services > Streaming > RTSP Server > User Database; API účet zde nefunguje. Ponechte prázdné pro použití MJPEG místo RTSP.",
+          "rtsp_password": "Volitelné — heslo k RTSP účtu. Nikdy se zde nezobrazuje: ponechte prázdné pro zachování uloženého hesla. Pro úplné odstranění RTSP údajů vymažte i uživatelské jméno; bez nich integrace používá MJPEG.",
+          "go_back": "Zaškrtněte a odešlete pro návrat do nastavení zařízení bez uložení. Zadané hodnoty zůstanou zachovány."
         }
       },
       "relay": {
@@ -114,13 +132,15 @@
           "relay_number": "Číslo relé",
           "relay_name": "Název relé",
           "relay_device_type": "Typ zařízení",
-          "relay_pulse_duration": "Doba pulsu (milisekundy)"
+          "relay_pulse_duration": "Doba pulsu (milisekundy)",
+          "go_back": "Zpět na předchozí krok"
         },
         "data_description": {
           "relay_number": "Fyzické číslo relé na zařízení (automaticky detekováno)",
           "relay_name": "Zobrazený název relé v Home Assistant",
           "relay_device_type": "Dveře vytvoří spínač, vrata vytvoří kryt",
-          "relay_pulse_duration": "Délka spínacího pulsu odeslaného relé (ms). Výchozí hodnota je switchOnDuration nakonfigurovaná na zařízení."
+          "relay_pulse_duration": "Délka spínacího pulsu odeslaného relé (ms). Výchozí hodnota je switchOnDuration nakonfigurovaná na zařízení.",
+          "go_back": "Zaškrtněte a odešlete pro návrat na předchozí krok bez uložení. Zadané hodnoty zůstanou zachovány."
         }
       }
     }
