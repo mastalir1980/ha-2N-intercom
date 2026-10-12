@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# ha2n-staging — the ONLY way the CI runner user touches the staging Home Assistant on the Pi.
+#
+# Installed by e2e/ci/install-pi.sh as /usr/local/sbin/ha2n-staging (root-owned, not writable by
+# the runner) and allowed via sudoers to run as the staging user (the one in the docker group):
+#     ha2n-ci ALL=(<staging-user>) NOPASSWD: /usr/local/sbin/ha2n-staging
+# The runner user itself has NO docker access: production HA runs on the same Pi.
+#
+# Everything here is fixed: config comes from root-owned /etc/ha2n-ci/staging.conf, arguments are
+# validated, only the staging container/dir is touched, and only commits that exist on a branch of
+# the origin repo are deployed (never fork PR refs). Changing this file needs a manual reinstall
+# on the Pi (sudo bash e2e/ci/install-pi.sh), so a branch or an agent cannot change it.
+#
+#   ha2n-staging lock   <owner>          acquire the shared staging lock (waits, breaks stale)
+#   ha2n-staging unlock <owner>          release it if <owner> holds it
+#   ha2n-staging deploy <owner> <sha>    deploy custom_components/2n_intercom@<sha>, restart, wait
+#   ha2n-staging logs                    last 400 lines of the staging container log
+#   ha2n-staging status                  who holds the lock
+#
+# <owner> must look like ci-<run-id>. Lock protocol = e2e/scripts/lock.sh (keep in sync).
+set -euo pipefail
+umask 022
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+HOME="$(getent passwd "$(id -un)" | cut -d: -f6)"; export HOME
+
+CONF=/etc/ha2n-ci/staging.conf
+die() { echo "ha2n-staging: $*" >&2; exit 2; }
+[ -r "$CONF" ] || die "missing $CONF"
+# shellcheck disable=SC1090
+. "$CONF"
+: "${STAGING_DIR:?}" "${HA_CONTAINER:?}" "${HA_URL:?}" "${REPO_URL:?}" "${MIRROR:?}"
+HA_IMAGE="${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:stable}"
+LOCK_WAIT="${LOCK_WAIT:-1800}"; LOCK_STALE="${LOCK_STALE:-5400}"
+LOCK="$STAGING_DIR/.e2e.lock"
+
+case "$HA_URL" in *:8124|*:8124/*) ;; *) die "HA_URL is not staging (port 8124)";; esac
+[ "$HA_CONTAINER" != "homeassistant" ] || die "refusing the production container"
+COMPOSE_FILE=/etc/ha2n-ci/staging-compose.yml   # root-owned copy; branches cannot change it
+[ -f "$COMPOSE_FILE" ] || die "missing $COMPOSE_FILE"
+compose() { docker compose -f "$COMPOSE_FILE" --project-directory "$STAGING_DIR" "$@"; }
+
+valid_owner() { [[ "$1" =~ ^ci-[A-Za-z0-9._-]{1,60}$ ]] || die "invalid owner '$1' (expected ci-<id>)"; }
+lock_owner() { local o _t; read -r o _t 2>/dev/null < "$LOCK/owner" && echo "$o"; }
+
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  lock)
+    valid_owner "${1:-}"; waited=0
+    while :; do
+      now=$(date +%s)
+      if mkdir "$LOCK" 2>/dev/null; then echo "$1 $now" > "$LOCK/owner"; echo "lock acquired by $1"; exit 0; fi
+      # owner file not written yet -> fall back to the directory mtime (a fresh lock is never stale)
+      read -r o t 2>/dev/null < "$LOCK/owner" || { o=unknown; t="$(stat -c %Y "$LOCK" 2>/dev/null || echo "$now")"; }
+      if [ $((now - ${t:-$now})) -gt "$LOCK_STALE" ]; then
+        # atomic: only one waiter wins the rename, nobody deletes a lock someone just took
+        if mv "$LOCK" "$LOCK.stale.$$" 2>/dev/null; then rm -rf "$LOCK.stale.$$"; echo "broke stale lock of $o"; fi
+        continue
+      fi
+      [ "$waited" -ge "$LOCK_WAIT" ] && die "staging lock still held by $o after ${LOCK_WAIT}s"
+      [ "$waited" -eq 0 ] && echo "staging busy ($o), waiting…"
+      sleep 10; waited=$((waited + 10))
+    done ;;
+
+  unlock)
+    valid_owner "${1:-}"
+    if [ "$(lock_owner || true)" = "$1" ]; then rm -rf "$LOCK"; echo "lock released"; fi ;;
+
+  deploy)
+    valid_owner "${1:-}"; sha="${2:-}"
+    [[ "$sha" =~ ^[0-9a-f]{7,40}$ ]] || die "invalid sha"
+    [ "$(lock_owner || true)" = "$1" ] || die "deploy without holding the staging lock"
+    [ -d "$MIRROR" ] || git init -q --bare "$MIRROR"
+    git -C "$MIRROR" fetch -q --prune "$REPO_URL" '+refs/heads/*:refs/remotes/origin/*'
+    full="$(git -C "$MIRROR" rev-parse --verify -q "$sha^{commit}")" || die "commit $sha not found on origin"
+    [ -n "$(git -C "$MIRROR" for-each-ref --contains "$full" refs/remotes/origin)" ] \
+      || die "commit $sha is not on any origin branch (fork PRs are never deployed)"
+    if git -C "$MIRROR" ls-tree -r "$full" -- custom_components/2n_intercom | grep -q '^120000 '; then
+      die "symlinks in custom_components/2n_intercom are not allowed"
+    fi
+    git -C "$MIRROR" cat-file -e "$full:custom_components/2n_intercom/manifest.json" 2>/dev/null \
+      || die "commit $sha has no custom_components/2n_intercom"
+    dest="$STAGING_DIR/config"
+    [ -d "$dest" ] && [ ! -L "$dest" ] || die "staging config dir missing or a symlink"
+    echo "==> deploying ${full:0:12} to $HA_CONTAINER"
+    # Code from the previous branch ran as root in this container and could have planted symlinks
+    # in /config. Stop it first, and never touch $dest from the host: remove + extract happen inside
+    # a throwaway container that mounts only $dest, so any symlink resolves inside that container.
+    compose stop -t 20 "$HA_CONTAINER" >/dev/null 2>&1 || true
+    git -C "$MIRROR" archive --format=tar "$full" custom_components/2n_intercom |
+      docker run --rm -i --network none -v "$dest:/config" --entrypoint /bin/sh "$HA_IMAGE" -c '
+        set -e
+        rm -rf /config/custom_components/2n_intercom
+        mkdir -p /config/custom_components
+        tar -x -C /config
+        printf "%s\n" "$1" > /config/custom_components/2n_intercom/.e2e_deployed.json' \
+        sh "{\"sha\": \"${full:0:7}\", \"deployed_at\": \"$(date -Is)\", \"by\": \"$1\"}"
+    echo "==> (re)starting $HA_CONTAINER"
+    compose up -d --force-recreate "$HA_CONTAINER" >/dev/null
+    echo -n "==> waiting for staging HA "
+    for _ in $(seq 1 100); do
+      if curl -fsS -o /dev/null --max-time 5 "$HA_URL/manifest.json"; then echo " up"; exit 0; fi
+      echo -n "."; sleep 3
+    done
+    echo " TIMEOUT"; exit 1 ;;
+
+  logs) docker logs --tail 400 "$HA_CONTAINER" 2>&1 ;;
+
+  status) echo "lock: $(lock_owner || echo free)" ;;
+
+  *) die "usage: ha2n-staging lock|unlock <owner> | deploy <owner> <sha> | logs | status" ;;
+esac

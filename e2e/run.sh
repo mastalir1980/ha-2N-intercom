@@ -11,6 +11,7 @@ E2E_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$E2E_DIR/.." && pwd)"
 set -a; [ -f "$E2E_DIR/.env" ] && . "$E2E_DIR/.env"; set +a
 . "$E2E_DIR/scripts/pi.sh"
+. "$E2E_DIR/scripts/lock.sh"
 
 DEPLOY_ARGS=(); PYTEST_ARGS=(); AGENT="${E2E_AGENT:-1}"; TRIGGER="manual"; REF_LABEL="HEAD"
 while [ $# -gt 0 ]; do
@@ -57,8 +58,13 @@ if [ $? -ne 0 ]; then
 else
   # ---- 2. deploy to staging HA ------------------------------------------------
   STAGE="deploy"
+  # One run at a time on the shared staging HA (Mac, nightly and the Pi CI runner).
+  LOCK_OWNER="run-$(hostname -s 2>/dev/null || echo host)-$$"
+  trap 'staging_unlock "$LOCK_OWNER"' EXIT
   echo "==> [2/4] deploy to staging HA"
-  if ! bash "$E2E_DIR/scripts/deploy.sh" ${DEPLOY_ARGS[@]+"${DEPLOY_ARGS[@]}"} 2>&1 | tee "$REPORT/deploy.log"; then
+  if ! staging_lock "$LOCK_OWNER"; then
+    STATUS="error"
+  elif ! bash "$E2E_DIR/scripts/deploy.sh" ${DEPLOY_ARGS[@]+"${DEPLOY_ARGS[@]}"} 2>&1 | tee "$REPORT/deploy.log"; then
     STATUS="error"
   else
     sleep "${E2E_SETTLE_SECONDS:-20}"  # let the integration finish setup + first log/subscribe
@@ -86,6 +92,8 @@ if [ "$STAGE" != "unit" ]; then
     pi "cd '$PI_STAGING_DIR' && docker compose stop -t 20 >/dev/null 2>&1" || true
   fi
 fi
+# Free staging for the next run before the (slow) agent triage starts.
+if [ -n "${LOCK_OWNER:-}" ]; then staging_unlock "$LOCK_OWNER"; fi
 finish
 
 # ---- 4. agent triage -> Backlog.md --------------------------------------------

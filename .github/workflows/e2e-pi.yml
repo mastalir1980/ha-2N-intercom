@@ -1,0 +1,55 @@
+# E2E against the real 2N intercom, run on the Pi by a self-hosted runner (label ha2n-pi).
+# Runbook + threat model: e2e/ci/README.md
+#
+# Safety rules (do not relax without Jan):
+# - pull_request_target: this workflow and e2e/ci/* always come from main, never from the PR.
+# - Only PRs from branches of THIS repo whose author and pusher are in the repo variable
+#   E2E_PI_ACTORS (JSON list, e.g. ["mastalir1980"]). Fork PRs never reach the Pi.
+# - Read-only: no relay tests. The 2N account used on the Pi has no Control privilege.
+# - The repo is public: only the sanitised summary is printed; full logs stay on the Pi.
+name: E2E on the Pi
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full 40-char commit SHA (must be on a branch of this repo)
+        required: true
+
+permissions:
+  contents: read
+
+# Per PR: a new push supersedes the pending run of the same PR. Runs of different PRs are
+# serialised by the single runner + the staging lock (a global group would drop queued PRs).
+concurrency:
+  group: e2e-pi-${{ github.event.pull_request.number || inputs.sha }}
+  cancel-in-progress: false
+
+jobs:
+  e2e-pi:
+    name: e2e-pi
+    if: >-
+      (github.event_name == 'workflow_dispatch'
+        && contains(fromJSON(vars.E2E_PI_ACTORS || '[]'), github.actor))
+      || (github.event_name == 'pull_request_target'
+        && github.event.pull_request.head.repo.full_name == github.repository
+        && github.event.pull_request.base.ref == github.event.repository.default_branch
+        && contains(fromJSON(vars.E2E_PI_ACTORS || '[]'), github.event.pull_request.user.login)
+        && contains(fromJSON(vars.E2E_PI_ACTORS || '[]'), github.actor))
+    runs-on: [self-hosted, ha2n-pi]
+    timeout-minutes: 45
+    steps:
+      - name: Checkout trusted CI scripts from main
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: e2e/ci
+          path: trusted
+
+      - name: Deploy to staging HA and run E2E (read-only)
+        env:
+          SHA: ${{ github.event.pull_request.head.sha || inputs.sha }}
+        run: bash trusted/e2e/ci/pr-e2e.sh "$SHA"
