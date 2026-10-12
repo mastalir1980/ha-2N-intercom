@@ -69,3 +69,16 @@ class TwoN:
             if sw.get("switch") == number:
                 return bool(sw.get("active"))
         raise KeyError(f"relay {number} not reported by device")
+
+    # ------------------------------------------------------------ log channel
+    def log_caps(self) -> list[str]:
+        return list(self._get("/api/log/caps").get("events", []))
+
+    def log_subscribe(self, events: list[str]) -> int:
+        return int(self._get("/api/log/subscribe", filter=",".join(events))["id"])
+
+    def log_pull(self, sub_id: int, timeout: int = 0) -> list[dict[str, Any]]:
+        return list(self._get("/api/log/pull", id=sub_id, timeout=timeout).get("events", []))
+
+    def log_unsubscribe(self, sub_id: int) -> None:
+        self._get("/api/log/unsubscribe", id=sub_id)

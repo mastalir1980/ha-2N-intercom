@@ -117,6 +117,21 @@ class HA:
     def reload_entry(self, entry_id: str) -> Any:
         return self.post_json(f"/api/config/config_entries/entry/{entry_id}/reload")
 
+    # ------------------------------------------------------- options flows
+    def options_flow_start(self, entry_id: str) -> dict[str, Any]:
+        return self.post_json("/api/config/config_entries/options/flow", {"handler": entry_id})
+
+    def options_flow_submit(self, flow_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        return self.post_json(f"/api/config/config_entries/options/flow/{flow_id}", data)
+
+    def options_flow_abort(self, flow_id: str) -> None:
+        r = requests.delete(
+            f"{self.url}/api/config/config_entries/options/flow/{flow_id}",
+            headers=self._headers(), timeout=self.timeout,
+        )
+        if r.status_code not in (200, 204, 404):
+            raise HAError(f"DELETE options flow {flow_id} -> {r.status_code}: {r.text[:300]}")
+
     # -------------------------------------------------------------- helpers
     def wait_for(self, predicate, timeout: float, interval: float = 0.5, what: str = "condition") -> Any:
         deadline = time.monotonic() + timeout

@@ -18,4 +18,4 @@ echo "== 2/2 Staticka validace integrace =="
 "$PY" validate.py | tail -5
 
 echo ""
-echo "✅ PIPELINE OK — vsechny testy prosly. Muzes nasadit: ./deploy_test.sh"
+echo "✅ PIPELINE OK — vsechny testy prosly."
