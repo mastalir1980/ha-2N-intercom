@@ -66,7 +66,8 @@
       }
     },
     "error": {
-      "cannot_connect": "Verbindung zum Gerät fehlgeschlagen. Bitte IP-Adresse, Port und Zugangsdaten prüfen."
+      "cannot_connect": "Verbindung zum Gerät fehlgeschlagen. Bitte IP-Adresse, Port und Zugangsdaten prüfen.",
+      "invalid_auth": "HTTP-API-Anmeldung fehlgeschlagen. Prüfen Sie die Zugangsdaten und Kontoberechtigungen am Gerät."
     },
     "abort": {
       "already_configured": "Diese 2N Gegensprechanlage ist bereits konfiguriert.",

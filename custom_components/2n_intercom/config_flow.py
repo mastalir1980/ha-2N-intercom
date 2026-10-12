@@ -260,6 +260,10 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
                     )
                     if serial:
                         user_input[CONF_SERIAL_NUMBER] = str(serial).strip()
+                    else:
+                        # Going back and pointing at another host must not
+                        # keep the previous device's identity in the draft.
+                        self._data.pop(CONF_SERIAL_NUMBER, None)
                     # Build a descriptive default name from device identity
                     variant = sys_info.get("variant", "").strip()
                     sn = str(serial).strip() if serial else ""
@@ -269,6 +273,8 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
                         self._default_device_name = variant
                     elif sn:
                         self._default_device_name = f"2N Intercom {sn}"
+                    else:
+                        self._default_device_name = None
                     # Merge (not replace) so values from a later step survive
                     # a back-and-forth through this step.
                     self._data.update(user_input)

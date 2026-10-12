@@ -66,7 +66,8 @@
       }
     },
     "error": {
-      "cannot_connect": "Nepodařilo se připojit k zařízení. Zkontrolujte prosím IP adresu, port a přihlašovací údaje."
+      "cannot_connect": "Nepodařilo se připojit k zařízení. Zkontrolujte prosím IP adresu, port a přihlašovací údaje.",
+      "invalid_auth": "Přihlášení k HTTP API selhalo. Zkontrolujte přihlašovací údaje a oprávnění účtu v interkomu."
     },
     "abort": {
       "already_configured": "Toto zařízení 2N Intercom je již nakonfigurováno.",

@@ -155,6 +155,8 @@ The setup wizard has two steps:
 1. **Connection** — host, username, password. Protocol (HTTPS/HTTP) and port (443/80) are auto-detected
 2. **Device** — display name, enable camera, enable doorbell, optional ringing account (peer)
 
+To change the connection details, tick **Back to the previous step** on the Device step and submit. The connection form is pre-filled and the connection is re-checked on the next submit; values entered on the Device step are kept. If you point the wizard at a different intercom, the device identity (serial number, suggested name) is taken from that intercom.
+
 Relays are **not** configured during initial setup. The integration auto-discovers enabled relays from the device's `/api/switch/caps` endpoint and creates switch entities automatically. To override relay names, types (door/gate), or pulse durations, open the **Options** flow after setup.
 
 ### Initial setup parameters
@@ -178,6 +180,8 @@ The options flow has up to three steps:
 1. **Device** — name, feature toggles, backup polling interval, ringing account
 2. **Camera** *(only when camera is enabled)* — live view mode, RTSP credentials, MJPEG resolution/fps, camera source
 3. **Relay** *(one per auto-detected relay)* — name, device type (door/gate), pulse duration
+
+Intermediate steps show **Next**; the last step shows **Submit**. To revisit a step, tick **Back to the previous step** and submit the current form (Home Assistant validates required fields first). Values entered in this session — camera settings and each relay's override — stay in the draft and are saved only when you finish the last step without the back option. Closing the dialog discards the draft.
 
 | Step | Parameter | Type | Default | Description |
 |---|---|---|---|---|
