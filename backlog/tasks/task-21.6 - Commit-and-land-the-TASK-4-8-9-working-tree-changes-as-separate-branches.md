@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 11:41'
+updated_date: '2026-10-12 12:16'
 labels:
   - git
   - access-control
@@ -71,4 +71,10 @@ task-4 E2E: report 20261012-123306 passed at 81d8787 (13 passed, 4 skipped). tes
 Step 2, branch 2 of 3 (task-9) 2026-10-12: task-9-last-ring-image from origin/main 3c55e54 (task-4 merged) + diff 90e7fd7..0a40ec8 (the 4+9 tree) on custom_components/tests/README; resulting tree identical to the saved 4+9 tree. 539 tests OK, validate.py OK, py_compile OK. Restores the combined RingSnapshotTests.test_update_data_carries_event_state. E2E check: test_50 test_last_ring_image_follows_camera. Pending: E2E by Jan, review, merge.
 
 task-9 E2E: report 20261012-123947 passed at 64fe19c (14 passed, 3 skipped). test_last_ring_image_follows_camera ran and passed (image entity exists with camera enabled, not unavailable); access-control test still passes. Skips: SIP sensor disabled, relays, grant_access (relay).
+
+Step 2, branch 3 of 3 (task-8) 2026-10-12: task-8-grant-access from origin/main 4e4a3cf (task-4 + task-9 merged) + diff 0a40ec8..3c70f9a (4+9 tree -> full tree) on custom_components/tests/README/validate.py; resulting tree identical to the full cherry-picked tree of 91a58b8 (e2e/ kept from main, so the fixed test_50 labels stay). 563 tests OK, validate.py OK, py_compile OK. AC4: TASK-8 AC6 (relay E2E test_grant_access_is_logged_by_device, already in main) still needs Jan's manual relay run before merge.
+
+task-8 relay E2E: report 20261012-124448 at 3670c44 with --relays: passed (15 passed, 2 skipped); test_relay_roundtrip[1] passed. But test_grant_access_is_logged_by_device SKIPPED: E2E_GRANT_USER_UUID not set in e2e/.env on the Pi, so TASK-8 AC6 is NOT verified yet. Needs a rerun with the UUID set.
+
+task-8 relay E2E rerun: report 20261012-131421 at 3670c44 (--relays, E2E_GRANT_USER_UUID set) passed 16, skipped 1 (SIP sensor). test_grant_access_is_logged_by_device passed -> TASK-8 AC6 checked, TASK-8 Done (AC4 of this task satisfied).
 <!-- SECTION:NOTES:END -->

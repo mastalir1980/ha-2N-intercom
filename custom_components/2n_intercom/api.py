@@ -41,6 +41,7 @@ SWITCH_STATUS_PATH = "/api/switch/status"
 IO_CAPS_PATH = "/api/io/caps"
 IO_STATUS_PATH = "/api/io/status"
 LOG_CAPS_PATH = "/api/log/caps"
+GRANT_ACCESS_PATH = "/api/accesspoint/grantaccess"
 RTSP_PROBE_TIMEOUT = 3
 
 _RESOLUTION_RE = re.compile(r"^\s*(\d+)\s*x\s*(\d+)\s*$")
@@ -64,6 +65,11 @@ _CAMERA_CAPS_KEYS = {"caps", "camera", "jpeg", "resolution", "resolutions"}
 # The whole point of the helpers below is that the code itself is rarely
 # enough; the description string is the disambiguator.
 TWON_ERROR_CODE_UNSPECIFIED = 14
+# Codes from the master table (HTTP API manual 2.3) used to classify
+# rejections of user-facing actions such as grant_access.
+TWON_ERROR_CODES_UNSUPPORTED = frozenset({1, 2, 4})  # not supported / bad path / disabled
+TWON_ERROR_CODES_PERMISSION = frozenset({7, 8, 9, 10})  # HTTPS / auth method / auth / privileges
+TWON_ERROR_CODE_REQUEST_REJECTED = 18  # grantaccess: access point disallowed
 
 
 @dataclass(frozen=True)
@@ -178,6 +184,18 @@ def extract_directory_users(payload: Any) -> list[dict[str, str]]:
             continue
         users.append({"uuid": uuid, "name": str(user.get("name") or "").strip()})
     return users
+
+
+@dataclass(frozen=True)
+class GrantAccessResult:
+    """Outcome of ``/api/accesspoint/grantaccess``.
+
+    ``success: true`` from the device only means the request was processed;
+    whether the door actually opened is ``granted``.
+    """
+
+    granted: bool
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -940,6 +958,86 @@ class TwoNIntercomAPI:
     async def async_get_directory_users(self) -> list[dict[str, str]]:
         """Return directory users as ``[{"uuid", "name"}]``."""
         return extract_directory_users(await self.async_get_directory())
+
+    async def async_grant_access(
+        self, access_point: int, user: str
+    ) -> GrantAccessResult:
+        """Ask the device to grant access on behalf of a directory user.
+
+        Calls ``/api/accesspoint/grantaccess?id=<ap>&user=<uuid>`` (HTTP API
+        manual 5.17.3). Unlike ``/api/switch/ctrl`` the device applies the
+        user's access rights and records the access in its log.
+
+        Raises:
+            TwoNAuthenticationError: HTTP 401 (bad credentials or the account
+                lacks the "API Access Control" privilege).
+            TwoNDeviceRejectedError: the device answered ``success: false``;
+                inspect ``kind`` (unsupported / permission / rejected / ...).
+            TwoNConnectionError: timeout or transport failure.
+            TwoNAPIError: unexpected payload shape.
+        """
+        params: dict[str, Any] = {"id": access_point, "user": user}
+        try:
+            async with async_timeout.timeout(API_TIMEOUT):
+                async with self._async_request(
+                    "GET",
+                    GRANT_ACCESS_PATH,
+                    params=params,
+                ) as response:
+                    if response.status == 401:
+                        raise TwoNAuthenticationError(
+                            "Authentication failed for access point control"
+                        )
+                    if response.status == 404:
+                        raise TwoNDeviceRejectedError(
+                            TwoNDeviceError(
+                                code=None,
+                                description="HTTP 404 (endpoint not available)",
+                                param=None,
+                            ),
+                            unsupported=True,
+                        )
+                    response.raise_for_status()
+                    data = await response.json()
+        except (TwoNAuthenticationError, TwoNDeviceRejectedError):
+            raise
+        except asyncio.TimeoutError as err:
+            _LOGGER.warning("2N grant access timed out: %s", err)
+            raise TwoNConnectionError(f"Timeout: {err}") from err
+        except aiohttp.ClientError as err:
+            _LOGGER.warning("2N grant access transport error: %s", err)
+            raise TwoNConnectionError(f"Connection error: {err}") from err
+
+        # The user UUID is deliberately left out of the logged params.
+        log_params = {"id": access_point}
+        if not isinstance(data, dict):
+            raise TwoNAPIError(f"Unexpected grant access payload: {data!r}")
+
+        if not data.get("success", False):
+            error = parse_device_error(data) or TwoNDeviceError(
+                code=None, description="", param=None
+            )
+            log_device_error(
+                logging.WARNING, "grant access", GRANT_ACCESS_PATH, log_params, error
+            )
+            raise TwoNDeviceRejectedError(error)
+
+        result = data.get("result")
+        granted_raw = result.get("accessGranted") if isinstance(result, dict) else None
+        granted = coerce_bool(granted_raw)
+        if granted is None:
+            raise TwoNAPIError(
+                "Grant access response is missing result.accessGranted"
+            )
+        reason: str | None = None
+        if not granted and isinstance(result, dict):
+            reason = str(result.get("reason") or "").strip() or None
+            _LOGGER.warning(
+                "2N refused grant access at access point %s: reason=%s",
+                access_point,
+                reason,
+            )
+        return GrantAccessResult(granted=granted, reason=reason)
 
     async def _async_call_action(
         self,
@@ -1913,3 +2011,24 @@ class TwoNConnectionError(Exception):
 class TwoNAPIError(Exception):
     """Generic API error."""
 
+
+class TwoNDeviceRejectedError(TwoNAPIError):
+    """The device answered ``success: false`` for a user-facing action."""
+
+    def __init__(self, error: TwoNDeviceError, *, unsupported: bool = False) -> None:
+        """Wrap the parsed device error."""
+        super().__init__(error.format())
+        self.error = error
+        self._unsupported = unsupported
+
+    @property
+    def kind(self) -> str:
+        """Classify the rejection for user-facing error messages."""
+        code = self.error.code
+        if self._unsupported or code in TWON_ERROR_CODES_UNSUPPORTED:
+            return "unsupported"
+        if code in TWON_ERROR_CODES_PERMISSION:
+            return "permission"
+        if code == TWON_ERROR_CODE_REQUEST_REJECTED:
+            return "rejected"
+        return "other"

@@ -2216,7 +2216,7 @@ class SelectLiveViewModeEdgeCases(unittest.TestCase):
 
 
 class AccessControlApiTests(unittest.IsolatedAsyncioTestCase):
-    """Tests for log caps and directory users (TASK-4)."""
+    """Tests for log caps, directory users and grant access (TASK-4/TASK-8)."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -2283,6 +2283,107 @@ class AccessControlApiTests(unittest.IsolatedAsyncioTestCase):
         users = await api.async_get_directory_users()
         self.assertEqual(users, [{"uuid": "U-1", "name": "Bob"}])
         self.assertEqual(api.requests[0]["path"], "/api/dir/query")
+
+    # -- /api/accesspoint/grantaccess ----------------------------------
+
+    async def test_grant_access_granted(self) -> None:
+        api = self._make_api({"success": True, "result": {"accessGranted": True}})
+        result = await api.async_grant_access(0, "UUID-1")
+        self.assertTrue(result.granted)
+        self.assertIsNone(result.reason)
+        self.assertEqual(api.requests[0]["method"], "GET")
+        self.assertEqual(api.requests[0]["path"], "/api/accesspoint/grantaccess")
+        self.assertEqual(api.requests[0]["params"], {"id": 0, "user": "UUID-1"})
+
+    async def test_grant_access_exit_access_point(self) -> None:
+        api = self._make_api({"success": True, "result": {"accessGranted": "true"}})
+        result = await api.async_grant_access(1, "UUID-1")
+        self.assertTrue(result.granted)
+        self.assertEqual(api.requests[0]["params"]["id"], 1)
+
+    async def test_grant_access_denied_for_each_documented_reason(self) -> None:
+        for reason in ("invalidAp", "invalidCredential", "accessBlocked"):
+            api = self._make_api({
+                "success": True,
+                "result": {"accessGranted": False, "reason": reason},
+            })
+            with self.assertLogs(self.api_module._LOGGER, level="WARNING"):
+                result = await api.async_grant_access(0, "UUID-1")
+            self.assertFalse(result.granted)
+            self.assertEqual(result.reason, reason)
+
+    async def test_grant_access_missing_granted_flag_raises(self) -> None:
+        api = self._make_api({"success": True, "result": {}})
+        with self.assertRaises(self.api_module.TwoNAPIError):
+            await api.async_grant_access(0, "UUID-1")
+
+    async def test_grant_access_error_code_18_is_rejected(self) -> None:
+        api = self._make_api({
+            "success": False,
+            "error": {"code": 18, "description": "request rejected"},
+        })
+        with self.assertLogs(self.api_module._LOGGER, level="WARNING") as logs:
+            with self.assertRaises(self.api_module.TwoNDeviceRejectedError) as ctx:
+                await api.async_grant_access(0, "SECRET-UUID")
+        self.assertEqual(ctx.exception.kind, "rejected")
+        self.assertEqual(ctx.exception.error.code, 18)
+        self.assertNotIn("SECRET-UUID", "\n".join(logs.output))
+
+    async def test_grant_access_missing_privilege_is_permission_error(self) -> None:
+        for code in (8, 9, 10):
+            api = self._make_api({
+                "success": False,
+                "error": {"code": code, "description": "insufficient privileges"},
+            })
+            with self.assertLogs(self.api_module._LOGGER, level="WARNING"):
+                with self.assertRaises(self.api_module.TwoNDeviceRejectedError) as ctx:
+                    await api.async_grant_access(0, "UUID-1")
+            self.assertEqual(ctx.exception.kind, "permission")
+
+    async def test_grant_access_http_401_raises_auth_error(self) -> None:
+        api = self._make_api({"success": False}, status=401)
+        with self.assertRaises(self.api_module.TwoNAuthenticationError):
+            await api.async_grant_access(0, "UUID-1")
+
+    async def test_grant_access_unsupported_endpoint(self) -> None:
+        api = self._make_api({"success": False}, status=404)
+        with self.assertRaises(self.api_module.TwoNDeviceRejectedError) as ctx:
+            await api.async_grant_access(0, "UUID-1")
+        self.assertEqual(ctx.exception.kind, "unsupported")
+
+        for code in (1, 2, 4):
+            api = self._make_api({
+                "success": False,
+                "error": {"code": code, "description": "not supported"},
+            })
+            with self.assertLogs(self.api_module._LOGGER, level="WARNING"):
+                with self.assertRaises(self.api_module.TwoNDeviceRejectedError) as ctx:
+                    await api.async_grant_access(0, "UUID-1")
+            self.assertEqual(ctx.exception.kind, "unsupported")
+
+    async def test_grant_access_other_device_error(self) -> None:
+        api = self._make_api({
+            "success": False,
+            "error": {"code": 12, "description": "invalid parameter value", "param": "user"},
+        })
+        with self.assertLogs(self.api_module._LOGGER, level="WARNING"):
+            with self.assertRaises(self.api_module.TwoNDeviceRejectedError) as ctx:
+                await api.async_grant_access(0, "UUID-1")
+        self.assertEqual(ctx.exception.kind, "other")
+        self.assertIsInstance(ctx.exception, self.api_module.TwoNAPIError)
+
+    async def test_grant_access_timeout_raises_connection_error(self) -> None:
+        import asyncio
+
+        api = self._make_api({"success": True})
+
+        async def boom():
+            raise asyncio.TimeoutError("slow")
+
+        api.response.json = boom
+        with self.assertLogs(self.api_module._LOGGER, level="WARNING"):
+            with self.assertRaises(self.api_module.TwoNConnectionError):
+                await api.async_grant_access(0, "UUID-1")
 
     def test_coerce_bool(self) -> None:
         coerce = self.api_module.coerce_bool

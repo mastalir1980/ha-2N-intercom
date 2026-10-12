@@ -1,11 +1,11 @@
 ---
 id: TASK-8
 title: Add grant_access service using /api/accesspoint/grantaccess
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-08-30 09:27'
-updated_date: '2026-10-11 19:45'
+updated_date: '2026-10-12 12:16'
 labels:
   - access-control
   - services
@@ -28,7 +28,7 @@ Opening the door from HA today pulses the relay directly via /api/switch/ctrl, w
 - [x] #3 Options flow gets a default grant-access user (stored in entry.options); service falls back to it and raises a clear HA error when no user is given or configured
 - [x] #4 accessGranted=false raises a HomeAssistantError (translated) that includes the reason; the service never reports success when the door was not opened
 - [x] #5 services.yaml, strings.json, translations (en/de/cs) updated; README.md documents the service, required device privilege, the user requirement and the audit-log advantage over switch entities
-- [ ] #6 E2E test in e2e/tests/ marked @pytest.mark.relay (it physically opens the door) verifying that HA grant_access results in ApiAccessRequested on the device; never run without Jan's explicit request
+- [x] #6 E2E test in e2e/tests/ marked @pytest.mark.relay (it physically opens the door) verifying that HA grant_access results in ApiAccessRequested on the device; never run without Jan's explicit request
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -45,10 +45,12 @@ Opening the door from HA today pulses the relay directly via /api/switch/ctrl, w
 
 <!-- SECTION:NOTES:BEGIN -->
 Validation: python3 -m unittest discover -s tests -t tests (530 OK), python3 validate.py OK, py_compile OK. E2E 'bash e2e/e2e.sh wip' on staging (2N IP Force fw 3.3.1.82.4, HA 2026.10.1): 13 passed, 3 skipped, 1 failed — the failure is the pre-existing, unrelated TASK-18 options-flow test. E2E relay test test_50_access_control.py::test_grant_access_logs_api_access_requested is written (@pytest.mark.relay, needs E2E_GRANT_USER_UUID in e2e/.env) but NOT run — it physically opens the door; AC#6 stays unchecked until Jan runs 'bash e2e/e2e.sh relays'.
+
+2026-10-12 (TASK-21.6 split): landed on branch task-8-grant-access (4f40c65, rebased on main with TASK-4 + TASK-9 merged); 563 unit tests OK, validate.py OK, CI green. E2E: 20261012-124448 (--relays) passed but the grant test skipped (E2E_GRANT_USER_UUID unset); 20261012-131421 (--relays, run by Jan at 3670c44) passed 16/1 skipped (SIP sensor only), incl. test_grant_access_is_logged_by_device: HA grant_access on access point 0 produced ApiAccessRequested on the device with ap=0, valid=true and matching uuid. AC6 verified. (The E2E test name is test_grant_access_is_logged_by_device, not test_grant_access_logs_api_access_requested as noted earlier.)
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Added api.async_grant_access (/api/accesspoint/grantaccess, id+user) with typed errors (denied reasons, code 18, permission, unsupported), the 2n_intercom.grant_access service (config entry target, access_point 0/1, optional user falling back to the options-flow default user picked from dir/query) with translated HomeAssistantErrors, services.yaml/strings/en/de/cs/icons and README docs. Verified by unit tests (test_api, test_init, test_config_flow). The relay E2E test exists but has not been run (requires Jan).
+Added api.async_grant_access (/api/accesspoint/grantaccess, id+user) with typed errors (denied reasons, code 18, permission, unsupported), the 2n_intercom.grant_access service (config entry target, access_point 0/1, optional user falling back to the options-flow default user picked from dir/query) with translated HomeAssistantErrors, services.yaml/strings/en/de/cs/icons and README docs. Verified by unit tests (test_api, test_init, test_config_flow; 563 OK) and the relay E2E test_grant_access_is_logged_by_device on the IP Force fw 3.3.x (report 20261012-131421: device logged ApiAccessRequested for the HA call).
 <!-- SECTION:FINAL_SUMMARY:END -->

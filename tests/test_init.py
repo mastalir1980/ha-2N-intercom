@@ -385,6 +385,7 @@ class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result)
         self.assertTrue(hass.services.has_service(const_module.DOMAIN, "answer_call"))
         self.assertTrue(hass.services.has_service(const_module.DOMAIN, "hangup_call"))
+        self.assertTrue(hass.services.has_service(const_module.DOMAIN, "grant_access"))
         self.assertEqual(
             hass.config_entries.forwarded,
             [
@@ -1263,6 +1264,144 @@ class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):
         hass = FakeHass([entry])
         # Should not raise
         await init_module.async_update_options(hass, entry)
+
+
+class GrantAccessFakeAPI(FakeAPI):
+    """FakeAPI with a scripted /api/accesspoint/grantaccess outcome."""
+
+    def __init__(self, *args, grant_outcome=None, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.grant_calls: list[tuple[int, str]] = []
+        self.grant_outcome = grant_outcome
+
+    async def async_grant_access(self, access_point, user):
+        self.grant_calls.append((access_point, user))
+        outcome = self.grant_outcome
+        if isinstance(outcome, Exception):
+            raise outcome
+        api_module = sys.modules["custom_components.2n_intercom.api"]
+        if outcome is None:
+            return api_module.GrantAccessResult(granted=True)
+        return outcome
+
+
+class GrantAccessServiceTests(unittest.IsolatedAsyncioTestCase):
+    """Tests for the 2n_intercom.grant_access service."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.init_module = load_init_module()
+        cls.const_module = sys.modules["custom_components.2n_intercom.const"]
+        cls.api_module = sys.modules["custom_components.2n_intercom.api"]
+        cls.exceptions = sys.modules["homeassistant.exceptions"]
+
+    async def _setup(self, options=None, grant_outcome=None):
+        ha_const = sys.modules["homeassistant.const"]
+        self.init_module.TwoNIntercomAPI = FakeAPI
+        entry = FakeConfigEntry(
+            "entry-1",
+            {
+                ha_const.CONF_HOST: "intercom.local",
+                ha_const.CONF_PORT: 443,
+                ha_const.CONF_USERNAME: "user",
+                ha_const.CONF_PASSWORD: "secret",
+            },
+            options=options,
+        )
+        hass = FakeHass([entry])
+        await self.init_module.async_setup(hass, {})
+        await self.init_module.async_setup_entry(hass, entry)
+        api = GrantAccessFakeAPI(grant_outcome=grant_outcome)
+        entry.runtime_data.api = api
+        handler = hass.services.handlers[(self.const_module.DOMAIN, "grant_access")]
+        return handler, api
+
+    async def test_grant_access_uses_service_user_and_default_entry_ap(self) -> None:
+        handler, api = await self._setup()
+        await handler(types.SimpleNamespace(data={"user": " UUID-1 "}))
+        self.assertEqual(api.grant_calls, [(0, "UUID-1")])
+
+    async def test_grant_access_exit_access_point(self) -> None:
+        handler, api = await self._setup()
+        await handler(types.SimpleNamespace(data={"user": "u", "access_point": 1}))
+        await handler(types.SimpleNamespace(data={"user": "u", "access_point": "1"}))
+        await handler(types.SimpleNamespace(data={"user": "u", "access_point": 1.0}))
+        self.assertEqual(api.grant_calls, [(1, "u"), (1, "u"), (1, "u")])
+
+    async def test_grant_access_rejects_invalid_access_point(self) -> None:
+        handler, api = await self._setup()
+        for bad in (2, -1, "entry", True, 0.5):
+            with self.assertRaises(self.exceptions.ServiceValidationError) as ctx:
+                await handler(types.SimpleNamespace(data={"user": "u", "access_point": bad}))
+            self.assertEqual(ctx.exception.translation_key, "grant_access_invalid_access_point")
+        self.assertEqual(api.grant_calls, [])
+
+    async def test_grant_access_falls_back_to_configured_user(self) -> None:
+        handler, api = await self._setup(options={"grant_access_user": "default-uuid"})
+        await handler(types.SimpleNamespace(data={}))
+        await handler(types.SimpleNamespace(data={"user": "  "}))
+        self.assertEqual(api.grant_calls, [(0, "default-uuid"), (0, "default-uuid")])
+
+    async def test_grant_access_service_user_overrides_configured_user(self) -> None:
+        handler, api = await self._setup(options={"grant_access_user": "default-uuid"})
+        await handler(types.SimpleNamespace(data={"user": "other"}))
+        self.assertEqual(api.grant_calls, [(0, "other")])
+
+    async def test_grant_access_without_any_user_raises_validation_error(self) -> None:
+        handler, api = await self._setup()
+        with self.assertRaises(self.exceptions.ServiceValidationError) as ctx:
+            await handler(types.SimpleNamespace(data={}))
+        self.assertEqual(ctx.exception.translation_key, "grant_access_no_user")
+        self.assertEqual(ctx.exception.translation_domain, self.const_module.DOMAIN)
+        self.assertEqual(api.grant_calls, [])
+
+    async def test_grant_access_denied_raises_with_reason(self) -> None:
+        for reason in ("invalidAp", "invalidCredential", "accessBlocked"):
+            handler, _api = await self._setup(
+                grant_outcome=self.api_module.GrantAccessResult(granted=False, reason=reason)
+            )
+            with self.assertRaises(self.exceptions.HomeAssistantError) as ctx:
+                await handler(types.SimpleNamespace(data={"user": "u"}))
+            self.assertEqual(ctx.exception.translation_key, "grant_access_denied")
+            self.assertEqual(ctx.exception.translation_placeholders["reason"], reason)
+
+    async def test_grant_access_denied_without_reason_still_raises(self) -> None:
+        handler, _api = await self._setup(
+            grant_outcome=self.api_module.GrantAccessResult(granted=False)
+        )
+        with self.assertRaises(self.exceptions.HomeAssistantError) as ctx:
+            await handler(types.SimpleNamespace(data={"user": "u"}))
+        self.assertEqual(ctx.exception.translation_placeholders["reason"], "unknown")
+
+    async def test_grant_access_maps_device_errors_to_translation_keys(self) -> None:
+        api = self.api_module
+        cases = [
+            (api.TwoNAuthenticationError("401"), "grant_access_unauthorized"),
+            (
+                api.TwoNDeviceRejectedError(api.TwoNDeviceError(10, "insufficient privileges", None)),
+                "grant_access_unauthorized",
+            ),
+            (
+                api.TwoNDeviceRejectedError(api.TwoNDeviceError(18, "request rejected", None)),
+                "grant_access_ap_disabled",
+            ),
+            (
+                api.TwoNDeviceRejectedError(api.TwoNDeviceError(1, "not supported", None)),
+                "grant_access_unsupported",
+            ),
+            (
+                api.TwoNDeviceRejectedError(api.TwoNDeviceError(12, "invalid parameter", "user")),
+                "grant_access_failed",
+            ),
+            (api.TwoNConnectionError("timeout"), "grant_access_failed"),
+            (api.TwoNAPIError("bad payload"), "grant_access_failed"),
+        ]
+        for error, key in cases:
+            handler, _api = await self._setup(grant_outcome=error)
+            with self.assertRaises(self.exceptions.HomeAssistantError) as ctx:
+                await handler(types.SimpleNamespace(data={"user": "u"}))
+            self.assertEqual(ctx.exception.translation_key, key, error)
+            self.assertEqual(ctx.exception.translation_domain, self.const_module.DOMAIN)
 
 
 class PlatformSelectionTests(unittest.TestCase):

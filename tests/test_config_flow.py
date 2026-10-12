@@ -1046,6 +1046,103 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["type"], "form")
         self.assertEqual(result["step_id"], "device")
 
+    def _grant_user_marker(self, form):
+        for marker, field in form["data_schema"].schema.items():
+            if marker.key == "grant_access_user":
+                return marker, field
+        self.fail("grant_access_user field missing")
+
+    async def test_device_step_offers_directory_users_for_grant_access(self) -> None:
+        directory = {
+            "series": "1",
+            "users": [
+                {"uuid": "AAAA-1", "name": "Alice", "callPos": [{"peer": "sip:1@x"}]},
+                {"uuid": "BBBB-2", "name": ""},
+                {"name": "No uuid"},
+            ],
+        }
+
+        async def get_directory(_self):
+            return directory
+
+        entry = FakeConfigEntry(
+            "entry-1",
+            {"host": "192.0.2.20", "port": 443, "username": "u", "password": "p"},
+            options={"grant_access_user": "aaaa-1"},
+        )
+        flow = self._make_options_flow(entry)
+        original = FakeAPI.async_get_directory
+        FakeAPI.async_get_directory = get_directory
+        try:
+            form = await flow.async_step_device(None)
+        finally:
+            FakeAPI.async_get_directory = original
+
+        self.assertEqual(len(FakeAPI.instances), 1, "directory must be queried once")
+        marker, field = self._grant_user_marker(form)
+        self.assertIsInstance(marker, sys.modules["voluptuous"].Optional)
+        self.assertEqual(marker.description, {"suggested_value": "aaaa-1"})
+        self.assertTrue(field.config.custom_value)
+        self.assertEqual(
+            field.config.options,
+            [
+                {"label": "Alice", "value": "AAAA-1"},
+                {"label": "BBBB-2", "value": "BBBB-2"},
+            ],
+        )
+
+    async def test_device_step_keeps_unknown_stored_grant_user_selectable(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1",
+            {"host": "192.0.2.20", "port": 443, "username": "u", "password": "p"},
+            options={"grant_access_user": "CCCC-3"},
+        )
+        flow = self._make_options_flow(entry)
+        form = await flow.async_step_device(None)
+        _marker, field = self._grant_user_marker(form)
+        self.assertEqual(field.config.options, [{"label": "CCCC-3", "value": "CCCC-3"}])
+
+    async def test_device_step_without_stored_grant_user(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1",
+            {"host": "192.0.2.20", "port": 443, "username": "u", "password": "p"},
+        )
+        flow = self._make_options_flow(entry)
+        form = await flow.async_step_device(None)
+        marker, field = self._grant_user_marker(form)
+        self.assertEqual(marker.description, {"suggested_value": None})
+        self.assertEqual(field.config.options, [])
+
+    async def test_device_step_saves_trimmed_grant_user(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1",
+            {"host": "192.0.2.20", "port": 443, "username": "u", "password": "p"},
+        )
+        flow = self._make_options_flow(entry)
+        result = await flow.async_step_device({
+            "name": "Intercom", "enable_camera": False,
+            "enable_doorbell": True, "scan_interval": 60,
+            "grant_access_user": "  AAAA-1 ",
+        })
+        self.assertEqual(result["type"], "create_entry")
+        self.assertEqual(result["data"]["grant_access_user"], "AAAA-1")
+
+    async def test_device_step_clearing_grant_user_removes_it(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1",
+            {"host": "192.0.2.20", "port": 443, "username": "u", "password": "p"},
+            options={"grant_access_user": "AAAA-1"},
+        )
+        for submitted in ({"grant_access_user": ""}, {"grant_access_user": None}, {}):
+            flow = self._make_options_flow(entry)
+            result = await flow.async_step_device({
+                "name": "Intercom", "enable_camera": False,
+                "enable_doorbell": True, "scan_interval": 60,
+                **submitted,
+            })
+            self.assertEqual(result["type"], "create_entry")
+            self.assertNotIn("grant_access_user", result["data"], submitted)
+
     async def test_device_step_no_camera_no_relays_creates_entry(self) -> None:
         entry = FakeConfigEntry(
             "entry-1",

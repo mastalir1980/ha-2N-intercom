@@ -273,6 +273,7 @@ class DiagnosticsTests(unittest.IsolatedAsyncioTestCase):
         coordinator.ring_snapshot = b"jpeg"
         coordinator.ring_snapshot_time = datetime(2026, 1, 2, tzinfo=timezone.utc)
         entry = FakeConfigEntry()
+        entry.options = {"grant_access_user": "abc"}
         entry.runtime_data = coordinator_module.TwoNIntercomRuntimeData(
             coordinator=coordinator,
             api=types.SimpleNamespace(),
@@ -290,6 +291,7 @@ class DiagnosticsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(event["timestamp"], "2026-01-02T03:04:05+00:00")
         self.assertEqual(event["user_uuid"], "**REDACTED**")
         self.assertEqual(event["user_name"], "**REDACTED**")
+        self.assertEqual(result["entry"]["options"]["grant_access_user"], "**REDACTED**")
         self.assertTrue(result["ring_snapshot"]["captured"])
         self.assertNotIn("jpeg", str(result["ring_snapshot"]))
 

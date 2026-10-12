@@ -92,14 +92,16 @@
           "enable_camera": "Kamera aktivieren",
           "enable_doorbell": "Klingel aktivieren",
           "scan_interval": "Backup-Abfrageintervall (Sekunden)",
-          "called_id": "Rufkonto (Peer)"
+          "called_id": "Rufkonto (Peer)",
+          "grant_access_user": "Standardbenutzer für Zutrittsfreigabe"
         },
         "data_description": {
           "name": "Anzeigename in Home Assistant",
           "enable_camera": "Kamera-Entität anlegen",
           "enable_doorbell": "Klingel-Entität anlegen",
           "scan_interval": "Backup-Abfrageintervall (2-600 s). Ereignisse liefern Echtzeit-Updates; die Abfrage dient nur als Sicherheitsnetz. Standard 60 s reicht für die meisten Installationen.",
-          "called_id": "Wählen Sie das Konto, das klingeln soll. Alle Anrufe = Klingeln bei jeder Taste."
+          "called_id": "Wählen Sie das Konto, das klingeln soll. Alle Anrufe = Klingeln bei jeder Taste.",
+          "grant_access_user": "Verzeichnisbenutzer (UUID), in dessen Namen der Dienst grant_access die Tür öffnet, wenn der Aufruf keinen Benutzer angibt. Das Gerät wendet dessen Zutrittsrechte an und protokolliert den Zutritt. Leer lassen, um den Benutzer bei jedem Aufruf zu verlangen."
         }
       },
       "camera": {
@@ -172,6 +174,12 @@
         "door": "Tür (Schalter)",
         "gate": "Tor (Garagentorantrieb)"
       }
+    },
+    "access_point": {
+      "options": {
+        "0": "Eingang (0)",
+        "1": "Ausgang (1)"
+      }
     }
   },
   "entity": {
@@ -232,6 +240,27 @@
     },
     "invalid_hangup_reason": {
       "message": "Ungültiger Auflegegrund {reason}. Gültige Werte: {valid}."
+    },
+    "grant_access_no_user": {
+      "message": "Kein Benutzer für die Zutrittsfreigabe. Geben Sie user im Dienstaufruf an oder legen Sie einen Standardbenutzer in den Integrationsoptionen fest."
+    },
+    "grant_access_invalid_access_point": {
+      "message": "Ungültiger Zugangspunkt {access_point}. Verwenden Sie 0 (Eingang) oder 1 (Ausgang)."
+    },
+    "grant_access_denied": {
+      "message": "Das 2N-Gerät hat den Zutritt am Zugangspunkt {access_point} verweigert (Grund: {reason})."
+    },
+    "grant_access_unauthorized": {
+      "message": "Das 2N-API-Konto darf am Zugangspunkt {access_point} keinen Zutritt gewähren. Aktivieren Sie für dieses Konto das Recht \"Access Control - Control\" des Dienstes API Access Control."
+    },
+    "grant_access_ap_disabled": {
+      "message": "Das 2N-Gerät hat die Zutrittsfreigabe für Zugangspunkt {access_point} abgelehnt; der Zugangspunkt ist möglicherweise deaktiviert: {error}"
+    },
+    "grant_access_unsupported": {
+      "message": "Das 2N-Gerät unterstützt die Zutrittsfreigabe am Zugangspunkt {access_point} nicht: {error}"
+    },
+    "grant_access_failed": {
+      "message": "Zutrittsfreigabe am Zugangspunkt {access_point} fehlgeschlagen: {error}"
     }
   },
   "services": {
@@ -264,6 +293,24 @@
         "reason": {
           "name": "Grund",
           "description": "Auflegegrund, der an das Gerät gesendet wird."
+        }
+      }
+    },
+    "grant_access": {
+      "name": "Zutritt gewähren",
+      "description": "Einen Zugangspunkt über die 2N-Zutrittskontrolle im Namen eines Verzeichnisbenutzers öffnen. Anders als beim direkten Schalten eines Relais gelten die Zutrittsrechte des Benutzers und der Zutritt wird im Geräteprotokoll erfasst.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konfigurations-ID",
+          "description": "Bestimmten 2N-Konfigurationseintrag ansprechen, wenn mehrere geladen sind."
+        },
+        "access_point": {
+          "name": "Zugangspunkt",
+          "description": "Zu öffnender Zugangspunkt: 0 = Eingang, 1 = Ausgang."
+        },
+        "user": {
+          "name": "Benutzer",
+          "description": "UUID des Verzeichnisbenutzers, für den der Zutritt gewährt wird. Standard ist der in den Integrationsoptionen gesetzte Benutzer."
         }
       }
     }

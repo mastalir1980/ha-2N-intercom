@@ -18,12 +18,21 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.typing import ConfigType
 
-from .api import TwoNIntercomAPI
+from .api import (
+    TwoNAPIError,
+    TwoNAuthenticationError,
+    TwoNConnectionError,
+    TwoNDeviceRejectedError,
+    TwoNIntercomAPI,
+)
 from .const import (
+    ACCESS_POINT_ENTRY,
+    ACCESS_POINTS,
     CONF_ALLOW_INSECURE,
     CONF_CALLED_ID,
     CONF_ENABLE_CAMERA,
     CONF_ENABLE_DOORBELL,
+    CONF_GRANT_ACCESS_USER,
     CONF_PROTOCOL,
     CONF_RELAY_DEVICE_TYPE,
     CONF_RELAYS,
@@ -192,8 +201,87 @@ def _extract_session_ids_from_status(status: Any) -> list[str]:
     return out
 
 
+def _resolve_access_point(service_data: dict[str, Any]) -> int:
+    """Return the grant_access access point (0 = entry, 1 = exit)."""
+    raw = service_data.get("access_point", ACCESS_POINT_ENTRY)
+    if raw is None:
+        return ACCESS_POINT_ENTRY
+    access_point = -1
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        access_point = raw
+    elif isinstance(raw, float) and raw.is_integer():
+        access_point = int(raw)
+    elif isinstance(raw, str) and raw.strip().isdigit():
+        access_point = int(raw.strip())
+    if access_point not in ACCESS_POINTS:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="grant_access_invalid_access_point",
+            translation_placeholders={"access_point": str(raw)},
+        )
+    return access_point
+
+
+def _resolve_grant_user(
+    entry: ConfigEntry, service_data: dict[str, Any]
+) -> str:
+    """Return the directory user uuid for grant_access (call > options)."""
+    for candidate in (
+        service_data.get("user"),
+        _get_option(entry, CONF_GRANT_ACCESS_USER),
+    ):
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    raise ServiceValidationError(
+        translation_domain=DOMAIN,
+        translation_key="grant_access_no_user",
+    )
+
+
+async def _async_grant_access(
+    runtime: TwoNIntercomRuntimeData, access_point: int, user: str
+) -> None:
+    """Call grantaccess and translate every non-granted outcome to an error."""
+    placeholders = {"access_point": str(access_point)}
+    try:
+        result = await runtime.api.async_grant_access(access_point, user)
+    except TwoNAuthenticationError as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="grant_access_unauthorized",
+            translation_placeholders=placeholders,
+        ) from err
+    except TwoNDeviceRejectedError as err:
+        translation_key = {
+            "unsupported": "grant_access_unsupported",
+            "permission": "grant_access_unauthorized",
+            "rejected": "grant_access_ap_disabled",
+        }.get(err.kind, "grant_access_failed")
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key=translation_key,
+            translation_placeholders={**placeholders, "error": str(err)},
+        ) from err
+    except (TwoNConnectionError, TwoNAPIError) as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="grant_access_failed",
+            translation_placeholders={**placeholders, "error": str(err)},
+        ) from err
+
+    if not result.granted:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="grant_access_denied",
+            translation_placeholders={
+                **placeholders,
+                "reason": result.reason or "unknown",
+            },
+        )
+
+
 def _register_call_services(hass: HomeAssistant) -> None:
-    """Register call-control services once per Home Assistant instance."""
+    """Register the integration services once per Home Assistant instance."""
     if hass.services.has_service(DOMAIN, "answer_call"):
         return
 
@@ -333,8 +421,24 @@ def _register_call_services(hass: HomeAssistant) -> None:
                 },
             )
 
+    async def _async_grant_access_service(call: Any) -> None:
+        """Ask the device to grant access on behalf of a directory user.
+
+        Unlike the relay switches this goes through the device's access
+        control, so the user's rights apply and the access is logged.
+        """
+        service_data = dict(getattr(call, "data", {}) or {})
+        entry = _resolve_service_entry(hass, service_data)
+        runtime: TwoNIntercomRuntimeData = entry.runtime_data
+        access_point = _resolve_access_point(service_data)
+        user = _resolve_grant_user(entry, service_data)
+        await _async_grant_access(runtime, access_point, user)
+
     hass.services.async_register(DOMAIN, "answer_call", _async_answer_call)
     hass.services.async_register(DOMAIN, "hangup_call", _async_hangup_call)
+    hass.services.async_register(
+        DOMAIN, "grant_access", _async_grant_access_service
+    )
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:

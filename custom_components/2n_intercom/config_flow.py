@@ -17,7 +17,7 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.selector import SelectOptionDict
 import homeassistant.helpers.config_validation as cv
 
-from .api import TwoNIntercomAPI
+from .api import TwoNIntercomAPI, extract_directory_users
 from .const import (
     CALLED_ID_ALL,
     CAMERA_MJPEG_FPS_MAX,
@@ -29,6 +29,7 @@ from .const import (
     CONF_ENABLE_CAMERA,
     CONF_ENABLE_DOORBELL,
     CONF_GO_BACK,
+    CONF_GRANT_ACCESS_USER,
     CONF_LIVE_VIEW_MODE,
     CONF_MJPEG_FPS,
     CONF_MJPEG_HEIGHT,
@@ -89,6 +90,14 @@ def _read_integration_info(manifest_path: Path) -> tuple[str, str]:
 
 async def _async_get_called_peers(data: dict[str, Any]) -> list[str]:
     """Return list of called peers from directory."""
+    peers, _users = await _async_get_directory_choices(data)
+    return peers
+
+
+async def _async_get_directory_choices(
+    data: dict[str, Any],
+) -> tuple[list[str], list[dict[str, str]]]:
+    """Return ``(called peers, directory users)`` from a single dir/query."""
     api: TwoNIntercomAPI | None = None
     try:
         api = TwoNIntercomAPI(
@@ -126,13 +135,13 @@ async def _async_get_called_peers(data: dict[str, Any]) -> list[str]:
                 if peer and peer not in peers:
                     peers.append(peer)
 
-        return peers
+        return peers, extract_directory_users(users)
     except Exception:  # pylint: disable=broad-except
         _LOGGER.exception(
             "Failed to load called peers from dir/query host=%s",
             data.get(CONF_HOST),
         )
-        return []
+        return [], []
     finally:
         if api is not None:
             await api.async_close()
@@ -721,7 +730,7 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
         conn_data[CONF_ALLOW_INSECURE] = self._current_option(
             CONF_ALLOW_INSECURE, DEFAULT_ALLOW_INSECURE
         )
-        peers = await _async_get_called_peers(conn_data)
+        peers, directory_users = await _async_get_directory_choices(conn_data)
         called_options: list[SelectOptionDict] = [
             SelectOptionDict(
                 label=_all_calls_label(self.hass.config.language),
@@ -738,7 +747,34 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
             )
         )
 
+        current_grant_user = self._current_option(CONF_GRANT_ACCESS_USER) or None
+        grant_user_options: list[SelectOptionDict] = [
+            SelectOptionDict(label=user["name"] or user["uuid"], value=user["uuid"])
+            for user in directory_users
+        ]
+        if current_grant_user and not any(
+            option["value"].lower() == str(current_grant_user).lower()
+            for option in grant_user_options
+        ):
+            # Keep a stored uuid selectable even if the directory is
+            # unreachable or the user has since been removed.
+            grant_user_options.append(
+                SelectOptionDict(label=current_grant_user, value=current_grant_user)
+            )
+        grant_user_field = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=grant_user_options,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                custom_value=True,
+            )
+        )
+
         if user_input is not None:
+            grant_user = str(user_input.get(CONF_GRANT_ACCESS_USER) or "").strip()
+            if grant_user:
+                user_input[CONF_GRANT_ACCESS_USER] = grant_user
+            else:
+                user_input.pop(CONF_GRANT_ACCESS_USER, None)
             # NumberSelector returns floats; coerce so the int round-trips
             # cleanly into entry.options and the coordinator's int comparison
             # holds.
@@ -803,6 +839,10 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
                     CONF_CALLED_ID,
                     default=default_called,
                 ): called_field,
+                vol.Optional(
+                    CONF_GRANT_ACCESS_USER,
+                    description={"suggested_value": current_grant_user},
+                ): grant_user_field,
             }
         )
 
