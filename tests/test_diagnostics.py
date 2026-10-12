@@ -141,6 +141,8 @@ class FakeCoordinator:
         self.log_caps = None
         self.subscribed_log_events = ()
         self.last_access_event = None
+        self.ring_snapshot = None
+        self.ring_snapshot_time = None
 
     @property
     def camera_transport_info(self):
@@ -268,6 +270,8 @@ class DiagnosticsTests(unittest.IsolatedAsyncioTestCase):
             user_uuid="abc",
             user_name="Alice",
         )
+        coordinator.ring_snapshot = b"jpeg"
+        coordinator.ring_snapshot_time = datetime(2026, 1, 2, tzinfo=timezone.utc)
         entry = FakeConfigEntry()
         entry.runtime_data = coordinator_module.TwoNIntercomRuntimeData(
             coordinator=coordinator,
@@ -286,6 +290,8 @@ class DiagnosticsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(event["timestamp"], "2026-01-02T03:04:05+00:00")
         self.assertEqual(event["user_uuid"], "**REDACTED**")
         self.assertEqual(event["user_name"], "**REDACTED**")
+        self.assertTrue(result["ring_snapshot"]["captured"])
+        self.assertNotIn("jpeg", str(result["ring_snapshot"]))
 
 
 if __name__ == "__main__":

@@ -198,6 +198,11 @@
       "camera": {
         "name": "Kamera"
       }
+    },
+    "image": {
+      "last_ring": {
+        "name": "Poslední zazvonění"
+      }
     }
   },
   "exceptions": {

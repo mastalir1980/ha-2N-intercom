@@ -538,9 +538,68 @@ class DirectoryNameResolutionTests(_CoordinatorTestCase):
         self.assertIsNone(coordinator.last_access_event.user_name)
 
 
-class UpdateDataTests(_CoordinatorTestCase):
-    async def test_update_data_carries_access_event(self) -> None:
+class RingSnapshotTests(_CoordinatorTestCase):
+    def _ring(self, coordinator, event="CallStateChanged", direction="incoming", state="ringing"):
+        return coordinator._process_log_event(
+            {"event": event, "params": {"state": state, "direction": direction, "session": 1}}
+        )
+
+    async def test_ring_captures_snapshot_once_per_ring(self) -> None:
+        api_module = __import__("sys").modules["custom_components.2n_intercom.api"]
+        coordinator, hass, api = self._make(ring_snapshot_enabled=True)
+        coordinator._camera_transport_info = api_module.CameraTransportInfo(source="external")
+
+        before = datetime.now(timezone.utc)
+        self._ring(coordinator)
+        self._ring(coordinator, event="CallSessionStateChanged")
+        await hass.drain()
+
+        self.assertEqual(len(api.snapshot_calls), 1)
+        self.assertEqual(api.snapshot_calls[0]["source"], "external")
+        self.assertEqual(coordinator.ring_snapshot, b"jpeg-1")
+        self.assertEqual(coordinator.data.ring_snapshot, b"jpeg-1")
+        self.assertIsNotNone(coordinator.ring_snapshot_time.tzinfo)
+        self.assertGreaterEqual(coordinator.ring_snapshot_time, before)
+        self.assertEqual(coordinator.data.ring_snapshot_time, coordinator.ring_snapshot_time)
+        coordinator.async_update_listeners.assert_called()
+
+        # Ring ends, a new ring captures a fresh frame.
+        self._ring(coordinator, state="terminated")
+        api.snapshot = b"jpeg-2"
+        self._ring(coordinator)
+        await hass.drain()
+        self.assertEqual(len(api.snapshot_calls), 2)
+        self.assertEqual(coordinator.ring_snapshot, b"jpeg-2")
+
+    async def test_no_capture_when_disabled_or_outgoing(self) -> None:
         coordinator, hass, api = self._make()
+        self._ring(coordinator)
+        await hass.drain()
+        self.assertEqual(api.snapshot_calls, [])
+
+        coordinator, hass, api = self._make(ring_snapshot_enabled=True)
+        self._ring(coordinator, direction="outgoing")
+        await hass.drain()
+        self.assertEqual(api.snapshot_calls, [])
+
+    async def test_snapshot_failure_keeps_previous_image_and_warns(self) -> None:
+        coordinator, hass, api = self._make(ring_snapshot_enabled=True)
+        self._ring(coordinator)
+        await hass.drain()
+        first_time = coordinator.ring_snapshot_time
+
+        for failure in (RuntimeError("camera down"), None, b""):
+            self._ring(coordinator, state="idle")
+            api.snapshot = failure
+            with self.assertLogs(self.module._LOGGER, level="WARNING") as logs:
+                self._ring(coordinator)
+                await hass.drain()
+            self.assertIn("keeping previous image", "\n".join(logs.output))
+            self.assertEqual(coordinator.ring_snapshot, b"jpeg-1")
+            self.assertEqual(coordinator.ring_snapshot_time, first_time)
+
+    async def test_update_data_carries_event_state(self) -> None:
+        coordinator, hass, api = self._make(ring_snapshot_enabled=True)
 
         async def call_status():
             return {"state": "idle", "sessions": []}
@@ -550,10 +609,14 @@ class UpdateDataTests(_CoordinatorTestCase):
 
         api.async_get_call_status = call_status
         api.async_get_system_info = system_info
+        self._ring(coordinator)
+        await hass.drain()
         coordinator._process_log_event({"event": "FingerEntered", "params": {"valid": True}})
 
         data = await coordinator._async_update_data()
 
+        self.assertEqual(data.ring_snapshot, b"jpeg-1")
+        self.assertIsNotNone(data.ring_snapshot_time)
         self.assertEqual(data.last_access_event.event_type, "FingerEntered")
 
 

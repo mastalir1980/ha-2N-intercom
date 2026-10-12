@@ -174,6 +174,8 @@ class TwoNIntercomData:
     io_caps: dict[str, Any]
     io_status: dict[str, Any]
     last_access_event: AccessEvent | None = None
+    ring_snapshot: bytes | None = None
+    ring_snapshot_time: datetime | None = None
 
 
 class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type: ignore[misc]
@@ -188,6 +190,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         scan_interval: int = DEFAULT_SCAN_INTERVAL,
         called_id: str | None = None,
         config_entry: ConfigEntry | None = None,
+        ring_snapshot_enabled: bool = False,
     ) -> None:
         """Initialize the coordinator."""
         # HA 2024.10+ accepts config_entry kwarg; pass when available so log
@@ -246,6 +249,10 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         self._directory_names: dict[str, str] = {}
         self._directory_refresh_task: asyncio.Task[None] | None = None
         self._directory_last_refresh: float | None = None
+        # Last-ring snapshot
+        self._ring_snapshot_enabled = ring_snapshot_enabled
+        self._ring_snapshot: bytes | None = None
+        self._ring_snapshot_time: datetime | None = None
 
     @staticmethod
     def _normalize_peer(peer: str | None) -> str | None:
@@ -709,6 +716,34 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         self._directory_last_refresh = None
         return False
 
+    # ------------------------------------------------------------------
+    # Last-ring snapshot
+    # ------------------------------------------------------------------
+
+    async def _async_capture_ring_snapshot(self) -> None:
+        """Grab a JPEG for the ring that just started.
+
+        Bypasses the 1 s live-view cache so the frame is from the ring. On
+        failure the previous ring image is kept.
+        """
+        transport_info = self._camera_transport_info
+        source = transport_info.source if transport_info is not None else None
+        try:
+            snapshot = await self.api.async_get_snapshot(source=source)
+        except Exception as err:  # pylint: disable=broad-except
+            _LOGGER.warning(
+                "Failed to capture ring snapshot; keeping previous image: %s", err
+            )
+            return
+        if not snapshot:
+            _LOGGER.warning(
+                "Device returned no ring snapshot; keeping previous image"
+            )
+            return
+        self._ring_snapshot = snapshot
+        self._ring_snapshot_time = dt_util.utcnow()
+        self._publish_event_state()
+
     def _publish_event_state(self) -> None:
         """Push event-driven state into ``self.data`` and notify listeners."""
         current: TwoNIntercomData | None = self.data  # type: ignore[has-type]
@@ -724,6 +759,8 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
                 io_caps=self._io_caps or {},
                 io_status=self._io_status or {},
                 last_access_event=self._last_access_event,
+                ring_snapshot=self._ring_snapshot,
+                ring_snapshot_time=self._ring_snapshot_time,
             )
         if hasattr(self, "async_update_listeners"):
             self.async_update_listeners()
@@ -830,6 +867,10 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         )
         is_ringing = state in self._RING_STATES and direction != "outgoing"
         if is_ringing and ring_allowed:
+            # CallStateChanged and CallSessionStateChanged both report one
+            # ring; capture the snapshot only on the first of them.
+            if not self._ring_detected and self._ring_snapshot_enabled:
+                self.hass.async_create_task(self._async_capture_ring_snapshot())
             self._ring_detected = True
             self._last_ring_time = datetime.now()
             self._ring_pulse_until = (
@@ -1221,6 +1262,8 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
                 io_caps=io_caps,
                 io_status=io_status,
                 last_access_event=self._last_access_event,
+                ring_snapshot=self._ring_snapshot,
+                ring_snapshot_time=self._ring_snapshot_time,
             )
             
         except TwoNAuthenticationError as err:
@@ -1406,6 +1449,16 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
     def subscribed_log_events(self) -> tuple[str, ...]:
         """Return the events of the currently active log subscription."""
         return self._subscribed_log_events
+
+    @property
+    def ring_snapshot(self) -> bytes | None:
+        """Return the JPEG captured at the last ring."""
+        return self._ring_snapshot
+
+    @property
+    def ring_snapshot_time(self) -> datetime | None:
+        """Return when the last-ring JPEG was captured (tz-aware)."""
+        return self._ring_snapshot_time
 
     @property
     def camera_transport_info(self) -> CameraTransportInfo:

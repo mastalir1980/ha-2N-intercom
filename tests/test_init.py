@@ -390,7 +390,7 @@ class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):
             [
                 (
                     entry.entry_id,
-                    ("camera", "binary_sensor", "switch", "sensor"),
+                    ("camera", "image", "binary_sensor", "switch", "sensor"),
                 )
             ],
         )
@@ -1002,6 +1002,7 @@ class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):
         platforms = init_module._get_platforms(entry)
         # camera disabled, doorbell disabled → switch + sensor
         self.assertNotIn("camera", platforms)
+        self.assertNotIn("image", platforms)
         self.assertNotIn("binary_sensor", platforms)
         self.assertIn("switch", platforms)
         self.assertIn("sensor", platforms)
@@ -1263,3 +1264,20 @@ class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):
         # Should not raise
         await init_module.async_update_options(hass, entry)
 
+
+class PlatformSelectionTests(unittest.TestCase):
+    """The last-ring image follows the camera option."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.init_module = load_init_module()
+
+    def test_image_platform_added_with_camera(self) -> None:
+        entry = FakeConfigEntry("entry-1", {}, options={"enable_camera": True})
+        platforms = self.init_module._get_platforms(entry)
+        self.assertIn("image", platforms)
+        self.assertLess(platforms.index("camera"), platforms.index("image"))
+
+    def test_image_platform_skipped_without_camera(self) -> None:
+        entry = FakeConfigEntry("entry-1", {"enable_camera": False})
+        self.assertNotIn("image", self.init_module._get_platforms(entry))
