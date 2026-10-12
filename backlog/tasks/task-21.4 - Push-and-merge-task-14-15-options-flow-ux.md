@@ -1,11 +1,11 @@
 ---
 id: TASK-21.4
 title: Push and merge task-14-15-options-flow-ux
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 11:01'
+updated_date: '2026-10-12 11:07'
 labels:
   - git
   - config-flow
@@ -31,7 +31,7 @@ TASK-14/15 (options-flow Next/Submit labels, back navigation, clearer credential
 - [x] #1 Branch is pushed to origin and rebased on current `main` (after project files, e2e and busy-loop subtasks)
 - [x] #2 The `backlog/` files from this branch merge cleanly with the ones already on main (no duplicate TASK-14/15 files, `config.yml` identical or reconciled)
 - [x] #3 Unit suite + `validate.py` green; `bash e2e/e2e.sh run --ref origin/task-14-15-options-flow-ux` green including `test_40_options_flow.py`
-- [ ] #4 Merged `--no-ff` into `main` by Jan; the `/private/tmp/ha2n-t1415` worktree is removed
+- [x] #4 Merged `--no-ff` into `main` by Jan; the `/private/tmp/ha2n-t1415` worktree is removed
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -54,3 +54,9 @@ TASK-14/15 (options-flow Next/Submit labels, back navigation, clearer credential
 
 E2E report 20261012-120017 (Jan, on the Pi): passed, ref task-14-15-options-flow-ux, deployed_sha 421dc3b, 12 passed / 5 skipped. test_40_options_flow ran and PASSED (Next/Submit last_step, go_back, masked RTSP password, options unchanged). Skips: SIP sensor disabled, relays, test_50 TASK-8/9 features not deployed. Warnings only InsecureRequestWarning from the E2E 2N client (self-signed device cert). AC1-3 checked; AC4 after Jan's --no-ff merge + worktree removal.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+task-14-15-options-flow-ux (TASK-14 options-flow Next/Submit + back navigation, TASK-15 credential field clarity) rebased cleanly onto main, pushed to origin for the first time and merged --no-ff by Jan (e36c496). Backlog config.yml identical to main, no duplicate TASK-14/15 files. Unit suite 469, validate.py and E2E 20261012-120017 green with test_40_options_flow actually running. The obsolete untracked e2e/ copy from the worktree was moved to /private/tmp/ha2n-t1415-e2e-untracked-backup (not deleted); worktree /private/tmp/ha2n-t1415 removed.
+<!-- SECTION:FINAL_SUMMARY:END -->

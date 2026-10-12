@@ -1,11 +1,11 @@
 ---
 id: TASK-21.5
 title: Rebase mastalir1980-revize-pull-requestu onto main and land it
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 07:12'
+updated_date: '2026-10-12 11:07'
 labels:
   - git
   - config-flow
