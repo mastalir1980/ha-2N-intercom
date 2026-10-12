@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 11:34'
+updated_date: '2026-10-12 11:35'
 labels:
   - git
   - access-control
@@ -67,4 +67,6 @@ Step 2, branch 1 of 3 (task-4) done 2026-10-12:
 - Pending: E2E run by Jan (e2e.sh run --ref task-4-access-control-events; expect test_50 access_control part to run, image/grant skipped), review, merge.
 
 task-4 E2E: report 20261012-123306 passed at 81d8787 (13 passed, 4 skipped). test_subscribed_access_events_match_device_log_caps ran for the first time and passed (HA subscription = device log/caps). Skips as expected: SIP sensor disabled, relays, image (TASK-9 not deployed), grant_access (relay). Warnings only InsecureRequestWarning from the E2E client.
+
+Step 2, branch 2 of 3 (task-9) 2026-10-12: task-9-last-ring-image from origin/main 3c55e54 (task-4 merged) + diff 90e7fd7..0a40ec8 (the 4+9 tree) on custom_components/tests/README; resulting tree identical to the saved 4+9 tree. 539 tests OK, validate.py OK, py_compile OK. Restores the combined RingSnapshotTests.test_update_data_carries_event_state. E2E check: test_50 test_last_ring_image_follows_camera. Pending: E2E by Jan, review, merge.
 <!-- SECTION:NOTES:END -->
