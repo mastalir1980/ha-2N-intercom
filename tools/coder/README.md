@@ -46,6 +46,10 @@ sudo ha2n-coder-set-token copilot    # vlož token copilot-cli-vm
 sudo bash tools/coder/install-vm.sh hermes   # podruhé: self-check už vidí tokeny
 ```
 
+**Model:** bez nastavení používá Copilot svůj výchozí model. Konkrétní model nastavíš jako root:
+`echo <model-id> | sudo tee /etc/ha2n-coder/model`. Seznam dostupných modelů: `copilot --help` (u volby `--model`).
+Pískoviště se před každým během maže, takže model vybraný ručně v Copilotu se neudrží. Platí jen tenhle soubor.
+
 Aktualizace po změně v `tools/coder/`: `git pull` v instalačním klonu a znovu `install-vm.sh`.
 
 **Ruleset na `main`** (GitHub → Settings → Rules → Rulesets → New branch ruleset):
