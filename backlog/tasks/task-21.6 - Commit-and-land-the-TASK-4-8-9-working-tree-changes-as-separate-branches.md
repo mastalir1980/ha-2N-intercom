@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 11:30'
+updated_date: '2026-10-12 11:34'
 labels:
   - git
   - access-control
@@ -65,4 +65,6 @@ Step 2, branch 1 of 3 (task-4) done 2026-10-12:
 - docs/API_REFERENCE.md already covers all three features (landed with TASK-21.1); no docs change.
 - Intermediate trees kept as patches against 29c6773 in the agent session files (4+9 tree 0a40ec8, full tree 3c70f9a) for task-9 / task-8.
 - Pending: E2E run by Jan (e2e.sh run --ref task-4-access-control-events; expect test_50 access_control part to run, image/grant skipped), review, merge.
+
+task-4 E2E: report 20261012-123306 passed at 81d8787 (13 passed, 4 skipped). test_subscribed_access_events_match_device_log_caps ran for the first time and passed (HA subscription = device log/caps). Skips as expected: SIP sensor disabled, relays, image (TASK-9 not deployed), grant_access (relay). Warnings only InsecureRequestWarning from the E2E client.
 <!-- SECTION:NOTES:END -->
