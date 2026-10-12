@@ -3,11 +3,11 @@ id: TASK-21.1
 title: >-
   Commit untracked project files (CLAUDE.md, Copilot rules, docs/, backlog/) to
   main
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 07:59'
+updated_date: '2026-10-12 08:27'
 labels:
   - git
   - maintenance
@@ -32,10 +32,10 @@ ordinal: 22000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `main` contains `CLAUDE.md`, `.github/copilot-instructions.md`, `docs/` and `backlog/` exactly as they are in the working tree today
+- [x] #1 `main` contains `CLAUDE.md`, `.github/copilot-instructions.md`, `docs/` and `backlog/` exactly as they are in the working tree today
 - [x] #2 `custom_components/2n_intercom.zip` is not committed and `*.zip` plus Python caches (`__pycache__/`, `.pytest_cache/`) are in `.gitignore`
 - [x] #3 No integration code (`custom_components/`, `tests/`) and no `e2e/` file is part of this commit; the uncommitted TASK-4/8/9 working-tree changes stay untouched
-- [ ] #4 `validate.py` and the unit suite stay green on the resulting `main`
+- [x] #4 `validate.py` and the unit suite stay green on the resulting `main`
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -57,4 +57,12 @@ ordinal: 22000
 Committed f3873e1 on task-21.1-project-files (parent origin/main 369e923), pushed to origin. 37 files, only CLAUDE.md, .github/copilot-instructions.md, docs/, backlog/, .gitignore; verified no custom_components/, tests/, e2e/ or *.zip paths in the commit. Untracked e2e/ and the zip remain in the working tree untouched; TASK-4/8/9 work is safe on wip/task-4-8-9-backup (91a58b8).
 Validation on the branch (Python 3.14.3): unittest 452 tests OK, validate.py exit 0, py_compile OK. E2E not run (Jan runs it externally; branch has no code change).
 Open: AC #1 and #4 refer to main - pending Jan's --no-ff merge. Task-file status/notes edits made after the commit are uncommitted in the tree.
+
+Jan merged --no-ff into main (94d6f4c, includes e114768 backlog notes) and pushed. Verified on origin/main: project files identical to the branch, no custom_components/, tests/ or e2e/ changes vs 369e923, unittest OK, validate.py exit 0.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Committed CLAUDE.md, .github/copilot-instructions.md, docs/ and backlog/ (plus *.zip in .gitignore) on task-21.1-project-files; merged by Jan into main as 94d6f4c. Verified: no code/e2e paths in the change, unit suite + validate.py green on main.
+<!-- SECTION:FINAL_SUMMARY:END -->

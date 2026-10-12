@@ -1,11 +1,11 @@
 ---
 id: TASK-20
 title: 'E2E: orphaned entities left by another branch''s deploy fail the next run'
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:11'
-updated_date: '2026-10-12 08:08'
+updated_date: '2026-10-12 08:54'
 labels:
   - e2e
   - bug
@@ -44,11 +44,11 @@ Not verified directly: Claude could not read the report on the Pi. The diagnosis
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 After each deploy to staging, entity-registry entries of the e2e config entry that HA restored (`restored: true`) and whose entity domain has no platform module in the deployed code are removed; the removed entity_ids are logged and written to the run report (`context.json`)
-- [ ] #2 Restored entities whose platform DOES exist in the deployed code are NOT removed (a real regression where the integration stops creating an entity must still fail `test_entities_available`)
-- [ ] #3 Reproduction is green: deploy `origin/pr-7-savek-cc`, then run `bash e2e/e2e.sh run --ref origin/e2e-pipeline`; the second run passes and its report lists `lock.2n_e2e` as pruned (read-only, no relays)
+- [x] #1 After each deploy to staging, entity-registry entries of the e2e config entry that HA restored (`restored: true`) and whose entity domain has no platform module in the deployed code are removed; the removed entity_ids are logged and written to the run report (`context.json`)
+- [x] #2 Restored entities whose platform DOES exist in the deployed code are NOT removed (a real regression where the integration stops creating an entity must still fail `test_entities_available`)
+- [x] #3 Reproduction is green: deploy `origin/pr-7-savek-cc`, then run `bash e2e/e2e.sh run --ref origin/e2e-pipeline`; the second run passes and its report lists `lock.2n_e2e` as pruned (read-only, no relays)
 - [x] #4 `nightly.sh` no longer adds 'branch set changed' on every run, and `origin/main` runs before other branches
-- [ ] #5 Only the staging HA (port 8124) is touched; the production HA and `reset-entry` are not used; `e2e/e2elib/twon.py` stays independent of the integration
+- [x] #5 Only the staging HA (port 8124) is touched; the production HA and `reset-entry` are not used; `e2e/e2elib/twon.py` stays independent of the integration
 - [x] #6 `e2e/README.md` documents the orphan-pruning step
 <!-- AC:END -->
 
@@ -78,4 +78,12 @@ Implemented on task-20-e2e-orphan-entities @ 1f732b3 (from origin/e2e-pipeline a
 - NOT verified: AC #1/#2/#3/#5 live (staging Pi unreachable this morning; Jan runs E2E externally). Reproduction for AC #3: deploy origin/pr-7-savek-cc (bash e2e/scripts/deploy.sh --ref origin/pr-7-savek-cc), then from ../ha2n-t20: bash e2e/e2e.sh run --ref task-20-e2e-orphan-entities; check prune.log / context.json pruned_entities contains lock.2n_e2e.
 - Follow-up: TASK-19 is an exact duplicate of TASK-20 (same title/description) - should be archived/closed by Claude/Jan.
 - Note: e2e/unit is not run by run.sh stage 1 (out of scope); could be added later.
+
+Live E2E by Jan on the Pi (report 20261012-092517, run from ~/ha2n-t20, PI_SSH=local): ref task-20-e2e-orphan-entities, deployed_sha 1f732b3, HA 2026.10.1, IP Force 2.0 fw 3.3.1.82.4, status passed (11 passed, 2 skipped: SIP sensor disabled, relay test). prune.log: 'removed orphaned lock.2n_e2e (no lock.py deployed)'; pruned_entities.json: pruned [lock.2n_e2e], entry_state loaded, restored_kept []; context.json pruned_entities [lock.2n_e2e]. ha_url http://localhost:8124 (staging), no relays, no reset-entry. Deviation from AC #3 wording: second run used --ref task-20-e2e-orphan-entities instead of origin/e2e-pipeline - same platform set (no lock.py), and the branch is needed for run.sh to include the prune step. AC #2 is proven by the offline unit tests (test_restored_entity_with_existing_platform_is_kept); the live run had no such entity (restored_kept empty).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Added an orphan-pruning step to the E2E pipeline: after each staging deploy, scripts/prune_orphans.py removes restored entities of the e2e entry whose domain has no platform module in the deployed code (kept otherwise), logs them and records them in context.json pruned_entities. Fixed nightly.sh branch-set detection and main-first ordering; README documented. Verified with 8 offline tests, unit suite + validate.py, and a green live E2E run on the Pi (20261012-092517) that pruned lock.2n_e2e left by pr-7-savek-cc. Branch task-20-e2e-orphan-entities (1f732b3) lands with TASK-21.2.
+<!-- SECTION:FINAL_SUMMARY:END -->
