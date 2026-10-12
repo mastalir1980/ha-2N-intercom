@@ -1,11 +1,11 @@
 ---
 id: TASK-21.2
 title: Merge e2e-pipeline into main (incl. local e2e changes and orphan fix)
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 10:42'
+updated_date: '2026-10-12 10:47'
 labels:
   - git
   - maintenance
@@ -34,7 +34,7 @@ ordinal: 23000
 - [x] #1 Local `e2e/` changes are reviewed and committed to the e2e-pipeline line; nothing from `e2e/.env`, `e2e/reports/`, `e2e/state/`, `.venv`, caches lands in git
 - [x] #2 The orphaned-entity fix is included
 - [x] #3 `bash e2e/e2e.sh run --ref <merged branch>` is green (read-only, no relays); tests that need features not yet on main (options-flow UX, access control) skip cleanly instead of failing
-- [ ] #4 `main` contains `e2e/` and `run_tests.sh`; the nightly on the Pi picks up the scripts from `main`
+- [x] #4 `main` contains `e2e/` and `run_tests.sh`; the nightly on the Pi picks up the scripts from `main`
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -61,3 +61,9 @@ Branch task-21.2-e2e-merge (worktree ../ha2n-t212, pushed, HEAD 7b820c7):
 
 E2E report 20261012-111534 (run on the Pi by Jan): status passed, ref task-21.2-e2e-merge, deployed_sha 7b820c7, 11 passed / 6 skipped. Skips as expected: test_40 (last_step not set, TASK-14 not deployed), test_50 access events (no access_control diagnostics), test_50 last-ring image (no image platform), relay tests (no --relays), SIP sensor disabled. Prune step ran, nothing to prune. AC1-3 checked; AC4 waits for Jan's --no-ff merge into main and the Pi nightly switched to main.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Merged the E2E pipeline into main (f6d901d, --no-ff by Jan): e2e-pipeline branch + TASK-20 orphan pruning + Jan's local test_40/test_50 with feature skips, ha.py/twon.py helpers, E2E_GRANT_USER_UUID. Kept branch versions of e2e.sh/nightly.sh/run.sh (local copies were older). deploy_test.sh (production deploy) dropped per Jan. E2E report 20261012-111534 green on 7b820c7 (11 passed, 6 skipped as expected). Jan switched the Pi nightly checkout to main.
+<!-- SECTION:FINAL_SUMMARY:END -->

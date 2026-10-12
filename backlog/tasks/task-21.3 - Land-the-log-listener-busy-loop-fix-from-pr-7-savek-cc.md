@@ -1,11 +1,11 @@
 ---
 id: TASK-21.3
 title: Land the log-listener busy-loop fix from pr-7-savek-cc
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 07:12'
+updated_date: '2026-10-12 10:48'
 labels:
   - git
   - coordinator
@@ -38,8 +38,17 @@ ordinal: 24000
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Branch `task-<id>-log-listener-idle-delay` from `origin/main`; `git cherry-pick 48375d2` (merge-tree shows no conflict) and adapt the comment to main's code.
-2. Add the unit test.
-3. Do not take anything else from `pr-7-savek-cc`.
-4. CHANGELOG entry only in the next release task.
+1. Branch task-21.3-log-listener-idle-delay from origin/main (main tree).
+2. git cherry-pick -x 48375d2 (clean; comment already matches main's loop).
+3. Unit tests in tests/test_coordinator.py LogListenerTests: patched asyncio.sleep, empty pulls -> LOG_LISTENER_IDLE_DELAY, pulls with events -> sleep(0).
+4. Note the firmware quirk in docs/API_REFERENCE.md. Nothing else from pr-7-savek-cc; CHANGELOG in the release task.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+- Cherry-picked 48375d2 cleanly: LOG_LISTENER_IDLE_DELAY = 1 in coordinator.py; _async_run_log_subscription sleeps 1 s after an empty pull, sleep(0) after a pull with events. Error path (LOG_LISTENER_PULL_ERROR_DELAY + raise), subscribe/backoff and ring handling untouched.
+- Tests: test_empty_pull_waits_idle_delay, test_pull_with_events_only_yields (helper _sleeps_for_pulls patches coordinator asyncio.sleep with AsyncMock, stops the loop via _log_listener_stopped). Verified both fail against the pre-fix coordinator.
+- docs/API_REFERENCE.md: firmware quirk 'log/pull may not block' added.
+- Full suite 454 OK, validate.py OK, py_compile OK. E2E deferred to Jan (Pi unreachable from the Mac).
+<!-- SECTION:NOTES:END -->

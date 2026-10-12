@@ -96,6 +96,10 @@ uuid spustí refresh adresáře, nejvýš jednou za 60 s.
 - **Snapshot rozlišení** musí být z `camera/caps jepgResolution`; HA preview
   zkouší 80×80 → `code 12` → integrace retryuje na `640×480`.
 - **Kód 14** je přetížený – disambiguace podle `description`, ne podle kódu.
+- **`log/pull` nemusí blokovat.** Některý firmware vrátí prázdný `log/pull`
+  okamžitě i s `timeout=1`; listener proto po prázdném pullu čeká
+  `LOG_LISTENER_IDLE_DELAY` (1 s), po pullu s událostmi jen předá řízení
+  (`sleep(0)`), jinak by vznikl busy-loop.
 - **grantaccess `success: true` neznamená otevření** – rozhoduje `accessGranted`;
   `false` + `reason` (`invalidAp`, `invalidCredential`, `accessBlocked`).
   Kód 18 = požadavek odmítnut (např. vypnutý přístupový bod), kódy 7–10 =
