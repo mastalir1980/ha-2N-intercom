@@ -62,6 +62,12 @@ else
     STATUS="error"
   else
     sleep "${E2E_SETTLE_SECONDS:-20}"  # let the integration finish setup + first log/subscribe
+    # Staging HA is shared by all branches: drop restored entities whose platform module is
+    # not in the code just deployed (left by another branch). Never aborts the run.
+    echo "==> pruning orphaned entities left by other deploys"
+    if [ "$REF_LABEL" = "worktree" ]; then PRUNE_SRC=(--worktree); else PRUNE_SRC=(--ref "$REF_LABEL"); fi
+    "$PY" "$E2E_DIR/scripts/prune_orphans.py" "${PRUNE_SRC[@]}" --out "$REPORT/pruned_entities.json" 2>&1 \
+      | tee "$REPORT/prune.log" || echo "    prune failed — see $REPORT/prune.log (continuing)"
     # ---- 3. E2E tests ---------------------------------------------------------
     STAGE="e2e"
     echo "==> [3/4] E2E tests against the intercom"

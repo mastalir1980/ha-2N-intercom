@@ -89,6 +89,15 @@ def run_context(ha: HA, twon: TwoN) -> None:
         ctx["intercom_error"] = str(err)
     sha_file = env.E2E_DIR / "state" / "last_deployed_sha"
     ctx["deployed_sha"] = sha_file.read_text().strip() if sha_file.exists() else None
+    pruned_file = REPORT_DIR / "pruned_entities.json"  # written by scripts/prune_orphans.py via run.sh
+    if pruned_file.exists():
+        try:
+            pruned = json.loads(pruned_file.read_text())
+            ctx["pruned_entities"] = pruned.get("pruned", [])
+            if pruned.get("error"):
+                ctx["pruned_entities_error"] = pruned["error"]
+        except ValueError as err:
+            ctx["pruned_entities_error"] = f"unreadable {pruned_file.name}: {err}"
     (REPORT_DIR / "context.json").write_text(json.dumps(ctx, indent=2))
 
 

@@ -8,6 +8,7 @@ Mac (e2e/e2e.sh run / launchd 03:30)
  ├─ 1. unit testy + validate.py            (lokálně)
  ├─ 2. deploy git ref ──ssh──▶ Pi: ~/ha-staging  (HA kontejner ha-staging, port 8124)
  │                                   └─ 2N integrace ──HTTPS─▶ IP Force 2.0 (domácí, fw 3.3)
+ │     + úklid osiřelých entit z deploye jiné větve (scripts/prune_orphans.py)
  ├─ 3. pytest e2e/tests: stav v HA  ⇄  přímé dotazy na 2N API (ground truth)
  └─ 4. při chybě: claude -p (agent/triage.md) ─▶ backlog task create/edit  (type bug, label e2e)
 ```
@@ -37,8 +38,8 @@ Agent smí jen číst soubory a volat `backlog` + read-only `git`. Kód neupravu
 3. `e2e/e2e.sh bootstrap` — na Pi založí `~/ha-staging`, spustí staging HA, provede onboarding
    (uživatel `e2e`), uloží long-lived token do `.env` a přes config flow přidá interkom.
 4. `e2e/e2e.sh run` — první běh.
-5. `e2e/e2e.sh schedule` — noční běh v 03:30 (jen když se změnil `origin/main`,
-   firmware interkomu nebo vyšla nová verze HA).
+5. `e2e/e2e.sh schedule` — noční běh v 03:30 (jen když přibyl commit na některé větvi `origin`,
+   změnila se množina větví, firmware interkomu nebo vyšla nová verze HA; `origin/main` běží první).
 
 ## Denní použití
 
@@ -53,6 +54,23 @@ Agent smí jen číst soubory a volat `backlog` + read-only `git`. Kód neupravu
 
 Reporty: `e2e/reports/<čas>/` (`summary.json`, `context.json` s verzemi HA a firmwaru,
 `junit.xml`, logy, `triage.md`). `e2e/reports/latest` ukazuje na poslední běh.
+
+## Úklid osiřelých entit (staging sdílí všechny větve)
+
+Noční běh nasazuje na jeden staging HA postupně všechny větve. Větev s platformou navíc
+(např. `lock.py`) zanechá v entity registry entity, které HA po dalším deployi obnoví jako
+`unavailable` s atributem `restored: true` — a `test_entities_available` by pak padal na
+znečištěném prostředí, ne na chybě integrace.
+
+Proto `run.sh` po deployi a před pytestem spustí `scripts/prune_orphans.py`: počká, až je
+2N entry `loaded`, a z registry smaže entity e2e entry, které mají `restored: true` **a** jejichž
+doména nemá v právě nasazeném kódu modul `<doména>.py` (podle `git ls-tree` refu, u `wip`
+podle working tree). Obnovené entity platformy, která v kódu je, se **nemažou** — skutečná
+regrese (integrace přestala entitu vytvářet) musí dál shodit test.
+
+Smazané `entity_id` jsou v `prune.log`, `pruned_entities.json` a v `context.json` pod
+`pruned_entities`. Chyba úklidu běh nezastaví (zapíše se jako `pruned_entities_error`).
+Offline testy logiky: `python3 -m unittest discover -s e2e/unit -t e2e`.
 
 ## Přidání testu k nové funkci
 

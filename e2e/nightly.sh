@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Nightly check (launchd). Runs the read-only pipeline ONLY when something changed:
-#   - new commit on origin/main
+#   - new commit on any origin branch, or the set of origin branches changed
 #   - different intercom firmware (swVersion)
 #   - newer Home Assistant image (staging is pulled first)
 # Never switches relays.
@@ -25,8 +25,10 @@ MAIN_SHA="$(git rev-parse --short origin/main)"
 
 # --- Vsechny puvodni vetve (ne jen main): testujeme i vyvijejece vetve ---------
 # Barevné vyloučení: HEAD, remotes/origin/HEAD a doc-predpony; hlidaji se ostatní.
-BRANCHES="$(git for-each-ref --format='%(refname:short)' refs/remotes/origin \
+# origin/main always runs first, the rest in alphabetical order.
+ALL_BRANCHES="$(git for-each-ref --format='%(refname:short)' refs/remotes/origin \
   | grep -v -e '^origin/HEAD$' | sort)"
+BRANCHES="$( { grep -x 'origin/main' <<<"$ALL_BRANCHES"; grep -vx 'origin/main' <<<"$ALL_BRANCHES"; } || true)"
 echo "branches under watch: $(echo "$BRANCHES" | tr '\n' ' ')"
 
 FW="$(cd "$E2E_DIR" && "$E2E_DIR/.venv/bin/python" - <<'PY'
@@ -54,7 +56,8 @@ for B in $BRANCHES; do
     if [ -n "$LAST_SHA" ]; then CHANGES+=("$B: new commit $SHA"); fi
   fi
 done
-[[ " ${BRANCHES} " != *" main "* ]] && CHANGES+=("branch set changed")
+BRANCHES_LAST="$(cat "$E2E_DIR/state/last_nightly_branches" 2>/dev/null || true)"
+[ "$(sort <<<"$BRANCHES")" != "$BRANCHES_LAST" ] && CHANGES+=("branch set changed")
 FW_LAST="$(cat "$E2E_DIR/state/last_nightly_fw" 2>/dev/null || true)"
 [ "$FW" != "$FW_LAST" ] && CHANGES+=("intercom firmware $FW")
 HA_LAST="$(cat "$E2E_DIR/state/last_nightly_haimg" 2>/dev/null || true)"
@@ -93,6 +96,7 @@ rc=0; [ "${#FAILED_BRANCHES[@]}" -gt 0 ] && rc=1
 # Remember global state even on failure: the bugs are in the backlog, don't re-report every night.
 echo "$FW" > "$E2E_DIR/state/last_nightly_fw"
 echo "${HA_IMG:-unknown}" > "$E2E_DIR/state/last_nightly_haimg"
+sort <<<"$BRANCHES" > "$E2E_DIR/state/last_nightly_branches"
 echo "$TRIGGER" > "$E2E_DIR/state/last_nightly_trigger"
 if [ "$RAN" -eq 0 ]; then
   echo "no branch produced a run (all unchanged/merged)"
