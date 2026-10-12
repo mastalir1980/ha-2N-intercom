@@ -130,6 +130,10 @@ Never run `e2e/e2e.sh relays`, `--relays` or `reset-entry` unless Jan asks in th
   originally validated on IP Verso fw 2.50 — differences between 2.50 and 3.x are a known source of bugs).
 - Secrets live in `e2e/.env` (gitignored, never print or copy its values). Template: `e2e/.env.example`.
 - The E2E 2N client (`e2elib/twon.py`) is deliberately independent of `api.py` — do not make it import the integration.
+- **PR E2E on the Pi (self-hosted runner, TASK-22):** `.github/workflows/e2e-pi.yml` runs `e2e/ci/pr-e2e.sh` on the Pi
+  for same-repo PRs by actors in `E2E_PI_ACTORS`; check name `e2e-pi`. Staging is reached only via the root-owned helper
+  `e2e/ci/ha2n-staging`; all runs share one staging lock (`e2e/scripts/lock.sh`). Runbook: `e2e/ci/README.md`.
+  Changes to `.github/` and `e2e/ci/` always need Jan's review — never weaken the guards, never add `--relays`.
 
 ## Architecture rules you must not break
 

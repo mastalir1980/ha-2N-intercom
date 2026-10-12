@@ -1,0 +1,8 @@
+# Changes here decide what runs on the Pi next to the real intercom and production HA.
+# With "Require review from Code Owners" on main, they need Jan's approval.
+/.github/      @mastalir1980
+/e2e/ci/       @mastalir1980
+/e2e/scripts/  @mastalir1980
+/e2e/nightly.sh @mastalir1980
+/e2e/run.sh    @mastalir1980
+/e2e/staging/  @mastalir1980

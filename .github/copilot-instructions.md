@@ -94,6 +94,10 @@ bash e2e/e2e.sh report   # last result + triage
 ```
 
 - **Never run `e2e/e2e.sh relays`, `--relays` or `reset-entry`** unless Jan explicitly asks — they open the real door and gate.
+- **PR E2E on the Pi (self-hosted runner, TASK-22):** `.github/workflows/e2e-pi.yml` runs `e2e/ci/pr-e2e.sh` on the Pi
+  for same-repo PRs by actors in `E2E_PI_ACTORS`; check name `e2e-pi`. Staging is reached only via the root-owned helper
+  `e2e/ci/ha2n-staging`; all runs share one staging lock (`e2e/scripts/lock.sh`). Runbook: `e2e/ci/README.md`.
+  Changes to `.github/` and `e2e/ci/` always need Jan's review — never weaken the guards, never add `--relays`.
 - **Never touch production HA** (port 8123, `~/homeassistant` on the Pi).
 - Never print, copy or commit values from `e2e/.env`.
 - If E2E fails, follow `e2e/agent/triage.md`: a failure caused by your change is fixed in the task;

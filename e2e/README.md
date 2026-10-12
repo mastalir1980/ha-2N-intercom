@@ -41,6 +41,13 @@ Agent smí jen číst soubory a volat `backlog` + read-only `git`. Kód neupravu
 5. `e2e/e2e.sh schedule` — noční běh v 03:30 (jen když přibyl commit na některé větvi `origin`,
    změnila se množina větví, firmware interkomu nebo vyšla nová verze HA; `origin/main` běží první).
 
+## E2E pro každý PR na Pi (CI runner)
+
+Větve z repa se testují i automaticky: self-hosted runner na Pi spustí E2E pro každý PR
+a výsledek dá k PR jako check `e2e-pi`. Instalace, bezpečnostní model a první experiment
+jsou v [`ci/README.md`](ci/README.md). Mac, noční běh i CI sdílejí jeden zámek stagingu,
+takže když staging zrovna testuje něco jiného, běh počká.
+
 ## Denní použití
 
 | Příkaz | Kdy |
