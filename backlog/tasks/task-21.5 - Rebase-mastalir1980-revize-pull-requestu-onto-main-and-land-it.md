@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 11:14'
+updated_date: '2026-10-12 11:18'
 labels:
   - git
   - config-flow
@@ -64,4 +64,8 @@ Branch A task-21.5-auth-recovery:
 - Unit suite 483 OK on HEAD and OK on each intermediate commit; validate.py OK; py_compile OK; version stays 1.4.0. Docker not running locally, hassfest checked via GitHub Actions.
 
 Branch A E2E report 20261012-121220 (Jan, on the Pi): passed, deployed_sha 73261ae, 12 passed / 5 skipped (SIP sensor disabled, relays, test_50 TASK-8/9 not deployed); entry loaded, no auth errors. hassfest + HACS GitHub Actions green on the branch (runs 38240965530, 38240965441). AC2 checked (CONFIG_SCHEMA declared, duplicate placeholder change dropped, hassfest passes). AC1 after Jan's --no-ff merge.
+
+Branch B task-21.5-setup-wizard-back (from main 2d07e3b): analysis of 8dd8b6c vs main showed TASK-14/15 already landed setup-wizard back navigation (CONF_GO_BACK on config device step, last_step labels, user-step prefill), options-flow draft preservation (camera, per-relay via _relay_inputs), and HTTP API vs RTSP credential guidance. Jan decided scope for B: (a) clear stale serial number / default device name when the user goes back and the new host reports none; (b) add the missing config.error.invalid_auth string (used by reauth) to strings.json + en/cs/de; (c) document the 'Return to the previous step' option in README/INSTALLATION. NOT ported (Jan): (d) 8dd8b6c's options-flow merge of saved options for skipped steps (keep camera options when camera disabled, keep saved relays when entry not loaded) — main deliberately drops them (TASK-14). Also not ported: TYPE_CHECKING import refactor, 'HTTP API username' label wording (main already says 'API username' + guidance), CHANGELOG entry.
+
+Branch B changes: config_flow.py user step drops CONF_SERIAL_NUMBER from the draft and resets _default_device_name when the (re)connected host reports no serial/variant (unique id then falls back to host, as for a fresh setup). config.error.invalid_auth added to strings.json + en/cs/de (text taken from 8dd8b6c). README (setup wizard + options flow) and INSTALLATION document the 'Back to the previous step' option. Tests: test_go_back_to_other_host_drops_previous_device_identity, ConfigFlowErrorStringsTests (every errors['base'] key in config_flow.py exists in config.error of all four string files); both fail on main, pass on the branch. Suite 485 OK, validate.py + py_compile OK, version 1.4.0, no CHANGELOG. Follow-up (not fixed, pre-existing): running tests/test_config_flow.py alone fails at import because config_flow.py imports .coordinator at module level and the test loader does not stub it; the full discover run works because other modules load coordinator first (8dd8b6c had moved the import under TYPE_CHECKING).
 <!-- SECTION:NOTES:END -->

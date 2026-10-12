@@ -934,6 +934,52 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(_form_default(result, "name"), "Front door")
         self.assertIs(_form_default(result, "enable_camera"), True)
 
+    async def test_go_back_to_other_host_drops_previous_device_identity(
+        self,
+    ) -> None:
+        """Going back and connecting to a host that reports no serial must
+        not keep the first device's serial (unique id) or default name."""
+        original_info = FakeAPI.system_info
+        try:
+            FakeAPI.system_info = {"serialNumber": "SN-FIRST", "variant": "IP Verso"}
+            flow = self._make_flow()
+            await flow.async_step_user(
+                {"host": "192.0.2.20", "username": "u", "password": "p"}
+            )
+            self.assertEqual(flow._data["serial_number"], "SN-FIRST")
+            self.assertEqual(flow._default_device_name, "IP Verso SN-FIRST")
+
+            result = await flow.async_step_device(
+                {
+                    "name": "Front door",
+                    "enable_camera": False,
+                    "enable_doorbell": True,
+                    "go_back": True,
+                }
+            )
+            self.assertEqual(result["step_id"], "user")
+
+            FakeAPI.system_info = {}
+            result = await flow.async_step_user(
+                {"host": "192.0.2.21", "username": "u", "password": "p"}
+            )
+            self.assertEqual(result["step_id"], "device")
+            self.assertNotIn("serial_number", flow._data)
+            self.assertIsNone(flow._default_device_name)
+
+            result = await flow.async_step_device(
+                {
+                    "name": "Front door",
+                    "enable_camera": False,
+                    "enable_doorbell": True,
+                }
+            )
+            self.assertEqual(result["type"], "create_entry")
+            self.assertEqual(flow._unique_id, "192.0.2.21")
+            self.assertNotIn("serial_number", result["data"])
+        finally:
+            FakeAPI.system_info = original_info
+
     async def test_duplicate_serial_aborts_even_with_different_host(self) -> None:
         """Adding a device with the same serial but different host should abort."""
         existing = FakeConfigEntry(
@@ -1809,6 +1855,31 @@ class ConfigFlowHelperTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result, ["sip:500@device"])
         finally:
             self.config_flow_module.TwoNIntercomAPI = original_api
+
+
+class ConfigFlowErrorStringsTests(unittest.TestCase):
+    """Every error key the config flow can show has a translated string."""
+
+    def test_config_error_keys_are_translated(self) -> None:
+        import json
+        import re
+
+        source = CONFIG_FLOW_PATH.read_text(encoding="utf-8")
+        used = set(re.findall(r'errors\["base"\]\s*=\s*"([a-z_]+)"', source))
+        self.assertIn("invalid_auth", used)
+
+        integration_dir = CONFIG_FLOW_PATH.parent
+        for name in (
+            "strings.json",
+            "translations/en.json",
+            "translations/cs.json",
+            "translations/de.json",
+        ):
+            with self.subTest(file=name):
+                strings = json.loads(
+                    (integration_dir / name).read_text(encoding="utf-8")
+                )
+                self.assertLessEqual(used, set(strings["config"]["error"]))
 
 
 if __name__ == "__main__":

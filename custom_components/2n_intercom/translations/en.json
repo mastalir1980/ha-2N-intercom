@@ -66,7 +66,8 @@
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to the device. Please check the IP address, port, and credentials."
+      "cannot_connect": "Failed to connect to the device. Please check the IP address, port, and credentials.",
+      "invalid_auth": "HTTP API authentication failed. Check the account credentials and permissions on the intercom."
     },
     "abort": {
       "already_configured": "This 2N Intercom device is already configured.",
