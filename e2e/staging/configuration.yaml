@@ -1,0 +1,19 @@
+# Minimal staging config — only what the 2N integration and the E2E tests need.
+# No default_config: fewer moving parts, faster restarts on the Pi.
+homeassistant:
+  name: HA staging (2N E2E)
+  time_zone: Europe/Prague
+  unit_system: metric
+
+frontend:
+api:
+http:
+config:      # config entries / flow REST API used by the bootstrap
+system_log:  # /api/error_log + system_log for the tests
+  max_entries: 500
+  fire_event: false
+
+logger:
+  default: warning
+  logs:
+    custom_components.2n_intercom: debug

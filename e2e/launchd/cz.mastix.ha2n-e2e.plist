@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Installed by `e2e/e2e.sh schedule` (REPO_DIR is substituted). Runs 03:30 every night;
+     if the Mac was asleep, launchd runs it on the next wake. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>cz.mastix.ha2n-e2e</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>REPO_DIR/e2e/nightly.sh</string>
+  </array>
+  <key>WorkingDirectory</key><string>REPO_DIR/e2e</string>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>30</integer></dict>
+  <key>StandardOutPath</key><string>REPO_DIR/e2e/reports/launchd.out</string>
+  <key>StandardErrorPath</key><string>REPO_DIR/e2e/reports/launchd.err</string>
+</dict>
+</plist>

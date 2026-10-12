@@ -1,0 +1,17 @@
+# Staging Home Assistant for the 2N integration E2E pipeline.
+# Runs NEXT TO the production HA on the Pi and never touches its config.
+#   - own config dir (./config), own port 8124, own container name
+#   - same image channel as production, so a new HA release is tested here first
+# Managed by e2e/scripts/bootstrap_staging.py and e2e/scripts/deploy.sh.
+services:
+  ha-staging:
+    container_name: ha-staging
+    image: ${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:stable}
+    restart: unless-stopped
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1   # no root-owned __pycache__ in the deployed integration
+    ports:
+      - "8124:8123"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./config:/config
