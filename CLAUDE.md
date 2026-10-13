@@ -54,6 +54,13 @@ Work on this repo is split between two agents:
   the architecture rules and the definition of done; report findings, do not fix them silently.
 - Do not edit files under `custom_components/`, `tests/` or `e2e/tests/` unless Jan asks.
   Editing `docs/*`, `CLAUDE.md`, `.github/copilot-instructions.md` and Backlog (via CLI) is fine.
+- **Backlog and analysis changes ship in their own PR from `main`** (Jan's standing instruction):
+  new or updated tasks and drafts, analysis notes, `docs/*` findings and helper scripts from an analysis
+  go on a fresh branch `backlog-<topic>` cut from `origin/main`, as a backlog/docs-only PR that Jan merges
+  right away. Never leave them on Jan's working branch, in his working tree or in a task branch.
+  `main` is protected (changes only via PR). Code changes still go through `task-<id>-…` branches.
+  If Claude cannot push or open the PR itself, it gives Jan the exact commands
+  (`gh pr create` with explicit `--title`/`--body`, not `--fill`, when the branch is not checked out locally).
 - Claude's shell on Jan's Mac is a Linux VM that does not see the macOS `backlog`. If `backlog` is missing,
   install it there: `npm install --prefix $HOME/.backlog backlog.md` and call `$HOME/.backlog/node_modules/.bin/backlog`
   from the repo root. Only if that fails, give Jan the exact command to run.
