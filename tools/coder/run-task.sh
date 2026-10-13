@@ -23,6 +23,7 @@ SANDBOX=(sudo -n -u ha2n-copilot "$LIB/sandbox.sh")
 REPO_TOKEN_FILE=/etc/ha2n-coder/repo.token
 PROTECTED='(^|/)\.git|^(\.github/|e2e/ci/|e2e/scripts/|e2e/run\.sh$|e2e/nightly\.sh$|e2e/e2e\.sh$|e2e/staging/|e2e/\.env|e2e/tests/conftest\.py$|tools/coder/|CLAUDE\.md$|backlog/config\.yml$)'
 MAX_FILES=40; MAX_LINES=2500; LOCAL_ROUNDS=2; CI_ROUNDS=3; CHECKS_TIMEOUT=$((45*60))
+COST_CSV="$BASE/cost.csv"   # one line per Copilot call; stays on the VM (the repo is public)
 
 FG=0; [ "${1:-}" = "--foreground" ] && { FG=1; shift; }
 TASK="${1:-}"
@@ -92,9 +93,48 @@ sys.stdout.write(s)
 PY
 }
 
-copilot_round() {  # copilot_round <template> <failure-file|-> <where>
+log_cost() {  # log_cost <label> — one cost.csv line from the summary Copilot printed in copilot-$ROUND.log
+  # Columns: time,run,task,label,model,effort,ai_credits,tokens_in,tokens_out,duration
+  # Tokens are as printed (14.9k -> 14900). Never fails the run: missing/odd output -> empty fields.
+  python3 - "$COST_CSV" "$DIR/copilot-$ROUND.log" "$RUN" "$TASK" "$1" <<'PY' 2>/dev/null || true
+import csv, datetime, os, re, sys
+path, log, run, task, label = sys.argv[1:6]
+try:
+    text = open(log, errors="replace").read()
+except OSError:
+    text = ""
+text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)          # colour codes
+def last(rx):
+    m = re.findall(rx, text, re.M)
+    return m[-1] if m else None
+def first(rx):   # model/effort lines are printed by sandbox.sh before Copilot starts
+    m = re.findall(rx, text, re.M)
+    return m[0] if m else None
+def tokens(s):
+    m = re.fullmatch(r"([0-9]*\.?[0-9]+)([kKmM]?)", (s or "").replace(",", "").replace(" ", ""))
+    if not m:
+        return ""
+    return str(round(float(m.group(1)) * {"": 1, "k": 1e3, "m": 1e6}[m.group(2).lower()]))
+cr = last(r"AI Credits[ \t]+([0-9][0-9.,]*)")
+dur = last(r"AI Credits[ \t]+[0-9][0-9.,]*[ \t]*\(([^)]*)\)")
+tk = last(r"Tokens[ \t]+↑[ \t]*([0-9][0-9.,]*[ \t]*[kKmM]?)[^↓\n]*↓[ \t]*([0-9][0-9.,]*[ \t]*[kKmM]?)")
+tin, tout = (tokens(tk[0]), tokens(tk[1])) if tk else ("", "")
+row = [datetime.datetime.now().astimezone().isoformat(timespec="seconds"), run, task, label,
+       first(r"^model: (.+?)\s*$") or "", first(r"^reasoning effort: (.+?)\s*$") or "",
+       (cr or "").replace(",", ""), tin, tout, dur or ""]
+new = not os.path.exists(path) or os.path.getsize(path) == 0
+with open(path, "a", newline="") as f:
+    w = csv.writer(f, lineterminator="\n")
+    if new:
+        w.writerow(["time", "run", "task", "label", "model", "effort", "ai_credits", "tokens_in", "tokens_out", "duration"])
+    w.writerow(row)
+PY
+}
+
+copilot_round() {  # copilot_round <template> <failure-file|-> <where> <label>
   render "$1" "$2" "$3" | "${SANDBOX[@]}" copilot > "$DIR/copilot-$ROUND.log" 2>&1
   local rc=$?
+  log_cost "$4"
   tail -5 "$DIR/copilot-$ROUND.log"
   [ "$rc" = 3 ] && stop "Copilot stopped: $(sed -n '/asked to stop/,$p' "$DIR/copilot-$ROUND.log" | tail -n +2 | head -5 | tr '\n' ' ')"
   [ "$rc" = 0 ] || stop "Copilot run failed (exit $rc), see copilot-$ROUND.log"
@@ -106,7 +146,7 @@ local_gates() {  # implement + up to LOCAL_ROUNDS local fixes until gates are gr
     if "${SANDBOX[@]}" gates > "$DIR/gates-$ROUND-$i.log" 2>&1; then status running "local gates green"; return 0; fi
     [ "$i" -ge "$LOCAL_ROUNDS" ] && stop "local gates still red after $LOCAL_ROUNDS fix rounds (gates-$ROUND-$i.log)"
     i=$((i+1)); status running "local gates red — Copilot fix $i/$LOCAL_ROUNDS"
-    copilot_round fix.md "$DIR/gates-$ROUND-$((i-1)).log" "local gates (unit tests / validate.py / py_compile)"
+    copilot_round fix.md "$DIR/gates-$ROUND-$((i-1)).log" "local gates (unit tests / validate.py / py_compile)" "local-fix-$i"
   done
 }
 
@@ -195,7 +235,7 @@ failure_text() {  # public logs of the failed checks (e2e-pi prints only its san
 ROUND=0
 "${SANDBOX[@]}" prepare "$BRANCH" > "$DIR/prepare.log" 2>&1 || stop "sandbox prepare failed (prepare.log)"
 status running "Copilot implementing"
-copilot_round implement.md - ""
+copilot_round implement.md - "" "implement"
 local_gates
 publish
 open_pr
@@ -212,7 +252,7 @@ while :; do
     && stop "e2e-pi was skipped — PR author not allowed for the Pi runner (E2E_PI_ACTORS / allowed-actors)?"
   FAIL_FILE="$(failure_text)"
   ROUND=$((ROUND+1)); status running "checks red ($(cut -d' ' -f1 "$DIR/ci-$((ROUND-1)).txt" | tr '\n' ' ')) — Copilot fix $ROUND/$CI_ROUNDS"
-  copilot_round fix.md "$FAIL_FILE" "PR checks on GitHub (e2e-pi runs the E2E suite on the Pi; hassfest/HACS validate)"
+  copilot_round fix.md "$FAIL_FILE" "PR checks on GitHub (e2e-pi runs the E2E suite on the Pi; hassfest/HACS validate)" "ci-fix-$ROUND"
   local_gates
   publish
 done
