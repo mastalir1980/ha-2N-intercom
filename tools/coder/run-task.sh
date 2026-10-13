@@ -10,7 +10,8 @@
 # patch checked for protected paths/size → applied in our own clone → push + PR (Jan's token) →
 # wait for PR checks incl. e2e-pi → on failure feed the public log back to Copilot (≤3 rounds) → report.
 # Copilot never sees the repo token; this script never runs code from the repo (only git, gh, backlog).
-# Never merges. State: /var/lib/ha2n-coder/runs/<run>/{status,run.log,*.patch}; see ha2n-task-status.
+# When everything is green it adds ONE last commit to the PR branch that sets the task Done and ticks its
+# criteria (takes effect on main only when Jan merges; label manual-close opts out). Never merges. State: /var/lib/ha2n-coder/runs/<run>/{status,run.log,*.patch}; see ha2n-task-status.
 set -uo pipefail
 umask 027
 PATH=/usr/local/bin:/usr/bin:/bin
@@ -179,8 +180,8 @@ open_pr() {
     echo "Implements **$TASK** — $TITLE"; echo
     echo "Opened by **ha2n-coder** (GitHub Copilot CLI, headless on the VM) on Jan's command."
     echo "Local gates (unit tests, validate.py, py_compile on Python 3.12) were green before push;"
-    echo "E2E runs as the \`e2e-pi\` check. The task is left *In Progress*: acceptance criteria are"
-    echo "ticked and the task set Done during review, after \`e2e-pi\` is green."
+    echo "E2E runs as the \`e2e-pi\` check. When all checks are green the coder adds one last commit that"
+    echo "sets the task Done and ticks its criteria; that takes effect when you merge (label manual-close opts out)."
   } > "$DIR/pr-body.md"
   PR_URL="$(ghx pr create -R "$REPO" --base main --head "$BRANCH" --title "$TASK: $TITLE" \
             --body-file "$DIR/pr-body.md" --label agent 2>/dev/null \
@@ -231,8 +232,47 @@ failure_text() {  # public logs of the failed checks (e2e-pi prints only its san
   echo "$f"
 }
 
+close_task() {  # last commit on the PR branch: task Done + criteria ticked. Never fails the run (sets CLOSE_NOTE).
+  # Only called after wait_checks was green, so nothing waits for checks on this commit. Reaches main with Jan's merge.
+  CLOSE_NOTE=""
+  if grep -q '^Labels: .*manual-close' <<<"$HEADER"; then CLOSE_NOTE="label manual-close: task not closed"; return 0; fi
+  if grep -q '^Status: .*Done' <<<"$HEADER"; then CLOSE_NOTE="task is already Done"; return 0; fi
+  cd "$CLONE" || { CLOSE_NOTE="task not closed (no clone): close it by hand"; return 0; }
+  [ "$(git rev-parse --abbrev-ref HEAD)" = "$BRANCH" ] || { CLOSE_NOTE="task not closed (unexpected branch): close it by hand"; return 0; }
+  local before checks summary i
+  local -a acs=()
+  before="$(git rev-parse HEAD)"
+  checks="$(python3 - "$DIR/checks.json" 2>/dev/null <<'PY' || echo "see the PR checks"
+import json, sys
+print(", ".join(f'{x["name"]}={x["bucket"]}' for x in json.load(open(sys.argv[1]))))
+PY
+)"
+  summary="Implemented by the headless coder. Checks green on ${before:0:9} after $ROUND fix round(s): $checks. PR: $PR_URL. Done takes effect when the PR is merged."
+  backlog task view "$TASK" --plain > "$DIR/task-close.txt" 2>&1
+  for i in $(sed -nE 's/^- \[ \] #([0-9]+) .*/\1/p' "$DIR/task-close.txt"); do acs+=(--check-ac "$i"); done
+  if ! backlog task edit "$TASK" -s Done ${acs[@]+"${acs[@]}"} --final-summary "$summary" > "$DIR/close.log" 2>&1; then
+    git reset -q --hard "$before"; git clean -qfd -- backlog
+    CLOSE_NOTE="task not closed (backlog edit failed, see close.log): close it by hand"; return 0
+  fi
+  git add -A
+  git diff --cached --name-only -z | tr '\0' '\n' > "$DIR/close-files.txt"
+  if [ ! -s "$DIR/close-files.txt" ]; then CLOSE_NOTE="task not closed (nothing changed): close it by hand"; return 0; fi
+  if grep -qv '^backlog/' "$DIR/close-files.txt" || grep -qE "$PROTECTED" "$DIR/close-files.txt"; then
+    git reset -q --hard "$before"; git clean -qfd
+    CLOSE_NOTE="task not closed (the edit touched files outside backlog/): close it by hand"; return 0
+  fi
+  if ! git commit -q -m "$TASK: close task (checks green)" \
+       -m "Set by the headless coder after e2e-pi passed. Takes effect when the PR is merged."; then
+    git reset -q --hard "$before"; CLOSE_NOTE="task not closed (commit failed): close it by hand"; return 0
+  fi
+  if ! gitauth push -q origin "$BRANCH"; then
+    git reset -q --hard "$before"; CLOSE_NOTE="task not closed (push failed): close it by hand"; return 0
+  fi
+  CLOSE_NOTE="task set to Done in the PR's last commit (takes effect when merged)"
+}
+
 # ---- 2. implement --------------------------------------------------------------------------
-ROUND=0
+ROUND=0; CLOSE_NOTE=""
 "${SANDBOX[@]}" prepare "$BRANCH" > "$DIR/prepare.log" 2>&1 || stop "sandbox prepare failed (prepare.log)"
 status running "Copilot implementing"
 copilot_round implement.md - "" "implement"
@@ -244,8 +284,9 @@ open_pr
 while :; do
   status running "waiting for PR checks (e2e-pi on the Pi)"
   if wait_checks; then
-    ghx pr comment "$PR_URL" -R "$REPO" --body "✅ All checks green (incl. \`e2e-pi\`) after $ROUND fix round(s). Ready for review — the coder never merges." >/dev/null 2>&1 || true
-    status green "PR ready for review: $PR_URL"; exit 0
+    close_task
+    ghx pr comment "$PR_URL" -R "$REPO" --body "✅ All checks green (incl. \`e2e-pi\`) after $ROUND fix round(s). Ready for review — the coder never merges.${CLOSE_NOTE:+ Task: $CLOSE_NOTE.}" >/dev/null 2>&1 || true
+    status green "PR ready for review: $PR_URL${CLOSE_NOTE:+ — $CLOSE_NOTE}"; exit 0
   fi
   [ "$ROUND" -ge "$CI_ROUNDS" ] && { status failed "checks still red after $CI_ROUNDS fix rounds: $(cut -d' ' -f1 "$DIR/ci-$ROUND.txt" | tr '\n' ' ')"; exit 1; }
   grep -q '^e2e-pi skipping' "$DIR/ci-$ROUND.txt" \

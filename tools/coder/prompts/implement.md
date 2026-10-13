@@ -23,7 +23,7 @@ Headless rules:
 6. Never edit: .github/, e2e/ci/, e2e/scripts/, e2e/run.sh, e2e/nightly.sh, e2e/e2e.sh, e2e/staging/,
    tools/coder/, CLAUDE.md, backlog/config.yml. A change there is rejected and the whole run is lost.
 7. Add implementation notes to the task (`backlog task edit {{TASK_ID}} --append-notes "..."`). Do NOT tick
-   acceptance criteria and do NOT set the task Done — that happens after e2e-pi is green and Jan reviewed.
+   acceptance criteria and do NOT set the task Done — the orchestrator does that in a last commit once e2e-pi is green.
 8. Commit your work on the current branch with messages "{{TASK_ID}}: <what>". Do not push (you cannot).
 9. If the task cannot be done as written (plan does not match the code, missing design decision, untestable
    criterion, dependency not done): do not guess. Write the reason in the task notes, then write a short

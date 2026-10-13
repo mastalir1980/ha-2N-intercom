@@ -158,7 +158,10 @@ Never run `e2e/e2e.sh relays`, `--relays` or `reset-entry` unless Jan asks in th
 
 Copilot executes this list; Claude checks it during review. A task is not done without a green `e2e.sh wip`.
 For headless runs on the VM (`tools/coder/`, TASK-23) the E2E gate is the PR check `e2e-pi` instead of `e2e.sh wip`;
-the coder leaves the task *In Progress* and Claude ticks criteria / sets Done during review once `e2e-pi` is green.
+once the PR checks (incl. `e2e-pi`) are green the coder adds one last commit that sets the task *Done* and ticks its
+criteria; that reaches `main` only when Jan merges. A task with the label `manual-close` is left alone (for work verified
+only after the merge); parent tasks are closed by hand. Claude still reviews the diff against the criteria. For PRs not
+made by the coder the author does the same in the PR's last commit once the checks are green.
 A task is ready for the headless coder when it is *To Do*, assigned `@copilot`, its dependencies are Done and it meets
 the definition of ready above. Its PRs carry the label `agent`; the coder never merges. Changes to `tools/coder/` need
 Jan's review like `.github/` and `e2e/ci/`.
