@@ -1,10 +1,11 @@
 ---
 id: TASK-2.1
 title: 'B1: use tz-aware timestamps in the coordinator instead of naive datetime.now()'
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-12 19:54'
+updated_date: '2026-10-13 12:16'
 labels:
   - tech-debt
   - coordinator
@@ -46,9 +47,15 @@ This is the first task for the headless coder (TASK-23): small, unit-testable, n
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. custom_components/2n_intercom/coordinator.py: replace datetime.now() with dt_util.utcnow() at the four places (:354, :875, :1326, :1537). dt_util is already imported (line 19). Keep 'from datetime import timedelta, datetime' because datetime is used in type hints.
-2. tests/test_coordinator.py: change the ring_active tests (~1537, ~1552) to use datetime.now(timezone.utc); add asserts/tests that _last_ring_time, _ring_pulse_until (after a ring CallStateChanged event, see existing ring tests for how to feed one) and _last_motion_time (after MotionDetected in) have tzinfo not None. tests/_stubs.py already makes dt_util.utcnow() return an aware UTC datetime.
-3. tests/test_binary_sensor.py: add one test per sensor with an aware datetime (datetime(2026, 4, 12, 10, 0, tzinfo=timezone.utc)) asserting the attribute ends with '+00:00'. Leave the existing naive-input tests unchanged.
-4. Do not change: api.py, binary_sensor.py (it already calls isoformat()), diagnostics.py, any e2e/ file, CHANGELOG/version (only release tasks). Architecture rules in CLAUDE.md (event-driven, dual auth) are untouched by this change.
-5. Run: python3 -m unittest discover -s tests -t tests; python3 validate.py; python3 -m py_compile custom_components/2n_intercom/*.py.
+1. coordinator.py: replace datetime.now() with dt_util.utcnow() at the four places (motion :354, ring :875, ring_active compare :1326, snapshot cache :1537). Keep datetime import for type hints.
+2. tests/test_coordinator.py: update ring_active tests to use datetime.now(timezone.utc); add/extend tests asserting _last_ring_time, _ring_pulse_until, _last_motion_time are tz-aware (tzinfo is not None).
+3. tests/test_binary_sensor.py: add tests with aware datetime (timezone.utc) asserting last_ring/last_motion isoformat ends with +00:00; keep existing naive tests.
+4. Run unittest discover, validate.py, py_compile until green.
+5. Record notes, commit, do not tick ACs or set Done.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented: replaced the four naive datetime.now() call sites in coordinator.py (motion :354, ring :875, ring_active compare :1326, snapshot cache :1537) with dt_util.utcnow(); dt_util was already imported, datetime import kept for type hints. grep confirms no datetime.now() remains in custom_components/2n_intercom. Updated tests/test_coordinator.py: test_ring_active_false_when_pulse_expired and test_ring_active_true_within_pulse now use datetime.now(timezone.utc); test_process_call_state_event_sets_ring_and_active_session asserts _last_ring_time.tzinfo and _ring_pulse_until.tzinfo are not None; test_motion_detected_in_event asserts _last_motion_time.tzinfo is not None. Added tests/test_binary_sensor.py::test_doorbell_extra_state_attributes_tz_aware_last_ring and test_motion_sensor_extra_state_attributes_tz_aware asserting the last_ring/last_motion isoformat strings end with +00:00; existing naive-input tests left unchanged. Verified: python3 -m unittest discover -s tests -t tests (565 tests, OK), python3 validate.py (all checks passed), python3 -m py_compile custom_components/2n_intercom/*.py (OK). Did not run e2e.sh per headless rules; e2e-pi PR check will validate on the Pi. Committed on branch task-2.1-b1-use-tz-aware-timestamps-in-the-coordi, not pushed.
+<!-- SECTION:NOTES:END -->

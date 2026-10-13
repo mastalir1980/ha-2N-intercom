@@ -351,7 +351,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         state = str(params.get("state") or "").strip().lower()
         if state == "in":
             self._motion_detected = True
-            self._last_motion_time = datetime.now()
+            self._last_motion_time = dt_util.utcnow()
             return True
         if state == "out":
             self._motion_detected = False
@@ -872,7 +872,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             if not self._ring_detected and self._ring_snapshot_enabled:
                 self.hass.async_create_task(self._async_capture_ring_snapshot())
             self._ring_detected = True
-            self._last_ring_time = datetime.now()
+            self._last_ring_time = dt_util.utcnow()
             self._ring_pulse_until = (
                 self._last_ring_time
                 + timedelta(seconds=DOORBELL_PULSE_DURATION)
@@ -1323,7 +1323,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
                 return False
             if self._ring_pulse_until is None:
                 return False
-            return datetime.now() <= self._ring_pulse_until
+            return dt_util.utcnow() <= self._ring_pulse_until
         return False
 
     @property
@@ -1534,7 +1534,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         """Get camera snapshot with caching to reduce API load."""
         try:
             # Check cache to avoid excessive API calls
-            current_time = datetime.now()
+            current_time = dt_util.utcnow()
             requested_size = (width, height)
 
             if (
