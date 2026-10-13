@@ -3,11 +3,11 @@ id: TASK-27
 title: >-
   Expose IO output ports (except led_secured) as switches controlled via
   /api/io/ctrl
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-13 19:03'
-updated_date: '2026-10-13 19:54'
+updated_date: '2026-10-13 20:39'
 labels:
   - io
   - ha-platform
@@ -64,30 +64,37 @@ Switching `relay1` directly via `/api/io/ctrl` bypasses the timing of the logica
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `api.py` has `async_io_control(port: str, on: bool) -> bool` calling GET `/api/io/ctrl` with params `port=<port>` and `action=on|off`; returns True on `success: true`; on a device error it logs via `parse_device_error` / `log_device_error` at WARNING and returns False; timeout / transport errors handled like `async_switch_control`
-- [ ] #2 Unit tests in `tests/test_api.py` cover: success, device error payload (code + description logged), timeout, and correct query params for on and off
-- [ ] #3 One switch entity is created for each port with type output in io_caps that also exists in io_status; `led_secured` is never created; ports missing from io_status or malformed entries are skipped without error
-- [ ] #4 Output switch entities have `_attr_entity_registry_enabled_default = False`, unique_id `{entry_id}_io_<port>` (port name verbatim, e.g. `{entry_id}_io_modul1.relay1`), translation_key `io_output` with the port name as translation placeholder
-- [ ] #5 `is_on` reflects the port state in `coordinator.io_status` (accepts 1/True/"1"/"on"/"true" like `TwoNIntercomInput1Sensor._is_port_on`); there is no optimistic state and no auto-off timer
-- [ ] #6 turn_on / turn_off call the API, and on success request a coordinator refresh so the state is confirmed by io_status; on failure they raise a translated `HomeAssistantError` (new key in `exceptions` of strings.json + all translations) and the state stays unchanged
-- [ ] #7 `_process_output_changed_event` (and `_process_input_changed_event`) accept state as bool or 0/1 int, normalised to the same representation io_status uses; unit test covers both forms
-- [ ] #8 Existing logical switch entities (`{entry_id}_switch_<n>`), their unique_ids and behaviour are unchanged; existing tests in `tests/test_switch.py` pass unmodified
-- [ ] #9 Unit tests in `tests/test_switch.py`: entity set built from an io_caps fixture with the ports from issue #13 (led_secured excluded, module ports included), disabled by default, state from io_status, turn_on/off call `async_io_control` with the right port, failure raises HomeAssistantError, OutputChanged event updates state
-- [ ] #10 `strings.json`, `translations/en.json`, `translations/de.json`, `translations/cs.json` and `icons.json` updated together; `tests/test_translations.py` passes
-- [ ] #11 E2E read-only (runs in wip / e2e-pi): new test in `e2e/tests/test_10_entities.py` asserts that the set of `{entry_id}_io_<port>` switch unique_ids in the HA entity registry equals the output ports from `/api/io/caps` minus `led_secured`, that each is disabled_by integration by default, and that any enabled one has an HA state equal to `/api/io/status`
-- [ ] #12 E2E physical (marked `@pytest.mark.relay`, skipped by default): new test in `e2e/tests/test_30_relays.py` driven by a new env var `E2E_IO_OUTPUTS` (comma-separated port names, empty = skip, added to `e2e/.env.example` with an empty value) turns the output on via HA, waits for `/api/io/status` to report it on and HA to show on, then turns it off and checks both again
-- [ ] #13 README: output switches listed in the entity section with a clear warning that direct control of a relay bypasses the logical switch timing (door can stay unlocked) and that the API account needs the I/O control privilege; `/api/io/ctrl` added to "2N API Endpoints Used"; `docs/API_REFERENCE.md` table updated
-- [ ] #14 `python3 -m unittest discover -s tests -t tests`, `python3 validate.py` and `bash e2e/e2e.sh wip` (or PR check `e2e-pi`) are green
+- [x] #1 `api.py` has `async_io_control(port: str, on: bool) -> bool` calling GET `/api/io/ctrl` with params `port=<port>` and `action=on|off`; returns True on `success: true`; on a device error it logs via `parse_device_error` / `log_device_error` at WARNING and returns False; timeout / transport errors handled like `async_switch_control`
+- [x] #2 Unit tests in `tests/test_api.py` cover: success, device error payload (code + description logged), timeout, and correct query params for on and off
+- [x] #3 One switch entity is created for each port with type output in io_caps that also exists in io_status; `led_secured` is never created; ports missing from io_status or malformed entries are skipped without error
+- [x] #4 Output switch entities have `_attr_entity_registry_enabled_default = False`, unique_id `{entry_id}_io_<port>` (port name verbatim, e.g. `{entry_id}_io_modul1.relay1`), translation_key `io_output` with the port name as translation placeholder
+- [x] #5 `is_on` reflects the port state in `coordinator.io_status` (accepts 1/True/"1"/"on"/"true" like `TwoNIntercomInput1Sensor._is_port_on`); there is no optimistic state and no auto-off timer
+- [x] #6 turn_on / turn_off call the API, and on success request a coordinator refresh so the state is confirmed by io_status; on failure they raise a translated `HomeAssistantError` (new key in `exceptions` of strings.json + all translations) and the state stays unchanged
+- [x] #7 `_process_output_changed_event` (and `_process_input_changed_event`) accept state as bool or 0/1 int, normalised to the same representation io_status uses; unit test covers both forms
+- [x] #8 Existing logical switch entities (`{entry_id}_switch_<n>`), their unique_ids and behaviour are unchanged; existing tests in `tests/test_switch.py` pass unmodified
+- [x] #9 Unit tests in `tests/test_switch.py`: entity set built from an io_caps fixture with the ports from issue #13 (led_secured excluded, module ports included), disabled by default, state from io_status, turn_on/off call `async_io_control` with the right port, failure raises HomeAssistantError, OutputChanged event updates state
+- [x] #10 `strings.json`, `translations/en.json`, `translations/de.json`, `translations/cs.json` and `icons.json` updated together; `tests/test_translations.py` passes
+- [x] #11 E2E read-only (runs in wip / e2e-pi): new test in `e2e/tests/test_10_entities.py` asserts that the set of `{entry_id}_io_<port>` switch unique_ids in the HA entity registry equals the output ports from `/api/io/caps` minus `led_secured`, that each is disabled_by integration by default, and that any enabled one has an HA state equal to `/api/io/status`
+- [x] #12 E2E physical (marked `@pytest.mark.relay`, skipped by default): new test in `e2e/tests/test_30_relays.py` driven by a new env var `E2E_IO_OUTPUTS` (comma-separated port names, empty = skip, added to `e2e/.env.example` with an empty value) turns the output on via HA, waits for `/api/io/status` to report it on and HA to show on, then turns it off and checks both again
+- [x] #13 README: output switches listed in the entity section with a clear warning that direct control of a relay bypasses the logical switch timing (door can stay unlocked) and that the API account needs the I/O control privilege; `/api/io/ctrl` added to "2N API Endpoints Used"; `docs/API_REFERENCE.md` table updated
+- [x] #14 `python3 -m unittest discover -s tests -t tests`, `python3 validate.py` and `bash e2e/e2e.sh wip` (or PR check `e2e-pi`) are green
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Keep the checked-out task-27-expose-io-output-ports-except-led-secure branch. Add GET /api/io/ctrl through the existing authenticated request path and a coordinator control method with confirmed refresh.
-2. Normalize bool and integer 0/1 input/output log events; reuse the input-state helper for disabled-by-default physical output switches, excluding led_secured and malformed or absent ports. Preserve logical switches and covers.
-3. Update entity names, translated control errors, and icons together. Extend isolated API, coordinator, switch, and translation tests without altering existing logical-switch test cases.
-4. Add independent io_caps E2E client support, read-only registry/state coverage, and explicitly opted-in relay-marked physical output coverage via empty-default E2E_IO_OUTPUTS. Do not contact HA or the intercom from this VM.
-5. Document latching behavior, timing bypass hazards, I/O control privileges, and /api/io/ctrl. Run the full Python 3.12 unit suite, validate.py, and py_compile; leave acceptance criteria unchecked and task In Progress pending e2e-pi. Record implementation notes and commit locally with TASK-27 prefix; do not push.
+1. Branch `task-27-io-output-switches`.
+2. api.py: add `IO_CTRL_PATH = "/api/io/ctrl"` next to `IO_STATUS_PATH`; add `async_io_control(self, port: str, on: bool) -> bool` modelled 1:1 on `async_switch_control` (GET, params `{"port": port, "action": "on" if on else "off"}`, `async_timeout.timeout(API_TIMEOUT)`, `response.raise_for_status()`, success check, `parse_device_error` + `log_device_error(logging.WARNING, ...)`, same except blocks). Call control is GET on 2N - do not use POST. Keep the dual Basic/Digest auth path untouched: always go through `self._async_request`.
+3. coordinator.py: add `async_set_io_output(port: str, on: bool) -> bool` that calls `self.api.async_io_control` and on success calls `await self.async_request_refresh()`. Fix `_process_output_changed_event` and `_process_input_changed_event` to accept `bool` or int 0/1 (`isinstance(state, (bool, int))`), storing the value in the same form io_status uses. Do not change polling interval, ring detection or log subscription logic.
+4. switch.py: add `_io_output_ports(coordinator) -> list[str]` that walks `coordinator.io_caps["ports"]`, keeps entries with `type == "output"`, a string `port`, port != `led_secured` (constant `IO_EXCLUDED_OUTPUTS = {"led_secured"}` in const.py), and present in `coordinator.io_status["ports"]`. In `async_setup_entry`, after the existing `_async_check_relays()` population, add `TwoNIntercomIoOutputSwitch` entities for those ports once (io_caps is static, no dynamic add/remove needed). Do not touch `_get_eligible_caps`, `_switch_unique_id` or `TwoNIntercomSwitch`.
+5. New class `TwoNIntercomIoOutputSwitch(TwoNIntercomEntity, SwitchEntity)` in switch.py: `_attr_translation_key = "io_output"`, `_attr_translation_placeholders = {"port": port}`, `_attr_entity_registry_enabled_default = False`, unique_id `f"{entry_id}_io_{port}"`; `is_on` reads io_status (reuse the truthy set from `TwoNIntercomInput1Sensor._is_port_on`; consider moving that helper to entity.py or a small util so TASK-26 can reuse it); `async_turn_on/off` call `coordinator.async_set_io_output` and raise `HomeAssistantError(translation_domain=DOMAIN, translation_key="io_control_failed", translation_placeholders={"port": port})` on False. `PARALLEL_UPDATES = 1` already applies.
+6. strings.json + translations/en,de,cs: `entity.switch.io_output.name = "Output {port}"` (de: "Ausgang {port}", cs: "Výstup {port}"); `exceptions.io_control_failed.message` ("Failed to switch output {port} on the intercom. Check that the API account has the I/O control privilege." + de/cs). icons.json: `entity.switch.io_output` with `default` mdi:electric-switch, state on mdi:electric-switch-closed.
+7. Unit tests (style of tests/test_switch.py and tests/test_api.py, stubs from tests/_stubs.py, no HA and no network): see acceptance criteria; use the port list from issue #13 as fixture (io_caps with led_secured, relay1, output1, input1, modul1.relay1, modul1.relay2, modul1.input1, modul1.input2, modul1.tamper; io_status with 0/1 states).
+8. e2e: add `io_caps()` to `e2e/e2elib/twon.py` (independent of api.py - do not import the integration). Read-only test in test_10_entities.py (registry vs io_caps outputs minus led_secured, disabled_by == "integration", enabled ones match io_status). Physical test in test_30_relays.py marked `@pytest.mark.relay`, parametrised from `E2E_IO_OUTPUTS` like `E2E_RELAY_NUMBERS`; the e2e harness must never enable this by default. Add `E2E_IO_OUTPUTS=` (empty) to e2e/.env.example.
+9. Docs: README entity list + warning + endpoint table; docs/API_REFERENCE.md row for `/api/io/ctrl` (GET, `async_io_control`, params `port`, `action=on|off`). No version bump / CHANGELOG (release task does that).
+10. Run unit tests, validate.py, py_compile, then `bash e2e/e2e.sh wip` (headless: PR check e2e-pi). Never run `--relays`.
+
+Must not change: dual auth in api.py, entry.data/options split, logical switch entities and their unique_ids, cover.py, ring detection, the E2E client independence.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -99,4 +106,12 @@ Local Python 3.12 gates passed: 580 full-suite unit tests; python3 validate.py; 
 
 E2E coverage is now added without running it: the independent TwoN client reads /api/io/caps; the read-only test compares the exact registry unique-ID set against output capabilities minus led_secured, checks integration-disabled defaults and enabled output state, and explicitly reports missing status ports. The physical roundtrip is relay-marked and additionally gated by empty-default E2E_IO_OUTPUTS; it validates each allowlisted port, requires the output switch to be manually enabled and initially off, and always attempts turn_off with HA/device confirmation in finally. Existing logical relay test bodies and all protected harness files are unchanged. The three edited E2E Python files compile successfully.
 Implementation is ready for the orchestrator to push and run e2e-pi. No push, E2E execution, relay actuation, version bump, or CHANGELOG change was performed. Task status and unchecked acceptance criteria are intentionally retained until that gate is green.
+
+Recovery: the headless coder run 20261013-214615-TASK-27 stopped before push because the patch touched the protected path e2e/.env.example (the task itself asked for that line). Jan applied the unchanged patch by hand in PR #29: code in one commit, the empty E2E_IO_OUTPUTS line plus comments in e2e/.env.example in a separate commit. The coder had replaced the original implementation plan with a shortened one; the original plan is restored here. Review by Claude against all 14 acceptance criteria: no findings. Verification: PR #29 checks validate and e2e-pi green on 9c298a7 (15 passed, 0 failed, 1 skipped; relay-marked tests not run, including the new physical test_io_output_roundtrip); unit suite 580 tests OK, validate.py OK, py_compile OK.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Physical IO output ports from /api/io/caps (except led_secured) are now exposed as disabled-by-default, latching HA switches controlled via GET /api/io/ctrl (new api.async_io_control, coordinator.async_set_io_output), with state from io_status/OutputChanged and a translated error when the device rejects control. InputChanged/OutputChanged accept bool or 0/1. Logical switches unchanged. README warns that direct relay control bypasses logical switch timing and needs the I/O control privilege. Verified by unit tests (580 OK), validate.py, and the e2e-pi PR check (read-only registry vs /api/io/caps test green). The physical roundtrip test (relay-marked, gated by empty E2E_IO_OUTPUTS) was not executed.
+<!-- SECTION:FINAL_SUMMARY:END -->
