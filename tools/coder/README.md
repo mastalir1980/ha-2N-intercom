@@ -47,8 +47,26 @@ sudo bash tools/coder/install-vm.sh hermes   # podruhé: self-check už vidí to
 ```
 
 **Model:** bez nastavení používá Copilot svůj výchozí model. Konkrétní model nastavíš jako root:
-`echo <model-id> | sudo tee /etc/ha2n-coder/model`. Seznam dostupných modelů: `copilot --help` (u volby `--model`).
+`echo <model-id> | sudo tee /etc/ha2n-coder/model`. Seznam ID modelů: `copilot help config` (u klíče `model`). Úroveň reasoningu: `echo high | sudo tee /etc/ha2n-coder/effort`
+(none, minimal, low, medium, high, xhigh, max).
 Pískoviště se před každým během maže, takže model vybraný ručně v Copilotu se neudrží. Platí jen tenhle soubor.
+
+**Cena běhů (AI Credits):** Copilot na konci každého volání vypíše řádky `AI Credits` a `Tokens`
+(proto kodér nepoužívá přepínač `-s`, ten by je potlačil). Po každém volání z nich `ha2n-run-task`
+zapíše jeden řádek do `/var/lib/ha2n-coder/cost.csv`. Soubor zůstává jen na VM, nikdy se nepushuje
+ani nedává do komentářů u PR (repo je veřejné).
+
+| Sloupec | Význam |
+|---|---|
+| `time`, `run`, `task` | kdy, které id běhu, který úkol |
+| `label` | `implement`, `local-fix-N` (opravy po lokálních bránách) nebo `ci-fix-N` (opravy po červených checkách) |
+| `model`, `effort` | co bylo nastaveno v `/etc/ha2n-coder/model` a `/etc/ha2n-coder/effort` (prázdné = výchozí) |
+| `ai_credits`, `duration` | spotřeba a doba, jak je Copilot vypsal |
+| `tokens_in`, `tokens_out` | tokeny; Copilot je zaokrouhluje (14,9k = 14900) |
+
+Ceny jsou v kreditech, přepočet na peníze závisí na tvém tarifu. Když Copilot souhrn nevypíše,
+řádek se zapíše s prázdnými hodnotami a běh pokračuje. Součet za běh: `ha2n-task-status --list`
+(sloupec `cr`) a `ha2n-task-status <run-id>` (rozpis po voláních).
 
 Aktualizace po změně v `tools/coder/`: `git pull` v instalačním klonu a znovu `install-vm.sh`.
 
