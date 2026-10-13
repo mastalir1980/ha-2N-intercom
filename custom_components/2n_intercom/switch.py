@@ -8,6 +8,9 @@ length.
 
 Entities are added and removed dynamically as relays are enabled or
 disabled on the device — no HA restart required.
+
+Physical IO outputs are also discovered at setup, except the status LED.
+These disabled-by-default switches latch until explicitly turned off.
 """
 from __future__ import annotations
 
@@ -20,6 +23,7 @@ from typing import TYPE_CHECKING
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -33,9 +37,10 @@ from .const import (
     DEFAULT_PULSE_DURATION,
     DEVICE_TYPE_GATE,
     DOMAIN,
+    IO_EXCLUDED_OUTPUTS,
 )
 from .coordinator import TwoNIntercomCoordinator, TwoNIntercomRuntimeData
-from .entity import TwoNIntercomEntity
+from .entity import TwoNIntercomEntity, is_io_port_on
 
 if TYPE_CHECKING:
     from .coordinator import TwoNIntercomConfigEntry
@@ -92,6 +97,33 @@ def _build_switch_params(
 def _switch_unique_id(entry_id: str, relay_number: int) -> str:
     """Return the unique_id for a switch entity."""
     return f"{entry_id}_switch_{relay_number}"
+
+
+def _io_output_ports(coordinator: TwoNIntercomCoordinator) -> list[str]:
+    """Return usable physical outputs present in both capabilities and status."""
+    caps_ports = coordinator.io_caps.get("ports")
+    status_ports = coordinator.io_status.get("ports")
+    if not isinstance(caps_ports, list) or not isinstance(status_ports, list):
+        return []
+    available = {
+        port["port"]
+        for port in status_ports
+        if isinstance(port, dict) and isinstance(port.get("port"), str)
+    }
+    outputs: list[str] = []
+    for cap in caps_ports:
+        if not isinstance(cap, dict) or cap.get("type") != "output":
+            continue
+        port = cap.get("port")
+        if (
+            isinstance(port, str)
+            and port
+            and port not in IO_EXCLUDED_OUTPUTS
+            and port in available
+            and port not in outputs
+        ):
+            outputs.append(port)
+    return outputs
 
 
 async def async_setup_entry(
@@ -173,10 +205,58 @@ async def async_setup_entry(
     # Initial population.
     _async_check_relays()
 
+    io_outputs = [
+        TwoNIntercomIoOutputSwitch(coordinator, config_entry, port)
+        for port in _io_output_ports(coordinator)
+    ]
+    if io_outputs:
+        async_add_entities(io_outputs)
+
     # Listen for future coordinator updates to add/remove dynamically.
     config_entry.async_on_unload(
         coordinator.async_add_listener(_async_check_relays)
     )
+
+
+class TwoNIntercomIoOutputSwitch(TwoNIntercomEntity, SwitchEntity):  # type: ignore[misc]
+    """Direct, latching control of a physical IO output."""
+
+    _attr_translation_key = "io_output"
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self,
+        coordinator: TwoNIntercomCoordinator,
+        config_entry: TwoNIntercomConfigEntry,
+        port: str,
+    ) -> None:
+        """Initialize the output switch."""
+        super().__init__(coordinator, config_entry)
+        self._port = port
+        self._attr_unique_id = f"{config_entry.entry_id}_io_{port}"
+        self._attr_translation_placeholders = {"port": port}
+
+    @property
+    def is_on(self) -> bool:
+        """Return the device-confirmed output state."""
+        return is_io_port_on(self.coordinator.io_status, self._port)
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Latch the output on."""
+        await self._async_set_output(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Latch the output off."""
+        await self._async_set_output(False)
+
+    async def _async_set_output(self, on: bool) -> None:
+        """Control the output or surface the device rejection."""
+        if not await self.coordinator.async_set_io_output(self._port, on):
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="io_control_failed",
+                translation_placeholders={"port": self._port},
+            )
 
 
 class TwoNIntercomSwitch(TwoNIntercomEntity, SwitchEntity):  # type: ignore[misc]

@@ -389,7 +389,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             return False
         port = params.get("port")
         state = params.get("state")
-        if port is None or not isinstance(state, bool):
+        if port is None or not isinstance(state, (bool, int)) or state not in (0, 1):
             return False
         port_str = str(port)
         if self._io_status is None:
@@ -398,7 +398,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         ports = self._io_status.get("ports") or []
         for entry in ports:
             if isinstance(entry, dict) and str(entry.get("port")) == port_str:
-                entry["state"] = state
+                entry["state"] = int(state)
                 return True
         return False
 
@@ -411,7 +411,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             return False
         port = params.get("port")
         state = params.get("state")
-        if port is None or not isinstance(state, bool):
+        if port is None or not isinstance(state, (bool, int)) or state not in (0, 1):
             return False
         port_str = str(port)
         if self._io_status is None:
@@ -420,7 +420,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         ports = self._io_status.get("ports") or []
         for entry in ports:
             if isinstance(entry, dict) and str(entry.get("port")) == port_str:
-                entry["state"] = state
+                entry["state"] = int(state)
                 return True
         return False
 
@@ -1496,6 +1496,13 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         if mac:
             info["connections"] = {(_MAC, str(mac))}
         return info
+
+    async def async_set_io_output(self, port: str, on: bool) -> bool:
+        """Set an IO output and refresh its device-confirmed state."""
+        success = await self.api.async_io_control(port, on)
+        if success:
+            await self.async_request_refresh()
+        return success
 
     async def async_trigger_relay(
         self, relay: int, duration: int = 2000

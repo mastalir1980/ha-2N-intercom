@@ -58,6 +58,9 @@ class TwoN:
     def switch_status(self) -> list[dict[str, Any]]:
         return self._get("/api/switch/status").get("switches", [])
 
+    def io_caps(self) -> list[dict[str, Any]]:
+        return self._get("/api/io/caps").get("ports", [])
+
     def io_status(self) -> list[dict[str, Any]]:
         return self._get("/api/io/status").get("ports", [])
 

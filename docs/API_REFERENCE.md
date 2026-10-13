@@ -30,6 +30,7 @@ Basic**, pokud zařízení vrátí `401` s `WWW-Authenticate: Basic`.
 | `/api/switch/ctrl` | GET | `async_switch_control` | `switch`, `action` (on/off/trigger), `duration` |
 | `/api/io/caps` | GET | `async_get_io_caps` | dostupné IO porty |
 | `/api/io/status` | GET | `async_get_io_status` | stav IO portů |
+| `/api/io/ctrl` | GET | `async_io_control` | `port`, `action=on\|off`; latching output control, requires I/O control privilege and bypasses logical-switch timing |
 | `/api/camera/caps` | GET | `async_get_camera_caps` | rozlišení JPEG, zdroje (internal/external) |
 | `/api/camera/snapshot` | GET | `async_get_snapshot` / MJPEG | `source`, `width`, `height`, (`fps` pro MJPEG) |
 | `/api/log/caps` | GET | `async_get_log_caps` | `events` = seznam podporovaných událostí; průnik s přístupovými událostmi |

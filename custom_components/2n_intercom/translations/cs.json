@@ -183,6 +183,11 @@
     }
   },
   "entity": {
+    "switch": {
+      "io_output": {
+        "name": "Výstup {port}"
+      }
+    },
     "binary_sensor": {
       "doorbell": {
         "name": "Zvonek"
@@ -214,6 +219,9 @@
     }
   },
   "exceptions": {
+    "io_control_failed": {
+      "message": "Nepodařilo se přepnout výstup {port} interkomu. Zkontrolujte, zda má API účet oprávnění k ovládání I/O."
+    },
     "no_loaded_entries": {
       "message": "2N Intercom nemá žádné načtené konfigurační záznamy."
     },

@@ -44,6 +44,9 @@ CONF_RELAY_PULSE_DURATION = "relay_pulse_duration"
 DEVICE_TYPE_DOOR = "door"
 DEVICE_TYPE_GATE = "gate"
 
+# Status LED is controlled by the intercom, not by the user.
+IO_EXCLUDED_OUTPUTS = {"led_secured"}
+
 # Protocols
 PROTOCOL_HTTP = "http"
 PROTOCOL_HTTPS = "https"

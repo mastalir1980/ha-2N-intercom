@@ -18,7 +18,7 @@ except ImportError:  # pragma: no cover — test stub compat
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import TwoNIntercomCoordinator, TwoNIntercomRuntimeData
-from .entity import TwoNIntercomEntity
+from .entity import TwoNIntercomEntity, is_io_port_on
 
 if TYPE_CHECKING:
     from .coordinator import TwoNIntercomConfigEntry
@@ -164,13 +164,7 @@ class TwoNIntercomInput1Sensor(TwoNIntercomEntity, BinarySensorEntity):  # type:
 
     @staticmethod
     def _is_port_on(io_status: dict[str, Any]) -> bool:
-        ports = io_status.get("ports") or []
-        for port in ports:
-            if not isinstance(port, dict):
-                continue
-            if port.get("port") == "input1":
-                return port.get("state") in (1, True, "1", "on", "true")
-        return False
+        return is_io_port_on(io_status, "input1")
 
     @property
     def is_on(self) -> bool:

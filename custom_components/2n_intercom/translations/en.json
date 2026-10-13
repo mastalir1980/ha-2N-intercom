@@ -183,6 +183,11 @@
     }
   },
   "entity": {
+    "switch": {
+      "io_output": {
+        "name": "Output {port}"
+      }
+    },
     "binary_sensor": {
       "doorbell": {
         "name": "Doorbell"
@@ -214,6 +219,9 @@
     }
   },
   "exceptions": {
+    "io_control_failed": {
+      "message": "Failed to switch output {port} on the intercom. Check that the API account has the I/O control privilege."
+    },
     "no_loaded_entries": {
       "message": "2N Intercom has no loaded config entries."
     },

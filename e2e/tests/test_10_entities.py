@@ -58,6 +58,62 @@ def test_switch_state_matches_device(ha, registry, entry, twon):
         assert (st == "on") == device.get(number, False), f"relay {number}: HA={st} device={device.get(number)}"
 
 
+def _io_output_entities(registry, entry_id):
+    prefix = f"{entry_id}_io_"
+    return {
+        ent["unique_id"][len(prefix):]: ent
+        for ent in registry
+        if ent.get("unique_id", "").startswith(prefix)
+    }
+
+
+def _io_port_on(port):
+    return port.get("state") in (1, True, "1", "on", "true")
+
+
+def test_io_output_entities_match_device(ha, registry, entry, twon):
+    device = {
+        port["port"]: port
+        for port in twon.io_status()
+        if isinstance(port, dict) and isinstance(port.get("port"), str)
+    }
+    outputs = {
+        cap["port"]
+        for cap in twon.io_caps()
+        if isinstance(cap, dict)
+        and cap.get("type") == "output"
+        and isinstance(cap.get("port"), str)
+        and cap["port"]
+        and cap["port"] != "led_secured"
+    }
+    missing_status = outputs - set(device)
+    entities = _io_output_entities(registry, entry["entry_id"])
+    expected_ids = {f"{entry['entry_id']}_io_{port}" for port in outputs}
+    actual_ids = {ent["unique_id"] for ent in entities.values()}
+    assert actual_ids == expected_ids, (
+        f"HA IO output unique IDs {sorted(actual_ids)} != device outputs {sorted(expected_ids)}; "
+        f"caps outputs absent from /api/io/status: {sorted(missing_status)} "
+        "(integration discovery legitimately requires both caps and status)"
+    )
+    assert not missing_status, (
+        f"caps outputs absent from /api/io/status: {sorted(missing_status)}; "
+        "integration discovery legitimately requires both caps and status"
+    )
+    for port, ent in entities.items():
+        eid = ent["entity_id"]
+        assert eid.startswith("switch."), f"physical output {port} is not a switch: {eid}"
+        disabled_by = ent.get("disabled_by")
+        if disabled_by is not None:
+            assert disabled_by == "integration", (
+                f"{eid}: disabled_by={disabled_by!r}, expected 'integration' for disabled "
+                "physical outputs; a user disable does not verify the integration's default"
+            )
+            continue
+        expected = "on" if _io_port_on(device[port]) else "off"
+        state = ha.state(eid)["state"]
+        assert state == expected, f"IO output {port}: HA={state} device={expected}"
+
+
 def test_sip_registration_matches_device(ha, registry, twon):
     ent = next((e for e in registry if e.get("unique_id", "").endswith("sip_registration")), None)
     if ent is None or ent.get("disabled_by"):

@@ -6,6 +6,7 @@ import asyncio
 import sys
 import types
 import unittest
+from unittest.mock import AsyncMock
 
 from _stubs import (
     CONST_PATH,
@@ -18,6 +19,20 @@ from _stubs import (
 
 def _install_homeassistant_stubs() -> None:
     ensure_package("homeassistant")
+
+    exceptions = types.ModuleType("homeassistant.exceptions")
+
+    class HomeAssistantError(Exception):
+        def __init__(
+            self, *, translation_domain, translation_key, translation_placeholders
+        ) -> None:
+            super().__init__(translation_key)
+            self.translation_domain = translation_domain
+            self.translation_key = translation_key
+            self.translation_placeholders = translation_placeholders
+
+    exceptions.HomeAssistantError = HomeAssistantError
+    sys.modules["homeassistant.exceptions"] = exceptions
 
     switch_module = types.ModuleType("homeassistant.components.switch")
 
@@ -133,6 +148,14 @@ class FakeCoordinator:
     @property
     def switch_status(self):
         return self._switch_status
+
+    @property
+    def io_caps(self):
+        return {}
+
+    @property
+    def io_status(self):
+        return {}
 
     def get_device_info(self, entry_id, name):
         return {"entry_id": entry_id, "name": name}
@@ -442,6 +465,191 @@ class SwitchEntityTests(unittest.IsolatedAsyncioTestCase):
         switch = self._make_switch()
         info = switch._attr_device_info
         self.assertEqual(info["entry_id"], "entry-1")
+
+
+ISSUE_13_IO_PORTS = [
+    ("led_secured", "output"),
+    ("relay1", "output"),
+    ("output1", "output"),
+    ("modul1.relay1", "output"),
+    ("modul1.relay2", "output"),
+    ("input1", "input"),
+    ("modul1.input1", "input"),
+    ("modul1.input2", "input"),
+    ("modul1.tamper", "input"),
+]
+
+
+class IoOutputSwitchTests(unittest.IsolatedAsyncioTestCase):
+    """Physical output discovery, confirmed state, and action failures."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from test_coordinator import load_coordinator_module
+
+        cls.coordinator_module = load_coordinator_module()
+        cls.switch_module = load_switch_module()
+
+    def _make_coordinator(self, success=True):
+        coordinator = self.coordinator_module.TwoNIntercomCoordinator(
+            types.SimpleNamespace(),
+            types.SimpleNamespace(async_io_control=AsyncMock(return_value=success)),
+        )
+        coordinator._io_caps = {
+            "ports": [{"port": port, "type": kind} for port, kind in ISSUE_13_IO_PORTS]
+        }
+        coordinator._io_status = {
+            "ports": [{"port": port, "state": 0} for port, _ in ISSUE_13_IO_PORTS]
+        }
+        coordinator.async_request_refresh = AsyncMock()
+        coordinator.get_device_info = lambda entry_id, name: {
+            "entry_id": entry_id, "name": name
+        }
+        coordinator.listeners = []
+
+        def add_listener(listener):
+            coordinator.listeners.append(listener)
+            return lambda: coordinator.listeners.remove(listener)
+
+        coordinator.async_add_listener = add_listener
+        return coordinator
+
+    def _make_switch(self, coordinator=None, port="modul1.relay1"):
+        if coordinator is None:
+            coordinator = self._make_coordinator()
+        return self.switch_module.TwoNIntercomIoOutputSwitch(
+            coordinator, FakeConfigEntry("entry-1", {"name": "Intercom"}), port
+        )
+
+    async def test_discovers_issue_13_outputs_once_alongside_logical_switch(self):
+        coordinator = self._make_coordinator()
+        coordinator._switch_caps = DEVICE_CAPS_ONE_ENABLED
+        entry = FakeConfigEntry("entry-1", {"name": "Intercom"})
+        entry.runtime_data = types.SimpleNamespace(coordinator=coordinator)
+        added = []
+        await self.switch_module.async_setup_entry(
+            None, entry, lambda entities, update_before_add=False: added.extend(entities)
+        )
+        self.assertEqual(
+            {entity._attr_unique_id for entity in added},
+            {
+                "entry-1_switch_1",
+                "entry-1_io_relay1",
+                "entry-1_io_output1",
+                "entry-1_io_modul1.relay1",
+                "entry-1_io_modul1.relay2",
+            },
+        )
+        for entity in added[1:]:
+            self.assertFalse(entity._attr_entity_registry_enabled_default)
+            self.assertEqual(entity._attr_translation_key, "io_output")
+            self.assertEqual(entity._attr_translation_placeholders, {"port": entity._port})
+        for listener in coordinator.listeners:
+            listener()
+        self.assertEqual(len(added), 5)
+
+    def test_discovery_skips_malformed_missing_and_duplicate_ports(self):
+        coordinator = self._make_coordinator()
+        coordinator._io_caps["ports"].extend([
+            None, "not a port", {},
+            {"type": "output"},
+            {"type": "output", "port": 12},
+            {"type": "output", "port": []},
+            {"type": "output", "port": ""},
+            {"type": "output", "port": "missing"},
+            {"type": "output", "port": "relay1"},
+        ])
+        coordinator._io_status["ports"].extend([None, "invalid", {}, {"port": []}])
+        self.assertEqual(
+            self.switch_module._io_output_ports(coordinator),
+            ["relay1", "output1", "modul1.relay1", "modul1.relay2"],
+        )
+        for ports in (None, 1, "invalid", {}):
+            with self.subTest(ports=ports):
+                coordinator._io_caps = {"ports": ports}
+                self.assertEqual(self.switch_module._io_output_ports(coordinator), [])
+        coordinator._io_caps = {"ports": [{"port": "relay1", "type": "output"}]}
+        for ports in (None, 1, "invalid", {}):
+            with self.subTest(status_ports=ports):
+                coordinator._io_status = {"ports": ports}
+                self.assertEqual(self.switch_module._io_output_ports(coordinator), [])
+
+    def test_state_comes_only_from_matching_io_status(self):
+        coordinator = self._make_coordinator()
+        switch = self._make_switch(coordinator)
+        for state in (1, True, "1", "on", "true"):
+            with self.subTest(state=state):
+                coordinator._io_status = {
+                    "ports": [{"port": "modul1.relay1", "state": state}]
+                }
+                self.assertTrue(switch.is_on)
+        for state in (0, False, "0", "off", "false", None, [], {}):
+            with self.subTest(state=state):
+                coordinator._io_status["ports"][0]["state"] = state
+                self.assertFalse(switch.is_on)
+        for ports in (None, 1, {}, [None, {}, {"port": "relay1", "state": 1}]):
+            with self.subTest(ports=ports):
+                coordinator._io_status = {"ports": ports}
+                self.assertFalse(switch.is_on)
+
+    async def test_turn_on_off_use_api_and_refresh_without_optimistic_state(self):
+        coordinator = self._make_coordinator()
+        switch = self._make_switch(coordinator)
+        await switch.async_turn_on()
+        coordinator.api.async_io_control.assert_awaited_once_with("modul1.relay1", True)
+        coordinator.async_request_refresh.assert_awaited_once_with()
+        self.assertFalse(switch.is_on)
+        self.assertFalse(hasattr(switch, "_turning_off_task"))
+
+        coordinator._io_status["ports"][3]["state"] = 1
+        self.assertTrue(switch.is_on)
+        coordinator.api.async_io_control.reset_mock()
+        coordinator.async_request_refresh.reset_mock()
+        await switch.async_turn_off()
+        coordinator.api.async_io_control.assert_awaited_once_with("modul1.relay1", False)
+        coordinator.async_request_refresh.assert_awaited_once_with()
+        self.assertTrue(switch.is_on)
+
+    async def test_success_reads_refreshed_device_state(self):
+        coordinator = self._make_coordinator()
+        switch = self._make_switch(coordinator)
+
+        async def refresh():
+            coordinator._io_status = {
+                "ports": [{"port": "modul1.relay1", "state": 1}]
+            }
+
+        coordinator.async_request_refresh = AsyncMock(side_effect=refresh)
+        await switch.async_turn_on()
+        self.assertTrue(switch.is_on)
+
+    async def test_failures_raise_translated_error_and_keep_state(self):
+        for on in (True, False):
+            with self.subTest(on=on):
+                coordinator = self._make_coordinator(success=False)
+                coordinator._io_status["ports"][3]["state"] = int(not on)
+                switch = self._make_switch(coordinator)
+                action = switch.async_turn_on if on else switch.async_turn_off
+                with self.assertRaises(self.switch_module.HomeAssistantError) as caught:
+                    await action()
+                error = caught.exception
+                self.assertEqual(error.translation_domain, "2n_intercom")
+                self.assertEqual(error.translation_key, "io_control_failed")
+                self.assertEqual(error.translation_placeholders, {"port": "modul1.relay1"})
+                coordinator.api.async_io_control.assert_awaited_once_with("modul1.relay1", on)
+                coordinator.async_request_refresh.assert_not_awaited()
+                self.assertIs(switch.is_on, not on)
+
+    def test_output_changed_event_updates_switch_state(self):
+        coordinator = self._make_coordinator()
+        switch = self._make_switch(coordinator)
+        for state in (True, False, 1, 0):
+            with self.subTest(state=state):
+                self.assertTrue(coordinator._process_log_event({
+                    "event": "OutputChanged",
+                    "params": {"port": "modul1.relay1", "state": state},
+                }))
+                self.assertIs(switch.is_on, bool(state))
 
 
 if __name__ == "__main__":

@@ -40,6 +40,7 @@ SWITCH_CAPS_PATH = "/api/switch/caps"
 SWITCH_STATUS_PATH = "/api/switch/status"
 IO_CAPS_PATH = "/api/io/caps"
 IO_STATUS_PATH = "/api/io/status"
+IO_CTRL_PATH = "/api/io/ctrl"
 LOG_CAPS_PATH = "/api/log/caps"
 GRANT_ACCESS_PATH = "/api/accesspoint/grantaccess"
 RTSP_PROBE_TIMEOUT = 3
@@ -1811,6 +1812,40 @@ class TwoNIntercomAPI:
         )
         self._camera_transport_resolved = resolved
         return self._camera_transport_info
+
+    async def async_io_control(self, port: str, on: bool) -> bool:
+        """Set a physical IO output without logical-switch timing."""
+        params = {"port": port, "action": "on" if on else "off"}
+        try:
+            async with async_timeout.timeout(API_TIMEOUT):
+                async with self._async_request(
+                    "GET", IO_CTRL_PATH, params=params
+                ) as response:
+                    response.raise_for_status()
+                    data = await response.json()
+
+            if isinstance(data, dict) and data.get("success", False):
+                return True
+
+            error = parse_device_error(data)
+            if error is not None:
+                log_device_error(
+                    logging.WARNING,
+                    f"io control port={port} action={params['action']}",
+                    IO_CTRL_PATH,
+                    params,
+                    error,
+                )
+            return False
+        except asyncio.TimeoutError as err:
+            _LOGGER.warning("2N io control port=%s timed out: %s", port, err)
+            return False
+        except aiohttp.ClientError as err:
+            _LOGGER.warning("2N io control port=%s transport error: %s", port, err)
+            return False
+        except Exception as err:
+            _LOGGER.error("2N io control port=%s unexpected error: %s", port, err)
+            return False
 
     async def async_switch_control(
         self, relay: int, action: str = "on", duration: int = 0

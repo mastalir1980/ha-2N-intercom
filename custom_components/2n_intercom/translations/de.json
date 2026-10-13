@@ -183,6 +183,11 @@
     }
   },
   "entity": {
+    "switch": {
+      "io_output": {
+        "name": "Ausgang {port}"
+      }
+    },
     "binary_sensor": {
       "doorbell": {
         "name": "Klingel"
@@ -214,6 +219,9 @@
     }
   },
   "exceptions": {
+    "io_control_failed": {
+      "message": "Ausgang {port} der Gegensprechanlage konnte nicht geschaltet werden. Prüfen Sie, ob das API-Konto die Berechtigung zur I/O-Steuerung hat."
+    },
     "no_loaded_entries": {
       "message": "2N Gegensprechanlage hat keine geladenen Konfigurationseinträge."
     },
