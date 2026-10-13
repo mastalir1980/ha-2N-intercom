@@ -63,10 +63,13 @@ case "${1:-}" in
     cd "$SRC" || exit 1
     rm -f .agent-stop
     # Clean environment: only what Copilot needs. No repo token exists for this user at all.
+    # No -s (silent): with it Copilot prints nothing but the answer, and run-task.sh needs the
+    # "AI Credits" / "Tokens" summary at the end of the output to log the cost (cost.csv).
+    # Keep env/timeout/copilot one command: a comment inside the line continuation would split it
+    # and run copilot outside `env -i`, i.e. without COPILOT_GITHUB_TOKEN.
     env -i HOME="$HOME" PATH="$PATH" LANG=C.UTF-8 TERM=dumb \
       COPILOT_GITHUB_TOKEN="$(cat "$COPILOT_TOKEN_FILE")" \
-      timeout "${COPILOT_TIMEOUT:-50m}" # No -s (silent): with it Copilot prints nothing but the answer, and run-task.sh needs the
-      # "AI Credits" / "Tokens" summary at the end of the output to log the cost (cost.csv).
+      timeout "${COPILOT_TIMEOUT:-50m}" \
       copilot -p "$(cat "$WORK/prompt.md")" --no-ask-user "${MODEL_ARGS[@]}" \
         --allow-all-tools --deny-tool 'shell(git push)' --deny-tool 'shell(gh)' --deny-tool 'url'
     rc=$?
