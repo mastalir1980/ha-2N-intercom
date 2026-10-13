@@ -1,5 +1,13 @@
 {
   "entity": {
+    "switch": {
+      "io_output": {
+        "default": "mdi:electric-switch",
+        "state": {
+          "on": "mdi:electric-switch-closed"
+        }
+      }
+    },
     "binary_sensor": {
       "doorbell": {
         "default": "mdi:doorbell"

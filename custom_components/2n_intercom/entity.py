@@ -8,7 +8,7 @@ already pulls in everything we need (see ``camera.py``).
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -16,6 +16,17 @@ from .coordinator import TwoNIntercomCoordinator
 
 if TYPE_CHECKING:
     from .coordinator import TwoNIntercomConfigEntry
+
+
+def is_io_port_on(io_status: dict[str, Any], port_name: str) -> bool:
+    """Read a physical port state using the device's supported encodings."""
+    ports = io_status.get("ports")
+    if not isinstance(ports, list):
+        return False
+    for port in ports:
+        if isinstance(port, dict) and port.get("port") == port_name:
+            return port.get("state") in (1, True, "1", "on", "true")
+    return False
 
 
 class TwoNIntercomEntity(CoordinatorEntity[TwoNIntercomCoordinator]):  # type: ignore[misc]

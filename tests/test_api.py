@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 import logging
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from _stubs import (
     API_PATH,
@@ -658,6 +658,70 @@ class CallControlApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("code=11", joined)
         self.assertIn("param='switch'", joined)
         self.assertIn("missing mandatory parameter", joined)
+
+    async def test_io_control_sends_on_and_off_query_params(self) -> None:
+        for on, action in ((True, "on"), (False, "off")):
+            with self.subTest(on=on):
+                api = self._make_api()
+                self.assertTrue(await api.async_io_control("modul1.relay1", on))
+                self.assertEqual(
+                    api.requests,
+                    [{
+                        "method": "GET",
+                        "path": "/api/io/ctrl",
+                        "params": {"port": "modul1.relay1", "action": action},
+                        "json_data": None,
+                        "headers": None,
+                    }],
+                )
+
+    async def test_io_control_logs_device_error_at_warning(self) -> None:
+        api = self._make_api({
+            "success": False,
+            "error": {
+                "code": 11,
+                "description": "missing mandatory parameter",
+                "param": "port",
+            },
+        })
+        with self.assertLogs(
+            "custom_components.2n_intercom.api", level="WARNING"
+        ) as captured:
+            self.assertFalse(await api.async_io_control("output1", True))
+        self.assertEqual(len(captured.records), 1)
+        self.assertEqual(captured.records[0].levelno, logging.WARNING)
+        message = captured.output[0]
+        for expected in (
+            "/api/io/ctrl", "port=output1", "action=on", "code=11",
+            "missing mandatory parameter", "param='port'",
+        ):
+            self.assertIn(expected, message)
+
+    async def test_io_control_timeout_and_transport_errors(self) -> None:
+        errors = (
+            (TimeoutError("timed out"), "timed out"),
+            (self.api_module.aiohttp.ClientError("HTTP 401"), "transport error"),
+        )
+        for error, expected in errors:
+            with self.subTest(error=error):
+                api = self._make_api()
+                api.response.raise_for_status = Mock(side_effect=error)
+                with self.assertLogs(
+                    "custom_components.2n_intercom.api", level="WARNING"
+                ) as captured:
+                    self.assertFalse(await api.async_io_control("output1", False))
+                self.assertIn(expected, captured.output[0])
+                self.assertEqual(captured.records[0].levelno, logging.WARNING)
+                api.response.raise_for_status.assert_called_once_with()
+
+    async def test_io_control_unexpected_error_is_logged(self) -> None:
+        api = self._make_api()
+        api.response.raise_for_status = Mock(side_effect=ValueError("bad response"))
+        with self.assertLogs(
+            "custom_components.2n_intercom.api", level="ERROR"
+        ) as captured:
+            self.assertFalse(await api.async_io_control("output1", True))
+        self.assertIn("unexpected error", captured.output[0])
 
     async def test_get_phone_status_returns_result_payload(self) -> None:
         api = self._make_api(

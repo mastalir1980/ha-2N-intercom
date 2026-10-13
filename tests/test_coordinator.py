@@ -1819,6 +1819,41 @@ class SnapshotTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(captured["source"], "external")
 
 
+class IoOutputControlTests(unittest.IsolatedAsyncioTestCase):
+    """IO writes refresh only after success, without optimistic state."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.coordinator_module = load_coordinator_module()
+
+    async def test_control_refreshes_only_after_success(self) -> None:
+        for success in (True, False):
+            for on in (True, False):
+                with self.subTest(success=success, on=on):
+                    api = types.SimpleNamespace(
+                        async_io_control=AsyncMock(return_value=success),
+                    )
+                    coordinator = self.coordinator_module.TwoNIntercomCoordinator(
+                        types.SimpleNamespace(), api
+                    )
+                    coordinator._io_status = {
+                        "ports": [{"port": "modul1.relay1", "state": 0}]
+                    }
+                    coordinator.async_request_refresh = AsyncMock()
+                    result = await coordinator.async_set_io_output(
+                        "modul1.relay1", on
+                    )
+                    self.assertIs(result, success)
+                    api.async_io_control.assert_awaited_once_with("modul1.relay1", on)
+                    if success:
+                        coordinator.async_request_refresh.assert_awaited_once_with()
+                    else:
+                        coordinator.async_request_refresh.assert_not_awaited()
+                    self.assertEqual(
+                        coordinator.io_status["ports"][0]["state"], 0
+                    )
+
+
 class NormalizePeerTests(unittest.TestCase):
     """Tests for _normalize_peer."""
 
@@ -1943,6 +1978,37 @@ class EventDrivenHandlerTests(unittest.IsolatedAsyncioTestCase):
         c._io_status = None
         result = c._process_output_changed_event({"port": "relay1", "state": True})
         self.assertFalse(result)
+
+    def test_io_events_normalize_bool_and_binary_int_states(self) -> None:
+        for handler_name in (
+            "_process_input_changed_event", "_process_output_changed_event"
+        ):
+            for state in (True, False, 1, 0):
+                with self.subTest(handler=handler_name, state=state):
+                    c = self._make_coordinator()
+                    c._io_status = {
+                        "ports": [{"port": "modul1.relay1", "state": 1 - int(state)}]
+                    }
+                    handler = getattr(c, handler_name)
+                    self.assertTrue(handler({"port": "modul1.relay1", "state": state}))
+                    stored_state = c.io_status["ports"][0]["state"]
+                    self.assertEqual(stored_state, int(state))
+                    self.assertIs(type(stored_state), int)
+
+    def test_io_events_reject_invalid_states_without_mutation(self) -> None:
+        for handler_name in (
+            "_process_input_changed_event", "_process_output_changed_event"
+        ):
+            c = self._make_coordinator()
+            c._io_status = {"ports": [{"port": "relay1", "state": 0}]}
+            handler = getattr(c, handler_name)
+            for state in (None, "1", "on", 2, -1, 1.0, [], {}):
+                with self.subTest(handler=handler_name, state=state):
+                    self.assertFalse(handler({"port": "relay1", "state": state}))
+                    self.assertEqual(c.io_status["ports"][0]["state"], 0)
+            self.assertFalse(handler("not a dict"))
+            self.assertFalse(handler({"state": True}))
+            self.assertFalse(handler({"port": "unknown", "state": True}))
 
     # --- RegistrationStateChanged ---
 

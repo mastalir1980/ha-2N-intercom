@@ -235,7 +235,29 @@ Resulting entities:
 - `sensor.home_intercom_sip_registration`
 - `sensor.home_intercom_call_state` *(attribute: `active_session_id`)*
 - `switch.home_intercom_front_door`
+- `switch.home_intercom_output_relay1`, `switch.home_intercom_output_output1` *(physical outputs, disabled by default; actual ports depend on the device and extension modules)*
 - `cover.home_intercom_driveway_gate`
+
+### Direct IO output switches
+
+Each physical port with type `output` in `/api/io/caps` and present in
+`/api/io/status` gets a switch, including module ports such as `modul1.relay1`.
+The intercom's status LED (`led_secured`) is excluded. These switches are
+**disabled by default**; enable only the outputs you need in the entity settings.
+Their states come from `OutputChanged` events, with polling as a safety net.
+They are **latching**, not pulses: turning an output on leaves it on until you
+turn it off. There is no automatic turn-off timer.
+
+**Warning: direct relay control bypasses the logical switch timing.** Turning
+on a physical door relay such as `relay1` can leave the door **unlocked until
+someone turns the output off**, even if the logical relay switch is configured
+for a short pulse. A direct output switch is exposed even when a logical switch
+or gate cover already controls that same relay. Prefer the existing logical
+switch/cover for normal timed door or gate opening.
+
+The API account must have the **I/O control privilege** in the intercom's
+HTTP API settings. Without it, output control raises an error in Home Assistant;
+the device rejection is also logged with its code and description.
 
 ## Services
 
@@ -316,7 +338,8 @@ The integration negotiates Basic vs Digest per request — see the **Authenticat
 | `/api/dir/query` | Ringing-account peers, grant-access users, user names for access events |
 | `/api/accesspoint/grantaccess` | `grant_access` service backend |
 | `/api/switch/caps`, `/api/switch/status`, `/api/switch/ctrl` | Relay control + cached state |
-| `/api/io/caps`, `/api/io/status` | Cached input state |
+| `/api/io/caps`, `/api/io/status` | Physical input/output discovery + cached state |
+| `/api/io/ctrl` | Direct latching output control (requires I/O control privilege) |
 | `/api/phone/status` | SIP registration sensor |
 | `/api/camera/caps` | Discover MJPEG capability + resolutions |
 | `/api/camera/snapshot` (with/without `fps`) | JPEG snapshot + MJPEG live view |

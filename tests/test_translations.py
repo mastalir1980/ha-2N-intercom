@@ -92,6 +92,22 @@ class TranslationConsistencyTests(unittest.TestCase):
         self.assertEqual(icons["services"]["grant_access"], "mdi:door-open")
         self.assertEqual(set(icons["services"]), set(self.strings["services"]))
 
+    def test_io_output_names_errors_and_icons(self) -> None:
+        for lang, data in self.languages.items():
+            with self.subTest(lang=lang):
+                self.assertEqual(
+                    set(re.findall(r"\{(\w+)\}", data["entity"]["switch"]["io_output"]["name"])),
+                    {"port"},
+                )
+                self.assertIn("io_control_failed", data["exceptions"])
+        self.assertEqual(
+            _load("icons.json")["entity"]["switch"]["io_output"],
+            {
+                "default": "mdi:electric-switch",
+                "state": {"on": "mdi:electric-switch-closed"},
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
