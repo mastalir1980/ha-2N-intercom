@@ -66,8 +66,8 @@ nobody can answer questions, so stop with a `.agent-stop` file instead of guessi
 Assistant or the intercom, so **do not run `e2e/e2e.sh`** — E2E runs on the Pi as the PR check `e2e-pi` after the
 orchestrator pushes; you cannot push (no token) and must not edit `.github/`, `e2e/ci/`, `e2e/scripts/`,
 `e2e/run.sh`, `e2e/nightly.sh`, `e2e/e2e.sh`, `e2e/staging/`, `tools/coder/`, `CLAUDE.md` or `backlog/config.yml`
-(the patch is rejected). Leave the task *In Progress*; criteria are ticked and Done set during review after
-`e2e-pi` is green. Commit your work locally with `TASK-<id>: …` messages.
+(the patch is rejected). Do not tick criteria or set Done: once the PR checks incl. `e2e-pi` are green the orchestrator
+adds one last commit that does it (takes effect when Jan merges; label `manual-close` opts out). Commit your work locally with `TASK-<id>: …` messages.
 
 ## Working with the backlog
 
@@ -79,7 +79,8 @@ orchestrator pushes; you cannot push (no token) and must not edit `.github/`, `e
 - **One task per branch/PR**, branch name `task-<id>-short-slug`.
 - **Respect `dependencies`** in the task frontmatter — do not start a task whose dependencies are not Done.
 - When done: tick the acceptance criteria, add a short final summary, set status `Done` (via CLI) —
-  only after the full definition of done below, including a green `e2e.sh wip`.
+  only after the full definition of done below, including a green `e2e.sh wip`. Put this in the PR's last commit so
+  that the merge closes the task (not for tasks labelled `manual-close`; parent tasks are closed by hand).
 - Bugs found by E2E carry type `bug` and label `e2e`; they include the report path and evidence.
 
 ## Validation / definition of done — run all of these before calling a task done
