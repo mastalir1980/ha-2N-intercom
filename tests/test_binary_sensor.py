@@ -336,6 +336,27 @@ class BinarySensorPlatformTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(attrs["call_state"], "ringing")
         self.assertEqual(attrs["call_direction"], "incoming")
 
+    def test_doorbell_extra_state_attributes_tz_aware_last_ring(self) -> None:
+        binary_sensor_module = self.binary_sensor_module
+        from datetime import datetime, timezone
+
+        coordinator = FakeCoordinator()
+        coordinator.ring_active = True
+        coordinator.last_ring_time = datetime(2026, 4, 12, 10, 0, tzinfo=timezone.utc)
+        coordinator.called_peer = None
+        coordinator.caller_info = {}
+        coordinator.data = types.SimpleNamespace(
+            call_status={"direction": "incoming"},
+        )
+        coordinator.call_state = "ringing"
+
+        entity = binary_sensor_module.TwoNIntercomDoorbell(
+            coordinator,
+            FakeConfigEntry("entry-1", {"name": "Door"}),
+        )
+        attrs = entity.extra_state_attributes
+        self.assertTrue(attrs["last_ring"].endswith("+00:00"))
+
     def test_doorbell_extra_state_attributes_empty(self) -> None:
         binary_sensor_module = self.binary_sensor_module
         coordinator = FakeCoordinator()
@@ -554,6 +575,18 @@ class BinarySensorPlatformTests(unittest.IsolatedAsyncioTestCase):
         attrs = entity.extra_state_attributes
         self.assertIn("last_motion", attrs)
         self.assertEqual(attrs["last_motion"], "2026-04-12T14:30:00")
+
+    def test_motion_sensor_extra_state_attributes_tz_aware(self) -> None:
+        from datetime import datetime, timezone
+        binary_sensor_module = self.binary_sensor_module
+        coordinator = FakeCoordinator()
+        coordinator.last_motion_time = datetime(2026, 4, 12, 14, 30, 0, tzinfo=timezone.utc)
+        entity = binary_sensor_module.TwoNIntercomMotionSensor(
+            coordinator,
+            FakeConfigEntry("entry-1", {"name": "Door"}),
+        )
+        attrs = entity.extra_state_attributes
+        self.assertTrue(attrs["last_motion"].endswith("+00:00"))
 
     def test_motion_sensor_extra_state_attributes_empty(self) -> None:
         binary_sensor_module = self.binary_sensor_module

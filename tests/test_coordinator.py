@@ -291,6 +291,8 @@ class TwoNIntercomCoordinatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(coordinator.called_peer, "100")
         self.assertEqual(coordinator.call_state, "ringing")
         self.assertTrue(coordinator.ring_active)
+        self.assertIsNotNone(coordinator._last_ring_time.tzinfo)
+        self.assertIsNotNone(coordinator._ring_pulse_until.tzinfo)
 
     async def test_process_call_state_event_clears_ring_and_session_on_terminated(self) -> None:
         coordinator_module = self.coordinator_module
@@ -706,6 +708,7 @@ class ProcessLogEventEdgeCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result)
         self.assertTrue(c._motion_detected)
         self.assertIsNotNone(c._last_motion_time)
+        self.assertIsNotNone(c._last_motion_time.tzinfo)
 
     def test_motion_detected_out_event(self) -> None:
         c = self._make_coordinator()
@@ -1523,7 +1526,7 @@ class PropertyTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(c.ring_active)
 
     def test_ring_active_false_when_pulse_expired(self) -> None:
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
         hass = types.SimpleNamespace()
         api = types.SimpleNamespace()
@@ -1534,11 +1537,11 @@ class PropertyTests(unittest.IsolatedAsyncioTestCase):
             switch_caps={}, switch_status={}, io_caps={}, io_status={},
         )
         c._ring_detected = True
-        c._ring_pulse_until = datetime.now() - timedelta(seconds=10)
+        c._ring_pulse_until = datetime.now(timezone.utc) - timedelta(seconds=10)
         self.assertFalse(c.ring_active)
 
     def test_ring_active_true_within_pulse(self) -> None:
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
         hass = types.SimpleNamespace()
         api = types.SimpleNamespace()
@@ -1549,7 +1552,7 @@ class PropertyTests(unittest.IsolatedAsyncioTestCase):
             switch_caps={}, switch_status={}, io_caps={}, io_status={},
         )
         c._ring_detected = True
-        c._ring_pulse_until = datetime.now() + timedelta(seconds=10)
+        c._ring_pulse_until = datetime.now(timezone.utc) + timedelta(seconds=10)
         self.assertTrue(c.ring_active)
 
     def test_ring_active_false_when_pulse_none(self) -> None:
