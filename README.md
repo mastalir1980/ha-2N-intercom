@@ -14,6 +14,8 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 | **2N IP Force** | 2.50.x | **Expected to work** | Same HTTP API family |
 | **2N IP Safety** | 2.50.x | **Untested** | Same API but may lack camera |
 | **2N IP Audio** | 2.50.x | **Untested** | No camera module |
+| **Control4 DS2 Door Station** | — | **Community-reported** | Rebranded 2N IP Verso. Credentials are set by the Control4 installer, see [Control4 DS2 / DS2 Mini](#control4-ds2--ds2-mini-door-stations) |
+| **Control4 DS2 Mini Door Station** | — | **Community-reported** | Rebranded 2N IP Solo. Same as the DS2 |
 | Older 2N devices | < 2.40 | **Not supported** | Different API surface |
 | Non-2N intercoms | — | **Not supported** | 2N HTTP API only |
 
@@ -96,6 +98,19 @@ reauth instead of leaving the integration in an endless setup-retry loop.
 Session recovery preserves Home Assistant's shared HTTP connector.
 
 The same username and password must work for every service group the integration touches. **Don't try to "simplify" `_async_request`** by hard-coding one scheme — the dual-auth path exists exactly because the device exposes the choice per service group.
+
+#### Control4 DS2 / DS2 Mini door stations
+
+The Control4 **DS2 Door Station** (rebranded 2N IP Verso) and **DS2 Mini Door Station** (rebranded IP Solo) use the same `/api/` HTTP API and the same 2N web UI. The difference is that the Control4 installer sets up the accounts (web UI admin and HTTP API user) during installation, and owners usually know neither password.
+
+To get the HTTP API credentials:
+
+- Ask your Control4 dealer for the door station's HTTP API username and password, or
+- If you have access to **Composer Pro**: select the door station's driver, open its **Properties** tab and expand **Advanced**. The HTTP API username and password are shown there.
+
+Once you can log in to the 2N web UI, the account is visible and manageable there like on any 2N device (**Services → HTTP API → Account**). Use those credentials, together with the door station's IP address, in the setup flow.
+
+On Control4 installs some physical I/O (call button, relay outputs) may be wired into Control4's own hardware instead of being driven by the 2N board. See [Known Limitations](#known-limitations).
 
 #### RTSP authentication
 
@@ -371,6 +386,8 @@ The integration uses two data channels:
 - **No gate position feedback** — the IP Verso has no gate-position sensor; cover entities use optimistic state transitions
 - **Single camera source** — only one camera source (internal or external) can be active per config entry
 - **Firmware < 2.40 unsupported** — older firmware versions use a different API surface
+- **Control4 DS2 / DS2 Mini: relays may not switch** — on some Control4 installs a relay command succeeds at the API level (the station even shows the door-open icon) but nothing switches, because the lock or gate is wired to Control4 hardware rather than to the 2N relay. The 2N HTTP API cannot see or control that wiring ([#10](https://github.com/mastalir1980/ha-2N-intercom/issues/10))
+- **Control4 DS2 / DS2 Mini: false doorbell rings** — when Control4 (or another SIP client) calls *into* the door station, for example a page or intercom call, the doorbell binary sensor currently turns on as if a visitor rang ([#10](https://github.com/mastalir1980/ha-2N-intercom/issues/10))
 
 ## Troubleshooting
 
