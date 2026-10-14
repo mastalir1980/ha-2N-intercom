@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-11 18:43'
-updated_date: '2026-10-11 19:47'
+updated_date: '2026-10-12 13:58'
 labels:
   - config-flow
   - ux
@@ -50,17 +50,28 @@ Facts for the help text (from README "RTSP authentication" and docs/API_REFERENC
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Rewrite RTSP username/password help texts: fields are optional, used only for the RTSP (H.264) stream, account is created on the intercom under Services -> Streaming -> RTSP Server -> User Database, the HTTP API account does not work there, empty means MJPEG is used.
-2. Options device-step description tells the user that IP address, port and API credentials are changed via the integration card menu -> Reconfigure.
-3. Label credentials in the user, reconfigure and reauth_confirm steps as 'API username'/'API password' with help text naming the intercom web UI section (Services -> HTTP API -> Accounts); add the currently missing reauth_confirm step strings.
-4. RTSP password field becomes a password-type TextSelector with no suggested_value, so the stored password is never shown in clear text; empty on submit keeps the stored password, and emptying the username removes the whole RTSP credential pair (clearing path, documented in help text).
-5. Connection identity stays in entry.data; nothing added to the options flow (existing test guards this).
-6. Update strings.json and translations/{en,de,cs}.json with reviewed Czech and German; README options table and RTSP section updated to match.
-7. Unit tests for password masking and keep/clear behaviour; full unit suite, validate.py and e2e wip run green.
+Remaining work only (code is already on main; no integration code change is expected):
+1. Read 'backlog instructions task-execution' and 'task-finalization'.
+2. Get E2E evidence on current origin/main (c28e833 or later), read-only, NO relays:
+   - First check the latest report on the Pi (the TASK-21 run on origin/main that Jan confirmed green): if its deployed_sha is c28e833+ and pytest.log shows test_40_options_flow.py (incl. the rtsp_password masking assertions) and test_00_setup.py::test_no_integration_errors_in_log passed, use it as evidence.
+   - Otherwise run 'bash e2e/e2e.sh run --ref origin/main' from the main working tree.
+3. If test_no_integration_errors_in_log fails because the config-flow protocol auto-detection logs ERROR lines (verified-HTTPS probe against the self-signed cert), do NOT fix it inside TASK-15: triage it as a separate bug per e2e/agent/triage.md (type bug, label e2e) and tell Jan; TASK-15 then stays In Progress.
+4. If the run is green: append the report id, deployed_sha and test counts to the notes, check AC #7, write the final summary, set status Done.
+5. Commit only the backlog change on branch task-15-finalize; Jan merges. Do not run relay tests, reset-entry, or touch production HA (8123).
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented on branch task-14-15-options-flow-ux (commit 6ac5ad2). RTSP password is a password-type TextSelector, never pre-filled; empty on submit keeps the stored password, clearing the username removes the credential pair. Unit evidence: OptionsFlowRtspCredentialsTests (5 tests: masking, keep, replace, clear, stays-empty) — 467 tests green, validate.py green. E2E test_40 additionally asserts the password selector type and no suggested_value on real HA (passed 21:37). AC#7 pending: a full e2e wip run is not yet green end-to-end because a parallel session (branch task-4-8-9-access-control-ring-snapshot) shares this checkout and the staging HA — it switched the checkout mid-run (wrong ref deployed) and its config-flow runs leave expected auto-detect ERROR lines (verified-HTTPS rung against a self-signed cert) that fail test_no_integration_errors_in_log in fresh-bootstrap windows. Not caused by this change; needs one clean wip run after the parallel session settles.
+
+2026-10-12 status (Claude): the implementation is merged into main (e36c496, TASK-21.4); the parallel-session problem from the note above no longer applies (single checkout, branches consolidated). Verified on main c28e833 with Python 3.12.15: full unit suite 563 OK incl. all 5 OptionsFlowRtspCredentialsTests, validate.py OK. ACs 1-6 stay checked. Only AC #7's E2E part is open: one clean E2E run on current main with evidence recorded. Side finding, not part of this task: running tests/test_config_flow.py on its own (unittest -k OptionsFlowRtspCredentialsTests) fails with ModuleNotFoundError for custom_components.2n_intercom.coordinator; it only passes inside the full discover run (import-order dependency on _stubs).
+
+2026-10-12 finalization attempt (Copilot): current HEAD and origin/main are c28e833f733f0eef059ca6d0a7297c6f0d211097. Python 3.14.3: full unit suite passed (563 tests), validate.py passed, and py_compile passed for custom_components/2n_intercom/*.py. E2E evidence remains blocked: two read-only SSH attempts to the configured staging Pi timed out; the staging HA manifest request on port 8124 also timed out. No qualifying current-main report exists locally (the latest local directory 20261012-133233 has no summary.json or pytest.log). A new E2E pipeline run was not started while staging was unreachable. AC #7 remains unchecked and status remains In Progress. No integration code, staging deployment, relay, production HA, branch, or commit changes were made. Next prerequisite: restore staging connectivity or supply the TASK-21 current-main report with summary.json, pytest.log and test counts.
+
+2026-10-12 report supplied by Jan: Pi report 20261012-144418 is reported passed, ref origin/main, deployed_sha c28e833, unit suite 452/452 plus validate.py green, E2E 11 passed and 2 skipped (SIP and relays). These counts are user-reported, not independently read from the report. SSH from this checkout still times out, and the report is not present locally. The remaining implementation plan explicitly requires evidence that test_40_options_flow.py (RTSP password masking assertions) and test_00_setup.py::test_no_integration_errors_in_log both passed. The supplied summary does not identify those tests; the reported 452 unit tests also differs from the verified current-main suite of 563 tests, so the Pi test checkout may be older even though deployed integration SHA is current. Need pytest.log or junit.xml from this report before checking AC #7 or setting Done. Nightly state files require no changes and were left untouched.
+
+2026-10-12 attached JUnit evidence inspected: report 20261012-144418 contains 13 test cases, 0 failures, 0 errors, 2 skipped, hence 11 passed. tests.test_00_setup::test_no_integration_errors_in_log passed. No tests.test_40_options_flow::test_options_flow_last_step_and_back_navigation test case is present at all; RTSP password masking was not verified by this run. Skips are SIP registration disabled and manual relay test disabled. In e2e/run.sh, --ref selects the integration deployment only; unittest and pytest use the runner's working-tree test files. A passed deployment of c28e833 does not establish that the Pi ran its corresponding test suite. AC #7 remains unchecked, TASK-15 remains In Progress. Need inspect the Pi checkout status before updating it or rerun from the current main checkout on the Mac with staging connectivity; no integration changes are needed.
+
+2026-10-12 checkout clarification: Jan reports the current Pi checkout is main at c28e833, synchronized with origin/main, with only an unrelated untracked deploy_test.sh artifact. Locally verified with git ls-tree that c28e833 tracks e2e/tests/test_40_options_flow.py, e2e/tests/test_50_access_control.py and the current tests/test_config_flow.py; there are no working-tree differences in these tests. Therefore a reset or pull to the same commit is not required. The cause of the earlier incomplete test collection remains unconfirmed; do not equate the current Pi checkout state with the test files used by report 20261012-144418. Rerun the read-only pipeline from the confirmed current Pi main checkout and inspect its new JUnit results for test_40 and the integration-log check. Leave deploy_test.sh untouched and do not run it (it is a production deployment artifact outside TASK-15).
 <!-- SECTION:NOTES:END -->

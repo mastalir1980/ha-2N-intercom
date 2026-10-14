@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-13 12:55'
-updated_date: '2026-10-13 13:23'
+updated_date: '2026-10-14 14:31'
 labels:
   - agent
   - infra
@@ -53,4 +53,6 @@ Jan wants to know what each headless coder run costs before running more tasks (
 2026-10-13: implemented on branch task-24-headless-coder-log-ai-credits (not committed). sandbox.sh: -s removed. run-task.sh: log_cost() parses 'AI Credits' / 'Tokens' from copilot-$ROUND.log after every Copilot call and appends to $BASE/cost.csv (labels implement, local-fix-N, ci-fix-N; model/effort from the sandbox echo lines, first match). task-status.sh: cr column in --list, per-call rows in the single-run view. README documents cost.csv. Tested: parser on sample logs (normal, ANSI + k/M suffix, no summary, missing log), task-status.sh against a fake runs dir; bash -n on all three scripts. Not tested: real Copilot run on the VM; shellcheck not installed here. Unverified: that the Copilot CLI flag for reasoning effort is --effort (already in the working tree for /etc/ha2n-coder/effort).
 
 2026-10-13: verified on the VM (copilot --help): the flag is --reasoning-effort <none|minimal|low|medium|high|xhigh|max>, not --effort; sandbox.sh fixed accordingly.
+
+2026-10-14 (Claude): merged in PR #23 (checks green). Still open: evidence from a real run that /var/lib/ha2n-coder/cost.csv gets one line per Copilot call (the TASK-27 run 20261013-214615 happened after the merge; if the VM was reinstalled before it, its lines should be there). Jan to run 'ha2n-task-status --list' on the VM; if the cr column is filled, close.
 <!-- SECTION:NOTES:END -->

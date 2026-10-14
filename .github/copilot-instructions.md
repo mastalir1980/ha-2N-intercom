@@ -17,6 +17,8 @@ on Jan's Mac) implement those tasks.
 
 - **Work from a task.** Start with `backlog task <id> --plain`. Tasks assigned to `@copilot` with an
   implementation plan are ready for you. If Jan asks for a code change with no task, ask whether to create one first.
+  Tasks assigned to `@copilot-mac` (label `manual-path`) change the pipeline's protected paths and are done only in
+  VS Code on Jan's Mac, never by the headless coder on the VM.
 - **Follow the plan.** Implement what the description, acceptance criteria and implementation plan say.
   Do not redesign, widen the scope or fix unrelated things on the way — note them in the task's
   implementation notes as follow-ups instead.

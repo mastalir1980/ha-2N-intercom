@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-13 13:49'
-updated_date: '2026-10-13 13:58'
+updated_date: '2026-10-14 14:31'
 labels:
   - ci
   - infra
@@ -56,4 +56,6 @@ Tasks pile up in 'In Progress' because closing them is a manual step after every
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-13: implemented on branch task-25-headless-coder-closes-task (not pushed). run-task.sh: close_task() after wait_checks is green; skips label manual-close / already Done; one commit 'TASK-N: close task (checks green)' that only touches backlog/ (anything else is rolled back); every failure path sets CLOSE_NOTE and the run still ends green. Texts synced: CLAUDE.md, .github/copilot-instructions.md, prompts/implement.md, tools/coder/README.md, PR body and comment. Tested in a throw-away repo with a local bare origin and the real backlog CLI: normal (Done, 6/6 criteria ticked, summary written, pushed), manual-close, already Done, push rejected, edit touching a non-backlog file (rolled back), missing task. Not tested: a real coder run on the VM and shellcheck (not installed). Incident while testing: a test script ran its git reset/clean in the real repo for a moment because the temp dir was not found; uncommitted edits were restored from the autostash commit, nothing was pushed.
+
+2026-10-14 (Claude): merged in PR #24 (checks green). AC #7 (live check) not yet met: the only coder run since then (TASK-27, PR #29) stopped on a protected path and was finished by hand, so no closing commit by the coder exists yet. Close after the next coder PR ends with a 'TASK-N: close task (checks green)' commit.
 <!-- SECTION:NOTES:END -->

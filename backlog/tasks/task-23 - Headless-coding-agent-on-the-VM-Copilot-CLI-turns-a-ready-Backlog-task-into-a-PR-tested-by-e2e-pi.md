@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-12 19:11'
-updated_date: '2026-10-12 19:44'
+updated_date: '2026-10-14 14:31'
 labels:
   - agent
   - ci
@@ -27,13 +27,13 @@ Second half of the autonomous pipeline (first half: TASK-22, PRs are tested on t
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 One command on the VM (directly or via Hermes) takes a ready task id and ends with a PR from branch task-<id>-<slug> opened by the bot account, or a clear stop reason
+- [x] #1 One command on the VM (directly or via Hermes) takes a ready task id and ends with a PR from branch task-<id>-<slug> opened by the bot account, or a clear stop reason
 - [ ] #2 Copilot runs headless with a token that has no repository rights; push and PR creation are done only by the orchestrator with the bot token
 - [ ] #3 Local gates before push: unit tests, validate.py, py_compile on Python 3.12+; a diff touching protected paths (.github/, e2e/ci/, e2e/scripts/, e2e/run.sh, e2e/nightly.sh, e2e/staging/, CLAUDE.md) is never pushed
 - [ ] #4 After push the orchestrator waits for e2e-pi; on failure it feeds the public summary back to Copilot, at most 3 fix rounds, then stops and reports
 - [ ] #5 Bot is allow-listed for the Pi runner (E2E_PI_ACTORS and /etc/ha2n-ci/allowed-actors) and main is protected so the bot cannot merge
 - [ ] #6 Rules updated: .github/copilot-instructions.md and CLAUDE.md describe headless mode (no e2e.sh on the VM, e2e-pi is the gate); runbook for the VM setup
-- [ ] #7 First live run: a small ready task becomes a green PR without human edits
+- [x] #7 First live run: a small ready task becomes a green PR without human edits
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -53,4 +53,6 @@ Second half of the autonomous pipeline (first half: TASK-22, PRs are tested on t
 2026-10-12 21:13 decision change (Jan): no bot account for now — the orchestrator pushes and opens PRs under Jan's account with a fine-grained PAT scoped to this repo only (Contents RW, Pull requests RW, Metadata R; no Workflows, no Administration). Agent work is marked by a distinct commit author (ha2n-coder (Copilot)), PR label 'agent' and task-* branches. main gets a ruleset: PR required, no force push, no bypass (no required approvals — Jan cannot approve his own PRs). Pi allow-list unchanged (mastalir1980). AC #5 reads accordingly: allow-list already covers the account; the bot can be introduced later.
 
 2026-10-12: implemented in working tree (not committed). Stub simulation in a container (real git, real repo clone, stubbed copilot/gh/backlog): happy path green; .agent-stop -> stopped; .github change -> rejected; rename of e2e/ci file -> rejected (staged-file check, no renames); binary -> diff does not apply -> stopped; symlink -> rejected; e2e-pi fail then fix round -> green; skipped e2e-pi -> not green (now stops with a clear message); invalid --run -> refused; Copilot cannot read the repo token. Bug found by the simulation and fixed: sandbox kept sudo's cwd (unreadable dir), so HOME wipe failed. Independent review findings applied: git am replaced by git apply --index + checks on what is staged (MIME/base64 and rename bypasses), root-owned Python venv, HOME wipe + leftover kill on prepare, run-id validation, lock before 'latest', head-SHA wait before reading checks, e2e-pi must be pass, return codes on reset, token only in git/gh wrappers, header-only ready check, conftest.py protected, pr-e2e.sh deselects relay tests. Known residual (phase 2): Copilot can use curl/network from the sandbox (deny-tool is not a boundary), agent-written e2e tests run on the Pi with the read-only account; no egress firewall yet.
+
+2026-10-14 (Claude): live evidence: PR #22 (TASK-2.1) was produced by one ha2n-run-task run on the VM (commit author 'ha2n-coder (Copilot)', label agent, opened under Jan's account per the 2026-10-12 decision), no human edits, checks e2e-pi/hassfest/HACS green, merged 2026-10-13 -> AC #1 and #7 ticked. AC #2-#6 need confirmation on the VM (token scopes, guard, ruleset, allow-list): Jan to confirm, then close.
 <!-- SECTION:NOTES:END -->
