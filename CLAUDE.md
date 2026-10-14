@@ -49,6 +49,9 @@ Work on this repo is split between two agents:
   state findings with file/line pointers. Say what is fact (seen in code, logs, API response) and what is a hypothesis.
 - **Prepare tasks so Copilot can execute them without guessing** — see "Definition of ready" below.
   Assign ready tasks to `@copilot` (`backlog task edit <id> -a @copilot`).
+  Pipeline tooling tasks that touch the coder's protected paths (`.github/`, `e2e/ci/`, `e2e/scripts/`, `tools/coder/`,
+  `CLAUDE.md` …) are implemented by Copilot in VS Code on Jan's Mac: assign them to `@copilot-mac` and add the label
+  `manual-path`. The headless coder and the grooming agent only count tasks assigned to `@copilot`.
 - **Triage E2E failures** into Backlog bugs per `e2e/agent/triage.md`.
 - **Review** Copilot's working-tree diff or branch when Jan asks: check it against the task's acceptance criteria,
   the architecture rules and the definition of done; report findings, do not fix them silently.

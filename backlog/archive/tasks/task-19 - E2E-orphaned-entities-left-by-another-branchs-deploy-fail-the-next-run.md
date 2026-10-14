@@ -5,6 +5,7 @@ status: To Do
 assignee:
   - '@copilot'
 created_date: '2026-10-12 06:59'
+updated_date: '2026-10-14 14:30'
 labels:
   - e2e
   - bug
@@ -50,3 +51,9 @@ Not verified directly: Claude could not read the report on the Pi. The diagnosis
 - [ ] #5 Only the staging HA (port 8124) is touched; the production HA and `reset-entry` are not used; `e2e/e2elib/twon.py` stays independent of the integration
 - [ ] #6 `e2e/README.md` documents the orphan-pruning step
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Duplicate of TASK-20, created by a failed first create attempt (lock-file EPERM) on 2026-10-12. Archived; all work is tracked and done in TASK-20.
+<!-- SECTION:NOTES:END -->

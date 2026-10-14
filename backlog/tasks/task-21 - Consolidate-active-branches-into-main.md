@@ -1,11 +1,11 @@
 ---
 id: TASK-21
 title: Consolidate active branches into main
-status: To Do
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:11'
-updated_date: '2026-10-12 07:11'
+updated_date: '2026-10-12 12:37'
 labels:
   - git
   - maintenance
@@ -43,10 +43,10 @@ Merge order (each step = subtask): project files -> e2e-pipeline -> busy-loop fi
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 All subtasks are Done
-- [ ] #2 `origin/main` contains the work from e2e-pipeline, task-14-15, revize, the busy-loop fix and TASK-4/8/9; the full unit suite and `validate.py` are green on main (Python 3.12+)
-- [ ] #3 `bash e2e/e2e.sh run --ref origin/main` is green after the last merge
-- [ ] #4 Only branches with unmerged, still-wanted work remain on origin
+- [x] #1 All subtasks are Done
+- [x] #2 `origin/main` contains the work from e2e-pipeline, task-14-15, revize, the busy-loop fix and TASK-4/8/9; the full unit suite and `validate.py` are green on main (Python 3.12+)
+- [x] #3 `bash e2e/e2e.sh run --ref origin/main` is green after the last merge
+- [x] #4 Only branches with unmerged, still-wanted work remain on origin
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -54,3 +54,15 @@ Merge order (each step = subtask): project files -> e2e-pipeline -> busy-loop fi
 <!-- SECTION:PLAN:BEGIN -->
 Execute the subtasks in dependency order; each subtask = one branch/merge, reviewed by Claude, merged only after Jan's go-ahead.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-12 final check by Claude: all 7 subtasks Done. origin/main c28e833 contains e2e-pipeline (orphan pruning via e2e/scripts/prune_orphans.py from run.sh, nightly runs origin/main first), task-14-15, revize (auth recovery, CONFIG_SCHEMA, setup-wizard back navigation), busy-loop fix (LOG_LISTENER_IDLE_DELAY) and TASK-4/8/9; the backup 91a58b8 is fully contained (diff to main = TASK-14/revize refactors only). Unit suite on Python 3.12.15: 563 OK, validate.py OK. E2E 'e2e.sh run --ref origin/main' after the last merge: green, report on the Pi, confirmed by Jan 2026-10-12 14:36 (Claude cannot read Pi reports). origin has only main plus the already-merged task-21.7-finalize (safe to delete). Duplicate TASK-19 (Claude's failed first create) archived.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All active branches consolidated into main via 7 subtasks (no-ff merges): project files, E2E pipeline with orphan-entity pruning, log-listener idle-delay fix, options-flow UX (TASK-14/15), auth recovery + setup-wizard back navigation from the revize branch, TASK-4/8/9 split from the working tree; obsolete branches deleted. Verified: 563 unit tests + validate.py green on Python 3.12, E2E run on origin/main green (Jan, Pi report), TASK-8 relay E2E green (20261012-131421).
+<!-- SECTION:FINAL_SUMMARY:END -->

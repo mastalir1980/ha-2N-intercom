@@ -6,6 +6,7 @@ Vývojářská / technická dokumentace. Uživatelské návody zůstávají v ko
 
 | Dokument | Obsah |
 |---|---|
+| [`OVERVIEW.md`](OVERVIEW.md) | **Začni tady.** Přehled projektu: stroje a agenti, pipeline od groomingu po merge, životní cyklus úkolu, kontroly, bezpečnost, běžné úkony. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Přehled komponent, datový model, tok dat, životní cyklus, kamera transport, dynamické entity. |
 | [`API_REFERENCE.md`](API_REFERENCE.md) | 2N HTTP/RTSP endpointy, které integrace volá, mapování událostí, zvláštnosti firmwaru. |
 | [`IMPROVEMENTS.md`](IMPROVEMENTS.md) | Návrh vylepšení – bezpečnost (TLS/HTTP/Basic) a možné chyby, seřazené dle závažnosti. |
