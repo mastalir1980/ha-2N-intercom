@@ -1,11 +1,11 @@
 ---
 id: TASK-24
 title: 'Headless coder: log AI Credits and tokens per Copilot round'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-13 12:55'
-updated_date: '2026-10-14 14:31'
+updated_date: '2026-10-14 14:44'
 labels:
   - agent
   - infra
@@ -28,12 +28,12 @@ Jan wants to know what each headless coder run costs before running more tasks (
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 sandbox.sh no longer passes -s to copilot, so the AI Credits and Tokens lines appear at the end of each copilot-<round>.log
-- [ ] #2 After every Copilot round run-task.sh appends one CSV line to /var/lib/ha2n-coder/cost.csv: timestamp, run id, task id, model, round label (implement or fix N), AI credits, tokens in, tokens out, duration
-- [ ] #3 If the summary lines are missing or unparsable, the CSV line is still written with empty cost fields and the run does not fail
-- [ ] #4 ha2n-task-status --list shows the total AI credits per run as an extra column; single-run view shows the per-round lines
-- [ ] #5 Exit-code handling still works without -s: exit 3 (.agent-stop) and the failure stop messages behave as before
-- [ ] #6 Cost is never written to PR comments, commit messages or anything pushed; tools/coder/README.md (Czech) documents the file and its columns
+- [x] #1 sandbox.sh no longer passes -s to copilot, so the AI Credits and Tokens lines appear at the end of each copilot-<round>.log
+- [x] #2 After every Copilot round run-task.sh appends one CSV line to /var/lib/ha2n-coder/cost.csv: timestamp, run id, task id, model, round label (implement or fix N), AI credits, tokens in, tokens out, duration
+- [x] #3 If the summary lines are missing or unparsable, the CSV line is still written with empty cost fields and the run does not fail
+- [x] #4 ha2n-task-status --list shows the total AI credits per run as an extra column; single-run view shows the per-round lines
+- [x] #5 Exit-code handling still works without -s: exit 3 (.agent-stop) and the failure stop messages behave as before
+- [x] #6 Cost is never written to PR comments, commit messages or anything pushed; tools/coder/README.md (Czech) documents the file and its columns
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -55,4 +55,12 @@ Jan wants to know what each headless coder run costs before running more tasks (
 2026-10-13: verified on the VM (copilot --help): the flag is --reasoning-effort <none|minimal|low|medium|high|xhigh|max>, not --effort; sandbox.sh fixed accordingly.
 
 2026-10-14 (Claude): merged in PR #23 (checks green). Still open: evidence from a real run that /var/lib/ha2n-coder/cost.csv gets one line per Copilot call (the TASK-27 run 20261013-214615 happened after the merge; if the VM was reinstalled before it, its lines should be there). Jan to run 'ha2n-task-status --list' on the VM; if the cr column is filled, close.
+
+2026-10-14 live evidence (Jan, ha2n-task-status --list on the VM): run 20261013-214615-TASK-27 shows 78.55 cr (cost.csv lines written and summed per run); the two failed runs 20261013-212100/212652-TASK-27 still end with the usual stop message 'Copilot run failed (exit 1)' and a cost line (0.00 cr); the pre-TASK-24 run of TASK-2.1 shows '-'. Missing/unparsable summary handling: covered by the parser test on a sample log without summary (notes above). tools/coder/README.md documents cost.csv and its columns; cost is not pushed.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Copilot CLI runs without -s, every Copilot call appends a line to /var/lib/ha2n-coder/cost.csv and ha2n-task-status shows credits per run (PR #23). Verified live on the VM: run 20261013-214615-TASK-27 logged 78.55 credits.
+<!-- SECTION:FINAL_SUMMARY:END -->
