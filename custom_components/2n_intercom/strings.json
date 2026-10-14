@@ -23,6 +23,7 @@
           "enable_camera": "Enable Camera",
           "enable_doorbell": "Enable Doorbell",
           "ring_on_keypress": "Ring on button press",
+          "ring_on_call": "Ring on incoming call",
           "called_id": "Ringing account (peer)",
           "go_back": "Back to the previous step"
         },
@@ -31,6 +32,7 @@
           "enable_camera": "Create the camera entity for snapshots and streaming",
           "enable_doorbell": "Create the doorbell entity for ring detection",
           "ring_on_keypress": "Treat a physical button press (KeyPressed event) as a doorbell ring, even when the press does not start a SIP call — required for devices with an empty directory. Note: the ringing-account filter does not apply to button presses.",
+          "ring_on_call": "Treat an incoming call as a doorbell ring. Turn this off if something other than a visitor can call the station (for example a page or intercom call from Control4 or another home automation system). Button presses still ring via Ring on button press, and the call state sensor keeps tracking calls.",
           "called_id": "Select which account should ring. Choose All calls to ring on every button.",
           "go_back": "Check and submit to return to the connection settings without saving. Values entered here are kept."
         }
@@ -88,7 +90,8 @@
         "data": {
           "enable_camera": "Enable Camera",
           "enable_doorbell": "Enable Doorbell",
-          "ring_on_keypress": "Ring on button press"
+          "ring_on_keypress": "Ring on button press",
+          "ring_on_call": "Ring on incoming call"
         }
       },
       "device": {
@@ -99,6 +102,7 @@
           "enable_camera": "Enable Camera",
           "enable_doorbell": "Enable Doorbell",
           "ring_on_keypress": "Ring on button press",
+          "ring_on_call": "Ring on incoming call",
           "scan_interval": "Backup polling interval (seconds)",
           "called_id": "Ringing account (peer)",
           "grant_access_user": "Default user for grant access"
@@ -108,6 +112,7 @@
           "enable_camera": "Create the camera entity",
           "enable_doorbell": "Create the doorbell entity",
           "ring_on_keypress": "Treat a physical button press (KeyPressed event) as a doorbell ring, even when the press does not start a SIP call — required for devices with an empty directory. Note: the ringing-account filter does not apply to button presses.",
+          "ring_on_call": "Treat an incoming call as a doorbell ring. Turn this off if something other than a visitor can call the station (for example a page or intercom call from Control4 or another home automation system). Button presses still ring via Ring on button press, and the call state sensor keeps tracking calls.",
           "scan_interval": "Backup polling interval (2-600 s). Events deliver real-time updates; polling only runs as a safety net. Default 60 s is fine for most setups.",
           "called_id": "Select which account should ring. Choose All calls to ring on every button.",
           "grant_access_user": "Directory user (UUID) on whose behalf the grant_access service opens the door when the call does not name one. The device applies this user's access rights and logs the access. Leave empty to require the user in every call."

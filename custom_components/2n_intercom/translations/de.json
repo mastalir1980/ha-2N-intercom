@@ -23,6 +23,7 @@
           "enable_camera": "Kamera aktivieren",
           "enable_doorbell": "Klingel aktivieren",
           "ring_on_keypress": "Klingeln bei Tastendruck",
+          "ring_on_call": "Klingeln bei eingehendem Anruf",
           "called_id": "Rufkonto (Peer)",
           "go_back": "Zurück zum vorherigen Schritt"
         },
@@ -31,6 +32,7 @@
           "enable_camera": "Kamera-Entität für Schnappschüsse und Streaming anlegen",
           "enable_doorbell": "Klingel-Entität zur Klingelerkennung anlegen",
           "ring_on_keypress": "Einen physischen Tastendruck (KeyPressed-Ereignis) als Türklingeln behandeln, auch wenn dadurch kein SIP-Anruf gestartet wird — erforderlich bei Geräten mit leerem Telefonbuch. Hinweis: Der Rufkonto-Filter gilt nicht für Tastendrücke.",
+          "ring_on_call": "Einen eingehenden Anruf als Türklingeln behandeln. Deaktivieren, wenn außer Besuchern auch etwas anderes die Station anrufen kann (z. B. ein Durchsage- oder Interkom-Anruf von Control4 oder einem anderen Hausautomationssystem). Tastendrücke klingeln weiterhin über „Klingeln bei Tastendruck“, und der Anrufstatus-Sensor verfolgt Anrufe weiter.",
           "called_id": "Wählen Sie das Konto, das klingeln soll. Alle Anrufe = Klingeln bei jeder Taste.",
           "go_back": "Anhaken und absenden, um ohne Speichern zu den Verbindungseinstellungen zurückzukehren. Eingegebene Werte bleiben erhalten."
         }
@@ -84,7 +86,8 @@
         "data": {
           "enable_camera": "Kamera aktivieren",
           "enable_doorbell": "Klingel aktivieren",
-          "ring_on_keypress": "Klingeln bei Tastendruck"
+          "ring_on_keypress": "Klingeln bei Tastendruck",
+          "ring_on_call": "Klingeln bei eingehendem Anruf"
         }
       },
       "device": {
@@ -95,6 +98,7 @@
           "enable_camera": "Kamera aktivieren",
           "enable_doorbell": "Klingel aktivieren",
           "ring_on_keypress": "Klingeln bei Tastendruck",
+          "ring_on_call": "Klingeln bei eingehendem Anruf",
           "scan_interval": "Backup-Abfrageintervall (Sekunden)",
           "called_id": "Rufkonto (Peer)",
           "grant_access_user": "Standardbenutzer für Zutrittsfreigabe"
@@ -104,6 +108,7 @@
           "enable_camera": "Kamera-Entität anlegen",
           "enable_doorbell": "Klingel-Entität anlegen",
           "ring_on_keypress": "Einen physischen Tastendruck (KeyPressed-Ereignis) als Türklingeln behandeln, auch wenn dadurch kein SIP-Anruf gestartet wird — erforderlich bei Geräten mit leerem Telefonbuch. Hinweis: Der Rufkonto-Filter gilt nicht für Tastendrücke.",
+          "ring_on_call": "Einen eingehenden Anruf als Türklingeln behandeln. Deaktivieren, wenn außer Besuchern auch etwas anderes die Station anrufen kann (z. B. ein Durchsage- oder Interkom-Anruf von Control4 oder einem anderen Hausautomationssystem). Tastendrücke klingeln weiterhin über „Klingeln bei Tastendruck“, und der Anrufstatus-Sensor verfolgt Anrufe weiter.",
           "scan_interval": "Backup-Abfrageintervall (2-600 s). Ereignisse liefern Echtzeit-Updates; die Abfrage dient nur als Sicherheitsnetz. Standard 60 s reicht für die meisten Installationen.",
           "called_id": "Wählen Sie das Konto, das klingeln soll. Alle Anrufe = Klingeln bei jeder Taste.",
           "grant_access_user": "Verzeichnisbenutzer (UUID), in dessen Namen der Dienst grant_access die Tür öffnet, wenn der Aufruf keinen Benutzer angibt. Das Gerät wendet dessen Zutrittsrechte an und protokolliert den Zutritt. Leer lassen, um den Benutzer bei jedem Aufruf zu verlangen."

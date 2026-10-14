@@ -2395,3 +2395,50 @@ class KeyPressedRingTests(unittest.IsolatedAsyncioTestCase):
             c = self._make_coordinator()
             c._log_caps = caps
             self.assertNotIn("KeyPressed", c._build_log_event_list(), caps)
+
+
+class RingOnCallTests(unittest.IsolatedAsyncioTestCase):
+    """Tests for the ring_on_call toggle (calls ring the doorbell or not)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.coordinator_module = load_coordinator_module()
+
+    _make_coordinator = KeyPressedRingTests._make_coordinator
+    _make_data = KeyPressedRingTests._make_data
+
+    _INCOMING_RING = {
+        "event": "CallStateChanged",
+        "params": {
+            "direction": "incoming",
+            "state": "ringing",
+            "peer": "sip:100@example.com",
+            "session": 42,
+        },
+    }
+
+    def test_call_rings_by_default(self) -> None:
+        c = self._make_coordinator()
+        c.data = self._make_data(c)
+        c._process_log_event(self._INCOMING_RING)
+        self.assertTrue(c._ring_detected)
+
+    def test_call_does_not_ring_when_disabled(self) -> None:
+        c = self._make_coordinator(ring_on_call=False)
+        c.data = self._make_data(c)
+        updated = c._process_log_event(self._INCOMING_RING)
+        self.assertTrue(updated)
+        self.assertFalse(c._ring_detected)
+        self.assertIsNone(c.last_ring_time)
+        # Call tracking is unaffected by the toggle.
+        self.assertEqual(c.call_state, "ringing")
+        self.assertEqual(c.active_session_id, "42")
+
+    def test_keypress_still_rings_when_calls_disabled(self) -> None:
+        c = self._make_coordinator(ring_on_call=False)
+        c.data = self._make_data(c)
+        c._process_log_event({"event": "KeyPressed", "params": {"key": "1"}})
+        self.assertTrue(c._ring_detected)
+        # A call that follows the press must not clear the keypress ring.
+        c._process_log_event(self._INCOMING_RING)
+        self.assertTrue(c._ring_detected)

@@ -175,6 +175,7 @@ Relays are **not** configured during initial setup. The integration auto-discove
 | Device | `enable_camera` | bool | `true` | Create the camera entity |
 | Device | `enable_doorbell` | bool | `true` | Create the doorbell binary sensor |
 | Device | `ring_on_keypress` | bool | `true` | Ring on physical button press (`KeyPressed` event), even when the press does not start a SIP call |
+| Device | `ring_on_call` | bool | `true` | Ring on an incoming call. Turn off when something other than a visitor can call the station (e.g. Control4 page/intercom calls) |
 | Device | `called_id` | string | `All calls` | Ringing account / peer filter |
 
 ### Options flow parameters
@@ -195,6 +196,7 @@ Intermediate steps show **Next**; the last step shows **Submit**. To revisit a s
 | Device | `enable_camera` | bool | `true` | Toggle camera entity |
 | Device | `enable_doorbell` | bool | `true` | Toggle doorbell entity |
 | Device | `ring_on_keypress` | bool | `true` | Ring on physical button press (`KeyPressed` event), even when the press does not start a SIP call. The `called_id` filter does not apply to button presses |
+| Device | `ring_on_call` | bool | `true` | Ring on an incoming call. Turn off when something other than a visitor can call the station (e.g. Control4 page/intercom calls); button presses still ring via `ring_on_keypress` and the call state sensor keeps tracking calls |
 | Device | `scan_interval` | 2-600 (s) | 60 | Backup polling interval. Events deliver real-time updates; polling only runs as a safety net |
 | Device | `called_id` | string | `All calls` | Ringing account / peer filter |
 | Device | `grant_access_user` | directory user (UUID) | *(empty)* | Default user for `2n_intercom.grant_access` when the call does not pass `user`. Picked from the device directory; a UUID can also be typed in |

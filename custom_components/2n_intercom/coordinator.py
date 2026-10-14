@@ -41,6 +41,7 @@ from .const import (
     CONF_MJPEG_HEIGHT,
     CONF_MJPEG_WIDTH,
     DEFAULT_LIVE_VIEW_MODE,
+    DEFAULT_RING_ON_CALL,
     DEFAULT_RING_ON_KEYPRESS,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -193,6 +194,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         config_entry: ConfigEntry | None = None,
         ring_snapshot_enabled: bool = False,
         ring_on_keypress: bool = DEFAULT_RING_ON_KEYPRESS,
+        ring_on_call: bool = DEFAULT_RING_ON_CALL,
     ) -> None:
         """Initialize the coordinator."""
         # HA 2024.10+ accepts config_entry kwarg; pass when available so log
@@ -256,6 +258,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         self._ring_snapshot: bytes | None = None
         self._ring_snapshot_time: datetime | None = None
         self._ring_on_keypress = bool(ring_on_keypress)
+        self._ring_on_call = bool(ring_on_call)
         self._last_key_pressed: str | None = None
         self._ring_pulse_clear_handle: asyncio.TimerHandle | None = None
 
@@ -930,7 +933,10 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             or self._last_called_peer == self._ring_filter_peer
         )
         is_ringing = state in self._RING_STATES and direction != "outgoing"
-        if is_ringing and ring_allowed:
+        # ring_on_call off: calls never ring the doorbell (e.g. a home
+        # automation system calling into the station); button presses still
+        # ring via KeyPressed. Call state and session tracking are unaffected.
+        if is_ringing and ring_allowed and self._ring_on_call:
             # CallStateChanged and CallSessionStateChanged both report one
             # ring; capture the snapshot only on the first of them.
             if not self._ring_detected and self._ring_snapshot_enabled:
