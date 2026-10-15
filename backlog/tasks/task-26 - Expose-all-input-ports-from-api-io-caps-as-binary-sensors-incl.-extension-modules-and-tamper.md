@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-13 19:01'
-updated_date: '2026-10-15 12:41'
+updated_date: '2026-10-15 12:47'
 labels:
   - io
   - ha-platform
@@ -52,7 +52,7 @@ Example io_caps / io_status from the issue (inputs): `input1` = 0, `modul1.input
 ## Decision on tamper (Jan, 2026-10-13)
 When the device reports a tamper input port, that port IS the tamper sensor: its state comes from the API (io_status). No separate tamper entity is created from the `TamperSwitchActivated` log event. TASK-7 is updated accordingly.
 
-Ground-truth E2E device is IP Force 2.0 fw 3.3.x without an extension module - E2E covers only its built-in inputs; do not hard-code the port list in tests.
+Ground-truth E2E device: fw 3.x without an extension module - E2E covers only its built-in inputs; do not hard-code the port list in tests.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

@@ -120,7 +120,7 @@ uuid spustí refresh adresáře, nejvýš jednou za 60 s.
   `false` + `reason` (`invalidAp`, `invalidCredential`, `accessBlocked`).
   Kód 18 = požadavek odmítnut (např. vypnutý přístupový bod), kódy 7–10 =
   chybějící oprávnění, 1/2/4 = funkce nepodporovaná.
-- **Směr hovoru je z pohledu interkomu** (ověřeno na IP Force 2.0 fw 3.3.x,
+- **Směr hovoru je z pohledu interkomu** (ověřeno na fw 3.x,
   2026-10-13, TASK-29). Stisk tlačítka návštěvníkem = `CallStateChanged`
   `direction=outgoing`; hovor *na* interkom (My2N aplikace, Control4 panel) =
   `direction=incoming`. `CallSessionStateChanged` klíč `direction` vůbec nemá,

@@ -28,7 +28,7 @@ Home Assistant custom integration (HACS, domain `2n_intercom`) for **2N IP inter
 (2N = Axis / 2N Telekomunikace). Python, no external runtime requirements, `iot_class: local_push`,
 quality scale `platinum`. Current version: see `custom_components/2n_intercom/manifest.json` + `CHANGELOG.md`.
 Repo: `github.com/mastalir1980/ha-2N-intercom` (fork co-maintained with `@savek-cc`).
-Owner: Jan Maštalíř (mastix). Talk to Jan in Czech; write code, comments, tasks, commits and CHANGELOG in English.
+Owner: Jan (`@mastalir1980`). Talk to Jan in Czech; write code, comments, tasks, commits and CHANGELOG in English.
 
 GitHub Copilot has its own copy of these rules in `.github/copilot-instructions.md`.
 **When you change project rules, update both files.**
@@ -131,13 +131,18 @@ bash e2e/e2e.sh report   # last result + triage
 
 Never run `e2e/e2e.sh relays`, `--relays` or `reset-entry` unless Jan asks in this conversation.
 
-## E2E environment (Jan's home)
+## E2E environment
 
-- Runs from Jan's Mac. Deploys over SSH to **staging** HA on the Raspberry Pi "Rob's Berry"
+- Runs from Jan's Mac. Deploys over SSH to **staging** HA on a Raspberry Pi
   (`~/ha-staging`, container `ha-staging`, port **8124**). Production HA on the same Pi
-  (`~/homeassistant`, port 8123) must never be touched.
-- Ground truth device: home **2N IP Force 2.0, firmware 3.3.x** over HTTPS (docs and code were
+  (port 8123) must never be touched.
+- Ground truth device: a real 2N intercom on **firmware 3.x** over HTTPS (docs and code were
   originally validated on IP Verso fw 2.50 — differences between 2.50 and 3.x are a known source of bugs).
+- Exact environment details (device model, firmware build, host names) are kept out of the repo in
+  `CLAUDE.local.md` (gitignored, on Jan's Mac). Read it when present; never copy its contents into tracked files.
+- **This repo is public.** Never write into tracked files, Backlog tasks, commits or PRs: host names, user names,
+  LAN IPs, home paths, serial numbers or MACs, the exact device model/firmware build of the E2E intercom,
+  or anything about Jan's home and private life. Use neutral terms ("the Pi", "the E2E intercom", "fw 3.x", `<lan-ip>`).
 - Secrets live in `e2e/.env` (gitignored, never print or copy its values). Template: `e2e/.env.example`.
 - The E2E 2N client (`e2elib/twon.py`) is deliberately independent of `api.py` — do not make it import the integration.
 - **PR E2E on the Pi (self-hosted runner, TASK-22):** `.github/workflows/e2e-pi.yml` runs `e2e/ci/pr-e2e.sh` on the Pi

@@ -4,6 +4,7 @@ title: Investigate SSDP discovery and IP-change handling for 2N intercoms
 status: To Do
 assignee: []
 created_date: '2026-10-13 19:03'
+updated_date: '2026-10-15 12:47'
 labels:
   - discovery
   - config-flow
@@ -26,7 +27,7 @@ GitHub issue #11 (https://github.com/mastalir1980/ha-2N-intercom/issues/11): a u
 
 This conflicts with what the repo says today: `quality_scale.yaml` marks discovery and discovery-update-info as exempt ("does not broadcast a discoverable mDNS/SSDP service that maps to a unique device id"), and docs/ROADMAP-NAVRH.md E1 (DHCP discovery) was dropped on 2026-08-30, with E2 (mDNS/ONVIF) at P3. The issue suggests the exemption reason may be wrong.
 
-Spike: check what the ground-truth IP Force 2.0 fw 3.3.x (and, if available, an IP Verso 2.50 report) advertises over SSDP/UPnP - ST/NT, USN, LOCATION, SERVER, and whether the device description contains a stable id (serial number or MAC) that matches what the integration uses as unique_id. Then propose whether to add an `ssdp` matcher, `async_step_ssdp`, and host update on IP change (discovery-update-info).
+Spike: check what the ground-truth E2E intercom fw 3.x (and, if available, an IP Verso 2.50 report) advertises over SSDP/UPnP - ST/NT, USN, LOCATION, SERVER, and whether the device description contains a stable id (serial number or MAC) that matches what the integration uses as unique_id. Then propose whether to add an `ssdp` matcher, `async_step_ssdp`, and host update on IP change (discovery-update-info).
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

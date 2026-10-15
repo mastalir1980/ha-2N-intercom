@@ -29,11 +29,13 @@ Repo context: `CLAUDE.md`, `.github/copilot-instructions.md`, `docs/ARCHITECTURE
 4. Deduplicate: `backlog task list --type bug --exclude-status Done --plain` and
    `backlog search "<key words>" --plain`. If an open bug already covers the cause, do NOT create a new one —
    append the new occurrence: `backlog task edit <id> --append-notes "<date, sha, fw, test, 1-line evidence>"`.
+   The repo is public: never put the intercom model, full firmware build, IPs, host names, user names,
+   serial numbers or MACs into a task (write "the E2E intercom", "fw 3.x", `<lan-ip>`).
 5. Otherwise create one task per cause:
    ```
    backlog task create "<short imperative title>" --type bug -l e2e,<area> --priority <High|Medium|Low> \
      -d "<what fails and why it matters; evidence: failing test(s), key log lines (max ~15), suspected
-          location file:line; versions: integration sha, HA version, intercom model + firmware;
+          location file:line; versions: integration sha, HA version, intercom firmware major only ("fw 3.x");
           reproduce: e2e/run.sh --ref <sha> (add --relays only if a relay test failed)>" \
      --ac "<the failing E2E test passes>" --ac "<regression unit test covers the cause>"
    ```

@@ -3,7 +3,7 @@
 # Run ON THE PI from your own clone, as yourself with sudo:
 #
 #   sudo bash e2e/ci/install-pi.sh            # staging user = the user who ran sudo
-#   sudo bash e2e/ci/install-pi.sh mastix     # explicit staging user (owner of ~/ha-staging, in docker group)
+#   sudo bash e2e/ci/install-pi.sh <user>     # explicit staging user (owner of ~/ha-staging, in docker group)
 #
 # Creates/updates: user ha2n-ci (NO docker), /usr/local/sbin/ha2n-staging, /etc/ha2n-ci/staging.conf,
 # /etc/ha2n-ci/e2e.env (template, only if missing), /etc/sudoers.d/ha2n-ci, venv + reports under

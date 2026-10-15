@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 12:18'
+updated_date: '2026-10-15 12:47'
 labels:
   - git
   - access-control
@@ -52,7 +52,7 @@ Step 1 (backup) done 2026-10-12:
 - Plan vs reality: the TASK-4/8/9 work was NOT uncommitted any more. Jan had already committed it as 91a58b8 'Add access-control events, grant_access service and last-ring image' on task-4-8-9-access-control-ring-snapshot (24 files incl. README.md; parent 369e923), but it was not pushed anywhere. custom_components/, tests/, validate.py had no uncommitted changes (only untracked custom_components/2n_intercom.zip, deliberately excluded).
 - So step 1 = 'git switch -c wip/task-4-8-9-backup' at 91a58b8 (no new commit needed) + 'git push -u origin wip/task-4-8-9-backup'. origin/wip/task-4-8-9-backup = 91a58b81e1d0f0b7ef7958fab2346eea085743a4 (verified via ls-remote).
 - Validation on 91a58b8 (Python 3.14.3): unittest 530 tests OK, validate.py exit 0, py_compile OK.
-- e2e.sh wip NOT green: deploy stage failed, 'ssh: connect to host 192.168.88.28 port 22: Operation timed out'; ping to the Pi also 100% loss -> staging Pi unreachable (infrastructure, not code). Report: e2e/reports/20261012-092514. Needs rerun once the Pi is back.
+- e2e.sh wip NOT green: deploy stage failed, 'ssh: connect to host <lan-ip> port 22: Operation timed out'; ping to the Pi also 100% loss -> staging Pi unreachable (infrastructure, not code). Report: e2e/reports/20261012-092514. Needs rerun once the Pi is back.
 - Steps 2-3 not started (blocked by TASK-21.5 dependency and Jan's review).
 
 E2E deferred: Jan will run e2e.sh externally (instruction 2026-10-12).

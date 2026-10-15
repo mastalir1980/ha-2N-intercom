@@ -22,16 +22,16 @@ v [`CLAUDE.md`](../CLAUDE.md) a [`.github/copilot-instructions.md`](../.github/c
 | Kde | Co tam běží | K čemu |
 |---|---|---|
 | **Mac (Jan)** | repo, VS Code + Copilot (agent mode), Claude (Cowork, shell na Macu), `e2e/e2e.sh` | analýza, ruční vývoj, review, E2E na working tree |
-| **VM Trufalín** (mimo domácí síť) | Hermes, headless kodér `ha2n-run-task` (Copilot CLI v pískovišti) | z připraveného úkolu udělá PR, [`tools/coder/README.md`](../tools/coder/README.md) |
-| **GitHub** | repo, ruleset na `main`, checky `e2e-pi`, `hassfest`, `HACS` | jediný kanál mezi VM a domovem, žádná VPN |
-| **Pi „Rob's Berry“** | self-hosted runner `ha2n-pi`, staging HA (`:8124`), noční běh, produkční HA (`:8123`, nikdy se nemění) | E2E proti skutečnému interkomu, [`e2e/ci/README.md`](../e2e/ci/README.md) |
-| **Interkom** | 2N IP Force 2.0, fw 3.3.x, HTTPS | ground truth pro E2E; CI používá účet jen pro čtení |
+| **VM** (mimo lokální síť) | Hermes, headless kodér `ha2n-run-task` (Copilot CLI v pískovišti) | z připraveného úkolu udělá PR, [`tools/coder/README.md`](../tools/coder/README.md) |
+| **GitHub** | repo, ruleset na `main`, checky `e2e-pi`, `hassfest`, `HACS` | jediný kanál mezi VM a lokální sítí, žádná VPN |
+| **Raspberry Pi** | self-hosted runner `ha2n-pi`, staging HA (`:8124`), noční běh, produkční HA (`:8123`, nikdy se nemění) | E2E proti skutečnému interkomu, [`e2e/ci/README.md`](../e2e/ci/README.md) |
+| **Interkom** | skutečný 2N interkom, fw 3.x, HTTPS | ground truth pro E2E; CI používá účet jen pro čtení |
 
 | Agent | Role | Smí | Nesmí |
 |---|---|---|---|
 | **Grooming agent** (Claude, plánovaný běh) | příprava zadání | jednou za čas projde roadmapu, issues a backlog a připraví jeden návrh úkolu jako draft | zakládat úkoly ready pro Copilota bez Janova „ber“, psát do issues bez souhlasu |
 | **Claude** | analytik, tech lead | analýza, úkoly v Backlogu, plány, triage E2E, review, `docs/*` | psát kód bez Janova pokynu, commitovat a pushovat bez pokynu |
-| **Copilot** (headless na Trufalínu) | programátor kódu integrace | úkoly přiřazené `@copilot`: implementace, unit + E2E testy, dokumentace | měnit chráněné cesty, mergovat |
+| **Copilot** (headless na VM) | programátor kódu integrace | úkoly přiřazené `@copilot`: implementace, unit + E2E testy, dokumentace | měnit chráněné cesty, mergovat |
 | **Copilot** (VS Code na Macu) | programátor nástrojů pipeline | úkoly `@copilot-mac` se štítkem `manual-path` (`.github/`, `e2e/ci/`, `tools/coder/` …) | mergovat |
 | **Hermes** (VM) | spouštěč a hlásič | `ha2n-run-task`, `ha2n-task-status`, zprávy Janovi | číst tokeny, mergovat |
 | **Jan** | vlastník | zadání, merge, release, relé testy | |
@@ -47,7 +47,7 @@ flowchart LR
   J0 -- ber --> C
   J1([Jan: vlastní téma]) --> C[Claude: analýza + úkol v Backlogu<br/>@copilot, Definition of Ready]
   C --> BPR[PR backlog-téma] --> M1([Jan: merge]) --> MAIN[(main)]
-  MAIN --> J2([Jan: vezmi TASK-N]) --> H[Hermes na Trufalínu]
+  MAIN --> J2([Jan: vezmi TASK-N]) --> H[Hermes na VM]
   H --> K[ha2n-run-task<br/>ready check]
   K --> S[pískoviště: Copilot CLI<br/>unit testy + validate.py]
   S --> G{patch OK?<br/>chráněné cesty, velikost}
