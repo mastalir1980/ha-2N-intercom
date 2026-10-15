@@ -123,6 +123,34 @@ Běží s plnými právy dockeru, takže nesmí nasazovat cizí větve. PR a vě
 
 Ruční spuštění: **Actions → E2E on the Pi → Run workflow**, zadej plné SHA commitu z větve repa.
 
+## PR pouze se změnami Backlogu a dokumentace (TASK-32)
+
+Filtr cest pro `pull_request_target` přeskočí PR, který mění jen `backlog/**` (kromě
+`backlog/config.yml`) nebo `docs/**/*.md`. Změna jakéhokoli jiného souboru, včetně kořenového
+`README.md`, dokumentace v jiném formátu nebo `backlog/config.yml`, E2E stále spustí se všemi
+dosavadními bezpečnostními podmínkami. GitHub vyhodnocuje celý diff PR, ne jen poslední commit:
+PR s kódem proto spustí E2E i po závěrečném commitu pouze do Backlogu. `workflow_dispatch`
+se filtr netýká.
+
+`e2e-pi` nepřidávej mezi povinné kontroly: GitHub nechává kontroly workflow přeskočeného filtrem
+cest ve stavu čekání, takže by blokovaly PR pouze se změnami Backlogu. Filtry GitHubu pracují
+nejvýše s prvními 300 změněnými soubory; pokud by větší PR mohl skrýt relevantní soubor,
+spusť workflow ručně.
+
+Do `~/.zshrc` přidej načtení `tools/bship.zsh` podle řádku v hlavičce skriptu. Proměnná
+`BSHIP_REPO` umožňuje zvolit jiný checkout. `bship "Backlog update"` vyžaduje větev `main`
+a odmítne změny mimo `backlog/` a `docs/`, včetně změn v indexu a nesledovaných souborů.
+Nejprve aktualizuje `main` pomocí `git pull --ff-only` se zachováním necommitnutých změn,
+potom před vytvořením větve a commitu spustí `backlog doctor`. Neúspěšný pull, nenulový návratový
+kód `doctor` nebo hlášení duplicit zastaví odeslání. Ostatní výstupy `doctor` s nulovým návratovým
+kódem jsou povolené; skript nevyžaduje přesné znění zprávy o úspěchu. Při duplicitních ID spusť
+`backlog doctor --fix` ručně a opravu zkontroluj; `bship` nikdy nespouští `--fix` automaticky.
+
+Při úspěchu vytvoří commit pouze z `backlog/` a `docs/` na větvi `backlog-<timestamp>`, pushne ji,
+otevře PR s výslovně zadaným názvem a tělem, sloučí ho pomocí `--merge --delete-branch` a vrátí se
+na aktuální `main`. Jde o lokální pomocnou funkci, ne o workflow s právem zápisu pro automatické
+slučování. Před živým ověřením filtru je nutné změnu workflow zkontrolovat a sloučit do `main`.
+
 ## Provoz
 - reporty: `/var/lib/ha2n-ci/reports/` (posledních 50), `latest` je symlink na poslední,
 - kdo drží staging: `sudo -u ha2n-ci sudo -n -u <staging-user> /usr/local/sbin/ha2n-staging status`,

@@ -67,6 +67,8 @@ Work on this repo is split between two agents:
   Changes outside `backlog/` and `docs/` (e.g. this file, `.github/copilot-instructions.md`) do not fit `bship`:
   they go on a `backlog-<topic>` branch from `origin/main`, and Claude gives Jan the exact push and
   `gh pr create` commands (explicit `--title`/`--body`, not `--fill`). `main` is protected (changes only via PR).
+  `bship` is versioned in `tools/bship.zsh` (source line in its header), pulls `--ff-only`, and stops on duplicate
+  IDs found by `backlog doctor` without ever running `--fix`.
 - **Task work runs in git worktrees**, one per task (`git worktree add ../ha2n-task-<id> -b task-<id>-slug origin/main`),
   never in Jan's main checkout, which stays on `main` for Backlog changes and `bship`. Code changes go through
   `task-<id>-…` branches and PRs.
@@ -155,6 +157,10 @@ Never run `e2e/e2e.sh relays`, `--relays` or `reset-entry` unless Jan asks in th
   for same-repo PRs by actors in `E2E_PI_ACTORS`; check name `e2e-pi`. Staging is reached only via the root-owned helper
   `e2e/ci/ha2n-staging`; all runs share one staging lock (`e2e/scripts/lock.sh`). Runbook: `e2e/ci/README.md`.
   Changes to `.github/` and `e2e/ci/` always need Jan's review — never weaken the guards, never add `--relays`.
+- **E2E path filter (TASK-32):** `pull_request_target` skips PRs changing only `backlog/**`
+  (except `backlog/config.yml`) or `docs/**/*.md`. GitHub evaluates the whole PR diff, not just the last commit;
+  any other changed file keeps E2E enabled. `workflow_dispatch` is unaffected. Keep `e2e-pi` optional in
+  required checks: a path-filtered workflow stays pending and would block backlog-only PRs.
 
 ## Architecture rules you must not break
 

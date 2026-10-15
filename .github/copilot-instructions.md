@@ -82,6 +82,8 @@ adds one last commit that does it (takes effect when Jan merges; label `manual-c
 - New tasks and analysis-only Backlog changes made by Claude reach `main` through separate backlog-only PRs
   (Jan's `bship` command); do not expect them in your task branch and never commit them yourself. Your own task's
   status/notes/AC updates belong in your task branch. `main` is protected: nothing is committed or pushed to it directly.
+  `bship` is versioned in `tools/bship.zsh` (source line in its header), pulls `--ff-only`, and stops on duplicate
+  IDs found by `backlog doctor` without ever running `--fix`.
 - **Work in a git worktree per task** (`git worktree add ../ha2n-task-<id> -b task-<id>-slug origin/main`), not in
   Jan's main checkout, which stays on `main` for Backlog changes. Commit with Jan's GitHub noreply address
   (`164862832+mastalir1980@users.noreply.github.com`), never a work or private e-mail: the repo is public.
@@ -133,6 +135,10 @@ bash e2e/e2e.sh report   # last result + triage
   for same-repo PRs by actors in `E2E_PI_ACTORS`; check name `e2e-pi`. Staging is reached only via the root-owned helper
   `e2e/ci/ha2n-staging`; all runs share one staging lock (`e2e/scripts/lock.sh`). Runbook: `e2e/ci/README.md`.
   Changes to `.github/` and `e2e/ci/` always need Jan's review — never weaken the guards, never add `--relays`.
+- **E2E path filter (TASK-32):** `pull_request_target` skips PRs changing only `backlog/**`
+  (except `backlog/config.yml`) or `docs/**/*.md`. GitHub evaluates the whole PR diff, not just the last commit;
+  any other changed file keeps E2E enabled. `workflow_dispatch` is unaffected. Keep `e2e-pi` optional in
+  required checks: a path-filtered workflow stays pending and would block backlog-only PRs.
 - **Never touch production HA** (port 8123 on the Pi).
 - **This repo is public.** Never write host names, user names, LAN IPs, home paths, serial numbers or MACs,
   the exact model/firmware build of the E2E intercom, or anything about Jan's home into tracked files, Backlog
