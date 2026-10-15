@@ -1,11 +1,11 @@
 ---
 id: TASK-33
 title: 'Headless coder: independent review by a second model after green checks'
-status: In Progress
+status: Done
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-14 14:32'
-updated_date: '2026-10-15 14:33'
+updated_date: '2026-10-15 14:40'
 labels:
   - agent
   - infra
@@ -56,10 +56,12 @@ Must not change: the protected-path guard, token handling (reviewer never sees t
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented in tools/coder: prompts/review.md (new), prompts/fix.md, sandbox.sh (run_copilot helper + 'review' verb: restores tree, returns only .review.json), run-task.sh (review(), main loop with CI_USED/REVIEWS/REVIEW_FIX counters, state 'review', review= status line, cost label review-N). Per Jan's decision, AC7 is covered by extending the hermetic suite tools/coder/tests/test_run_task.py (31 tests, green with Bash 5 + flock) instead of a separate stub simulation. sandbox.sh itself is only syntax-checked (needs the real sandbox user). The reviewer reads the diff and CLAUDE.md in the sandbox itself (prompt goes via argv, so it is not embedded). Reviewer output is validated strictly and sanitised before being posted. ha2n-task-status shows the verdict via the review= line of the status file (no code change). Docs: CLAUDE.md, .github/copilot-instructions.md, tools/coder/README.md updated. Follow-up: a real end-to-end run on the VM with /etc/ha2n-coder/review-model set is still needed (Jan).
+
+2026-10-15 (Claude): review before merge: review only with /etc/ha2n-coder/review-model, sanitised JSON verdict as PR comment, unusable output = 'review failed' never approve, one review-fix round then checks + second review, close_task only after approve, state 'review' otherwise, cost.csv label review-N, status file has review=. 31 tests in tools/coder/tests green, bash -n clean; install-vm.sh copies prompts/*.md so review.md is installed. Merged in PR #50 (checks green). First live use: the TASK-31 run after reinstall on the VM; a failure there becomes a new bug task.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Second-model review added to the headless coder: after green checks the orchestrator runs a review (review-model), posts a sanitised verdict comment, feeds blocking findings back in one review-fix-1 round and closes the task only after approve; otherwise state 'review'. Covered by extended hermetic tests in tools/coder/tests/; rules and README updated.
+The headless coder now runs an independent review by a second model (/etc/ha2n-coder/review-model, optional review-effort) after green checks: verdict and findings as a sanitised PR comment, one fix round for blocking findings, task closed only on approve, run state 'review' otherwise, cost logged per review. Verified by 31 hermetic tests and code review; merged in PR #50.
 <!-- SECTION:FINAL_SUMMARY:END -->
