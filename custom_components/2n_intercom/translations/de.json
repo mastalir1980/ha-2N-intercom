@@ -195,6 +195,12 @@
       "input_1": {
         "name": "Eingang 1"
       },
+      "io_input": {
+        "name": "Eingang {port}"
+      },
+      "io_tamper": {
+        "name": "Sabotage {port}"
+      },
       "relay_1_active": {
         "name": "Relais 1 aktiv"
       }

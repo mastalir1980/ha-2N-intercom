@@ -199,6 +199,12 @@
       "input_1": {
         "name": "Input 1"
       },
+      "io_input": {
+        "name": "Input {port}"
+      },
+      "io_tamper": {
+        "name": "Tamper {port}"
+      },
       "relay_1_active": {
         "name": "Relay 1 active"
       }

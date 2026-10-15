@@ -18,6 +18,36 @@ if TYPE_CHECKING:
     from .coordinator import TwoNIntercomConfigEntry
 
 
+def io_ports_of_type(
+    io_caps: dict[str, Any],
+    io_status: dict[str, Any],
+    port_type: str,
+) -> list[str]:
+    """Return distinct ports of the requested type present in caps and status."""
+    caps_ports = io_caps.get("ports")
+    status_ports = io_status.get("ports")
+    if not isinstance(caps_ports, list) or not isinstance(status_ports, list):
+        return []
+    available = {
+        port["port"]
+        for port in status_ports
+        if isinstance(port, dict) and isinstance(port.get("port"), str)
+    }
+    ports: list[str] = []
+    for cap in caps_ports:
+        if not isinstance(cap, dict) or cap.get("type") != port_type:
+            continue
+        port = cap.get("port")
+        if (
+            isinstance(port, str)
+            and port
+            and port in available
+            and port not in ports
+        ):
+            ports.append(port)
+    return ports
+
+
 def is_io_port_on(io_status: dict[str, Any], port_name: str) -> bool:
     """Read a physical port state using the device's supported encodings."""
     ports = io_status.get("ports")

@@ -18,7 +18,7 @@ except ImportError:  # pragma: no cover — test stub compat
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import TwoNIntercomCoordinator, TwoNIntercomRuntimeData
-from .entity import TwoNIntercomEntity, is_io_port_on
+from .entity import TwoNIntercomEntity, io_ports_of_type, is_io_port_on
 
 if TYPE_CHECKING:
     from .coordinator import TwoNIntercomConfigEntry
@@ -71,11 +71,11 @@ async def async_setup_entry(
     coordinator: TwoNIntercomCoordinator = runtime.coordinator
     entities: list[BinarySensorEntity] = [TwoNIntercomDoorbell(coordinator, config_entry)]
 
-    if _port_exists(coordinator.io_caps, "input1", port_type="input") and _port_exists(
-        coordinator.io_status,
-        "input1",
-    ):
-        entities.append(TwoNIntercomInput1Sensor(coordinator, config_entry))
+    for port in io_ports_of_type(coordinator.io_caps, coordinator.io_status, "input"):
+        if port == "input1":
+            entities.append(TwoNIntercomInput1Sensor(coordinator, config_entry))
+        else:
+            entities.append(TwoNIntercomIoInputSensor(coordinator, config_entry, port))
 
     if _switch_exists(coordinator.switch_caps, 1):
         entities.append(TwoNIntercomRelay1ActiveSensor(coordinator, config_entry))
@@ -170,6 +170,32 @@ class TwoNIntercomInput1Sensor(TwoNIntercomEntity, BinarySensorEntity):  # type:
     def is_on(self) -> bool:
         """Return true if input 1 is active."""
         return self._is_port_on(self.coordinator.io_status)
+
+
+class TwoNIntercomIoInputSensor(TwoNIntercomEntity, BinarySensorEntity):  # type: ignore[misc]
+    """Representation of a physical IO input, including module tamper ports."""
+
+    _attr_translation_key = "io_input"
+
+    def __init__(
+        self,
+        coordinator: TwoNIntercomCoordinator,
+        config_entry: TwoNIntercomConfigEntry,
+        port: str,
+    ) -> None:
+        """Initialize the input sensor with its device port name."""
+        super().__init__(coordinator, config_entry)
+        self._port = port
+        self._attr_unique_id = f"{config_entry.entry_id}_io_{port}"
+        self._attr_translation_placeholders = {"port": port}
+        if port == "tamper" or port.endswith(".tamper"):
+            self._attr_device_class = BinarySensorDeviceClass.TAMPER
+            self._attr_translation_key = "io_tamper"
+
+    @property
+    def is_on(self) -> bool:
+        """Return true if this input is active in the cached device status."""
+        return is_io_port_on(self.coordinator.io_status, self._port)
 
 
 class TwoNIntercomRelay1ActiveSensor(TwoNIntercomEntity, BinarySensorEntity):  # type: ignore[misc]

@@ -40,7 +40,7 @@ from .const import (
     IO_EXCLUDED_OUTPUTS,
 )
 from .coordinator import TwoNIntercomCoordinator, TwoNIntercomRuntimeData
-from .entity import TwoNIntercomEntity, is_io_port_on
+from .entity import TwoNIntercomEntity, io_ports_of_type, is_io_port_on
 
 if TYPE_CHECKING:
     from .coordinator import TwoNIntercomConfigEntry
@@ -101,29 +101,11 @@ def _switch_unique_id(entry_id: str, relay_number: int) -> str:
 
 def _io_output_ports(coordinator: TwoNIntercomCoordinator) -> list[str]:
     """Return usable physical outputs present in both capabilities and status."""
-    caps_ports = coordinator.io_caps.get("ports")
-    status_ports = coordinator.io_status.get("ports")
-    if not isinstance(caps_ports, list) or not isinstance(status_ports, list):
-        return []
-    available = {
-        port["port"]
-        for port in status_ports
-        if isinstance(port, dict) and isinstance(port.get("port"), str)
-    }
-    outputs: list[str] = []
-    for cap in caps_ports:
-        if not isinstance(cap, dict) or cap.get("type") != "output":
-            continue
-        port = cap.get("port")
-        if (
-            isinstance(port, str)
-            and port
-            and port not in IO_EXCLUDED_OUTPUTS
-            and port in available
-            and port not in outputs
-        ):
-            outputs.append(port)
-    return outputs
+    return [
+        port
+        for port in io_ports_of_type(coordinator.io_caps, coordinator.io_status, "output")
+        if port not in IO_EXCLUDED_OUTPUTS
+    ]
 
 
 async def async_setup_entry(

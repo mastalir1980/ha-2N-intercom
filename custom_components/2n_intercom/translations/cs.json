@@ -195,6 +195,12 @@
       "input_1": {
         "name": "Vstup 1"
       },
+      "io_input": {
+        "name": "Vstup {port}"
+      },
+      "io_tamper": {
+        "name": "Sabotáž {port}"
+      },
       "relay_1_active": {
         "name": "Relé 1 aktivní"
       }
