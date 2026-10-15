@@ -164,6 +164,20 @@ Never run `e2e/e2e.sh relays`, `--relays` or `reset-entry` unless Jan asks in th
 - 2N quirks (see `docs/API_REFERENCE.md`): call control is **GET**, code 14 is overloaded (check `description`),
   snapshot resolution must come from `camera/caps`, MJPEG fps 1–15, RTSP has its own user DB, firmware < 2.40 out of scope.
 
+## Statuses and versions
+
+- **Statuses (board columns):** To Do → In Progress → **To Test** → Done. *To Test* = merged on `main`, automated
+  checks green, waiting for Jan to verify on the real device (criteria that need a ring button, relays, Control4 …;
+  label `manual-close`). A task moves from To Test to Done only after Jan's check (he does it, or tells Claude the result).
+  Until TASK-36 lands, Claude moves `manual-close` tasks to To Test by hand after the merge.
+- **Versions are Backlog milestones** (`v1.5.0`, …). Every user-facing task gets the next open milestone when it is
+  created (`-m vX.Y.Z`); pipeline/tooling tasks (`manual-path`, `ci`, `infra`) get none. `backlog milestone list` shows progress.
+- **PRs merge to `main` continuously.** HACS users install GitHub releases, not `main`, so `main` is the next version
+  in preparation. Do not hold PRs back for a release.
+- **Closing a version:** all tasks of the milestone are Done (Jan tests the To Test items and runs `e2e.sh relays` once)
+  → the task `Release vX.Y.Z` (@copilot) bumps `manifest.json` and writes the user-facing `CHANGELOG.md` section from
+  the milestone → Jan merges it and creates the GitHub release/tag → `backlog milestone archive vX.Y.Z`.
+
 ## Definition of done for a task
 
 Copilot executes this list; Claude checks it during review. A task is not done without a green `e2e.sh wip`.

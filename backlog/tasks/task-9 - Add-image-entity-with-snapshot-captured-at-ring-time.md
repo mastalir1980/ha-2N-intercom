@@ -5,10 +5,11 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-08-30 09:27'
-updated_date: '2026-10-11 19:45'
+updated_date: '2026-10-15 12:12'
 labels:
   - camera
   - ha-platform
+milestone: m-0
 dependencies:
   - TASK-1
 priority: high

@@ -5,11 +5,12 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:12'
-updated_date: '2026-10-12 11:24'
+updated_date: '2026-10-15 12:12'
 labels:
   - git
   - config-flow
   - auth
+milestone: m-0
 dependencies:
   - TASK-21.4
 references:

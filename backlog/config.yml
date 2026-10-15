@@ -1,6 +1,6 @@
 project_name: "ha-2n-intercom"
 default_status: "To Do"
-statuses: ["To Do", "In Progress", "Done"]
+statuses: ["To Do", "In Progress", "To Test", "Done"]
 labels: []
 date_format: yyyy-mm-dd
 max_column_width: 20

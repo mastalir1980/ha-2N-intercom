@@ -7,12 +7,13 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-13 19:03'
-updated_date: '2026-10-13 20:39'
+updated_date: '2026-10-15 12:12'
 labels:
   - io
   - ha-platform
   - github-issue
   - relay
+milestone: m-0
 dependencies: []
 references:
   - custom_components/2n_intercom/switch.py

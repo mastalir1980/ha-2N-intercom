@@ -7,12 +7,13 @@ status: To Do
 assignee:
   - '@copilot'
 created_date: '2026-10-13 19:54'
-updated_date: '2026-10-14 14:48'
+updated_date: '2026-10-15 12:12'
 labels:
   - bug
   - coordinator
   - manual-close
   - on-hold
+milestone: m-0
 dependencies: []
 references:
   - custom_components/2n_intercom/coordinator.py

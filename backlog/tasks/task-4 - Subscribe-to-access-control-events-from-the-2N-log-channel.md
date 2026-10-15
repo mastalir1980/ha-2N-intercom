@@ -5,10 +5,11 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-08-30 09:27'
-updated_date: '2026-10-12 07:13'
+updated_date: '2026-10-15 12:12'
 labels:
   - access-control
   - coordinator
+milestone: m-0
 dependencies:
   - TASK-1
 references:
