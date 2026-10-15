@@ -218,7 +218,7 @@ class FakeAPI:
             "sessions": [
                 {
                     "session": "session-123",
-                    "direction": "incoming",
+                    "direction": "outgoing",
                     "state": "ringing",
                     "calls": [{"peer": "100"}],
                 }

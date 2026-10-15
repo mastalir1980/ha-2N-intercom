@@ -33,6 +33,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 
 ### Doorbell and call lifecycle
 - **Event-driven ring detection** via `/api/log/subscribe` + `/api/log/pull` background loop with automatic re-subscribe and exponential backoff
+- Only calls started by the intercom trigger the doorbell (for example, a visitor button press); calls into the intercom from My2N, Control4, or a SIP phone do not
 - **Event-driven state updates** for switches, IO, SIP registration, and device config changes via the same subscription channel
 - Binary sensor with caller name/number/button attributes
 - **`2n_intercom.answer_call`** and **`2n_intercom.hangup_call`** services that target a config entry and (optionally) a specific session id, with `reason` selector (`normal`/`rejected`/`busy`)
@@ -401,7 +402,6 @@ The integration uses two data channels:
 - **Single camera source** — only one camera source (internal or external) can be active per config entry
 - **Firmware < 2.40 unsupported** — older firmware versions use a different API surface
 - **Control4 DS2 / DS2 Mini: relays may not switch** — on some Control4 installs a relay command succeeds at the API level (the station even shows the door-open icon) but nothing switches, because the lock or gate is wired to Control4 hardware rather than to the 2N relay. The 2N HTTP API cannot see or control that wiring ([#10](https://github.com/mastalir1980/ha-2N-intercom/issues/10))
-- **Control4 DS2 / DS2 Mini: false doorbell rings** — when Control4 (or another SIP client) calls *into* the door station, for example a page or intercom call, the doorbell binary sensor currently turns on as if a visitor rang ([#10](https://github.com/mastalir1980/ha-2N-intercom/issues/10))
 
 ## Troubleshooting
 
