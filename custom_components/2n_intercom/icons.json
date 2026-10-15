@@ -15,6 +15,18 @@
       "input_1": {
         "default": "mdi:electric-switch"
       },
+      "io_input": {
+        "default": "mdi:import",
+        "state": {
+          "on": "mdi:electric-switch-closed"
+        }
+      },
+      "io_tamper": {
+        "default": "mdi:shield-check",
+        "state": {
+          "on": "mdi:shield-alert"
+        }
+      },
       "relay_1_active": {
         "default": "mdi:electric-switch"
       }

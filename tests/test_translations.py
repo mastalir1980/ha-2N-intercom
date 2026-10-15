@@ -108,6 +108,28 @@ class TranslationConsistencyTests(unittest.TestCase):
             },
         )
 
+    def test_io_input_names_placeholders_and_icons(self) -> None:
+        names = {
+            "en": ("Input {port}", "Tamper {port}"),
+            "de": ("Eingang {port}", "Sabotage {port}"),
+            "cs": ("Vstup {port}", "Sabotáž {port}"),
+        }
+        for lang, data in self.languages.items():
+            for key, name in zip(("io_input", "io_tamper"), names[lang]):
+                with self.subTest(lang=lang, key=key):
+                    translated_name = data["entity"]["binary_sensor"][key]["name"]
+                    self.assertEqual(translated_name, name)
+                    self.assertEqual(set(re.findall(r"\{(\w+)\}", translated_name)), {"port"})
+        icons = _load("icons.json")["entity"]["binary_sensor"]
+        self.assertEqual(
+            icons["io_input"],
+            {"default": "mdi:import", "state": {"on": "mdi:electric-switch-closed"}},
+        )
+        self.assertEqual(
+            icons["io_tamper"],
+            {"default": "mdi:shield-check", "state": {"on": "mdi:shield-alert"}},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

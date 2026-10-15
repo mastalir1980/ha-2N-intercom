@@ -245,13 +245,27 @@ Resulting entities:
 - `camera.home_intercom_camera`
 - `image.home_intercom_last_ring` *(snapshot taken at the last ring)*
 - `binary_sensor.home_intercom_doorbell`
-- `binary_sensor.home_intercom_input_1` *(real device input)*
+- `binary_sensor.home_intercom_input_1` *(built-in input, existing entity preserved)*
+- `binary_sensor.home_intercom_input_modul1_input1`, `binary_sensor.home_intercom_input_modul1_input2` *(one per additional input port; actual ports depend on the device and extension modules)*
+- `binary_sensor.home_intercom_tamper_modul1_tamper` *(tamper input, when reported by the device)*
 - `binary_sensor.home_intercom_relay_1_active` *(real cached relay state)*
 - `sensor.home_intercom_sip_registration`
 - `sensor.home_intercom_call_state` *(attribute: `active_session_id`)*
 - `switch.home_intercom_front_door`
 - `switch.home_intercom_output_relay1`, `switch.home_intercom_output_output1` *(physical outputs, disabled by default; actual ports depend on the device and extension modules)*
 - `cover.home_intercom_driveway_gate`
+
+### IO input sensors
+
+Every port with type `input` in `/api/io/caps` and present in `/api/io/status`
+gets a binary sensor, including extension-module inputs such as `modul1.input1`
+and `modul1.input2`. Inputs are **enabled by default**. Their states come from
+`InputChanged` events, with polling as a safety net. The existing `input1`
+sensor keeps its identity and name on upgrade.
+
+A port named `tamper` or ending in `.tamper` is exposed with the tamper device
+class and the name "Tamper {port}". Its state comes directly from that IO port;
+there is no separate tamper sensor driven by `TamperSwitchActivated` log events.
 
 ### Direct IO output switches
 

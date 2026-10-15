@@ -28,8 +28,8 @@ Basic**, pokud zařízení vrátí `401` s `WWW-Authenticate: Basic`.
 | `/api/switch/caps` | GET | `async_get_switch_caps` | povolená relé, `switchOnDuration` |
 | `/api/switch/status` | GET | `async_get_switch_status` | `active` / `held` relé |
 | `/api/switch/ctrl` | GET | `async_switch_control` | `switch`, `action` (on/off/trigger), `duration` |
-| `/api/io/caps` | GET | `async_get_io_caps` | dostupné IO porty |
-| `/api/io/status` | GET | `async_get_io_status` | stav IO portů |
+| `/api/io/caps` | GET | `async_get_io_caps` | physical ports; one binary sensor per input also present in io/status, including module and tamper ports |
+| `/api/io/status` | GET | `async_get_io_status` | cached input/output states, patched by InputChanged/OutputChanged events |
 | `/api/io/ctrl` | GET | `async_io_control` | `port`, `action=on\|off`; latching output control, requires I/O control privilege and bypasses logical-switch timing |
 | `/api/camera/caps` | GET | `async_get_camera_caps` | rozlišení JPEG, zdroje (internal/external) |
 | `/api/camera/snapshot` | GET | `async_get_snapshot` / MJPEG | `source`, `width`, `height`, (`fps` pro MJPEG) |
@@ -37,6 +37,21 @@ Basic**, pokud zařízení vrátí `401` s `WWW-Authenticate: Basic`.
 | `/api/log/subscribe` | GET | `async_subscribe_log` | `filter` = seznam událostí → vrací `id` |
 | `/api/log/pull` | GET | `async_pull_log` | `id`, `timeout` (long-poll, server blokuje) |
 | `/api/log/unsubscribe` | GET | `async_unsubscribe_log` | `id` |
+
+### IO input ports
+
+Input discovery uses every port with `type=input` in `/api/io/caps` that is
+also present in `/api/io/status`, including extension-module ports such as
+`modul1.input1` and `modul1.input2`. Malformed entries and ports missing from
+status are skipped. Input sensors are enabled by default and read cached
+device states (`0`/`1`); `InputChanged` events accept bool or integer `0`/`1`
+and polling remains a safety net.
+
+The built-in `input1` retains unique ID `{entry_id}_input1` and translation
+key `input_1`. Other inputs use `{entry_id}_io_<port>` with the port name
+verbatim. Ports named `tamper` or ending in `.tamper` are the tamper sensors:
+their device class is `tamper` and their state comes from `/api/io/status`.
+No additional tamper entity is created from `TamperSwitchActivated` events.
 
 ### Odběr událostí (`/api/log/subscribe`)
 

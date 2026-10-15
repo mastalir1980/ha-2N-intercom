@@ -64,6 +64,7 @@ def _io_output_entities(registry, entry_id):
         ent["unique_id"][len(prefix):]: ent
         for ent in registry
         if ent.get("unique_id", "").startswith(prefix)
+        and ent["entity_id"].startswith("switch.")
     }
 
 
@@ -126,12 +127,41 @@ def test_sip_registration_matches_device(ha, registry, twon):
     assert ha.state(ent["entity_id"])["state"] == expected
 
 
-def test_input1_matches_device(ha, registry, entry, twon):
-    ent = find_by_suffix(registry, entry["entry_id"], "input1")
-    if ent is None or ent.get("disabled_by"):
-        pytest.skip("input1 sensor not enabled")
-    port = next((p for p in twon.io_status() if p.get("port") == "input1"), None)
-    if port is None:
-        pytest.skip("device has no input1")
-    expected = "on" if port.get("state") in (1, True, "1", "on", "true") else "off"
-    assert ha.state(ent["entity_id"])["state"] == expected
+def test_io_input_entities_match_device(ha, registry, entry, twon):
+    device = {
+        port["port"]: port
+        for port in twon.io_status()
+        if isinstance(port, dict) and isinstance(port.get("port"), str)
+    }
+    inputs = {
+        cap["port"]
+        for cap in twon.io_caps()
+        if isinstance(cap, dict)
+        and cap.get("type") == "input"
+        and isinstance(cap.get("port"), str)
+        and cap["port"]
+        and cap["port"] in device
+    }
+    entry_id = entry["entry_id"]
+    expected_ids = {
+        f"{entry_id}_input1" if port == "input1" else f"{entry_id}_io_{port}": port
+        for port in inputs
+    }
+    entities = {
+        ent["unique_id"]: ent
+        for ent in registry
+        if ent["entity_id"].startswith("binary_sensor.")
+        and (
+            ent.get("unique_id") == f"{entry_id}_input1"
+            or ent.get("unique_id", "").startswith(f"{entry_id}_io_")
+        )
+    }
+    assert set(entities) == set(expected_ids), (
+        f"HA input unique IDs {sorted(entities)} != device inputs {sorted(expected_ids)}"
+    )
+    for uid, port in expected_ids.items():
+        ent = entities[uid]
+        assert not ent.get("disabled_by"), f"input {port} is disabled: {ent['disabled_by']}"
+        expected = "on" if _io_port_on(device[port]) else "off"
+        state = ha.state(ent["entity_id"])["state"]
+        assert state == expected, f"IO input {port}: HA={state} device={expected}"
