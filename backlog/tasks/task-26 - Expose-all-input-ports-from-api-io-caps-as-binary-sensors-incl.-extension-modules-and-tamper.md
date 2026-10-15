@@ -7,7 +7,7 @@ status: To Do
 assignee:
   - '@copilot'
 created_date: '2026-10-13 19:01'
-updated_date: '2026-10-15 12:23'
+updated_date: '2026-10-15 12:33'
 labels:
   - io
   - ha-platform
@@ -28,7 +28,7 @@ references:
   - README.md
   - TASK-7
   - 'https://github.com/mastalir1980/ha-2N-intercom/issues/13'
-priority: medium
+priority: high
 type: feature
 ordinal: 34000
 ---
