@@ -3,11 +3,11 @@ id: TASK-34
 title: >-
   Headless coder: a run that stops after applying the patch leaves a dirty
   clone, the next run fails with "cannot reset own clone"
-status: In Progress
+status: Done
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-14 14:44'
-updated_date: '2026-10-15 13:36'
+updated_date: '2026-10-15 13:46'
 labels:
   - agent
   - infra
@@ -29,10 +29,10 @@ Evidence (ha2n-task-status --list on the VM, 14 Oct 2026): run 20261013-214615-T
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The start of every run brings the clone to a clean origin/main even if a previous run left staged, modified or untracked files on any branch (reset/clean before the checkout, or a forced checkout)
-- [ ] #2 A stop after git apply in publish() (protected path, symlink, binary, size) leaves the clone clean
-- [ ] #3 Stub simulation: a run stopped on a protected path, then main changes the same file, then the next run proceeds past the ready check; bash -n clean
-- [ ] #4 tools/coder/README.md (Czech) mentions the recovery command for a broken clone
+- [x] #1 The start of every run brings the clone to a clean origin/main even if a previous run left staged, modified or untracked files on any branch (reset/clean before the checkout, or a forced checkout)
+- [x] #2 A stop after git apply in publish() (protected path, symlink, binary, size) leaves the clone clean
+- [x] #3 Stub simulation: a run stopped on a protected path, then main changes the same file, then the next run proceeds past the ready check; bash -n clean
+- [x] #4 tools/coder/README.md (Czech) mentions the recovery command for a broken clone
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -61,4 +61,12 @@ Completion gate blocked: bash e2e/e2e.sh wip exited before running tests with 'r
 Jan requested one pre-commit hardening change: before PATH is changed, reject HA2N_CODER_TEST_ROOT for the actual production account using absolute /usr/bin/id -un, exit 2 with the exact requested message, add a regression and one README sentence. No commit or push was requested. The regression can simulate the absolute id in a sourced test-only Bash shell, so no extra runtime identity override will be introduced.
 
 Hardening implemented: before PATH changes, any set HA2N_CODER_TEST_ROOT (including an empty value) now checks /usr/bin/id -un and exits 2 with 'test override refused for the production user' for ha2n-coder. Identity lookup failures also fail closed with an explicit error. No configurable identity executable or additional runtime bypass was added. Tests mock absolute id only inside a sourced, isolated Bash process, with a conflicting PATH stub to prove the guard runs before PATH-dependent work; the harness skips when actually run as the production OS user. Added the requested README sentence. All 14 hermetic regressions, bash -n tools/coder/*.sh and git diff --check passed. Existing E2E setup blocker and In Progress status remain unchanged; no commit or push performed.
+
+2026-10-15 (Claude): review of 922835b before merge: start-of-run reset/clean before a forced detached checkout of origin/main; every publish() stop after git apply goes through stop_clean; test override HA2N_CODER_TEST_ROOT is refused when /usr/bin/id says ha2n-coder, and sudoers has no SETENV/env_keep. 12 hermetic tests in tools/coder/tests passed on bash 5.1 + flock (Linux), bash -n clean. PR #42 checks green on 922835b (e2e-pi, hassfest/HACS validate). Merged 2026-10-15 before the closing commit, so closed here in a backlog PR. VM reinstall (install-vm.sh) still to do, together with TASK-33.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+run-task.sh now cleans the coder's own clone before checking out origin/main and after every rejected patch (stop_clean), so a stopped run no longer breaks the next one. Verified by 12 hermetic regression tests in tools/coder/tests (incl. protected-path stop -> main edits the same file -> next run passes the ready check), bash -n and green PR checks on #42. README documents the recovery command and how to run the tests.
+<!-- SECTION:FINAL_SUMMARY:END -->
