@@ -112,9 +112,13 @@ Detaily endpointů: [`API_REFERENCE.md`](API_REFERENCE.md).
 
 ## Detekce zvonění a hovorů
 
-- Zvonění je **event-driven**: `CallStateChanged` / `CallSessionStateChanged`
-  ve `_RING_STATES` (`ringing`, `alerting`, `incoming`, `ring`) a směr ≠
-  `outgoing`. Volitelný filtr `called_id` omezí na konkrétní tlačítko/peer.
+- Ring detection is **event-driven**, from the intercom's point of view:
+  `CallStateChanged` rings only with `direction=outgoing`;
+  `CallSessionStateChanged` rings only with a nonempty `originator` other than
+  `incoming` (for example, `button`). Both require a state in `_RING_STATES`
+  (`ringing`, `alerting`, `ring`). Calls into the intercom do not ring the
+  doorbell; session events without `originator` are not ring signals.
+  The optional `called_id` filter still restricts ringing to a matching peer.
 - `ring_active` je krátký pulz (`DOORBELL_PULSE_DURATION = 1 s`) – binary
   sensor zvonku se rozsvítí na pulz, ne na celou délku vyzvánění.
 - `active_session_id` se drží jako zdroj pro `answer_call` / `hangup_call`,

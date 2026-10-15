@@ -181,7 +181,7 @@ class TwoNIntercomData:
 class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type: ignore[misc]
     """Coordinator to manage data updates from 2N Intercom."""
 
-    _RING_STATES = {"ringing", "alerting", "incoming", "ring"}
+    _RING_STATES = {"ringing", "alerting", "ring"}
 
     def __init__(
         self,
@@ -842,6 +842,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             self._last_called_peer = self._normalize_peer(raw_peer)
 
         direction = str(params.get("direction") or "").strip().lower()
+        originator = str(params.get("originator") or "").strip().lower()
         active_states = self._RING_STATES | {"active", "connected"}
         terminal_states = {
             "idle",
@@ -865,7 +866,14 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             self._ring_filter_peer is None
             or self._last_called_peer == self._ring_filter_peer
         )
-        is_ringing = state in self._RING_STATES and direction != "outgoing"
+        if event_name == "CallStateChanged":
+            is_ringing = state in self._RING_STATES and direction == "outgoing"
+        else:
+            is_ringing = (
+                state in self._RING_STATES
+                and bool(originator)
+                and originator != "incoming"
+            )
         if is_ringing and ring_allowed:
             # CallStateChanged and CallSessionStateChanged both report one
             # ring; capture the snapshot only on the first of them.
