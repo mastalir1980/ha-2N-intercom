@@ -1,9 +1,10 @@
 ---
-id: TASK-38
+id: TASK-39
 title: 'Doorbell: optional ring on physical button press (KeyPressed), from PR #32'
 status: To Do
 assignee: []
 created_date: '2026-10-15 13:01'
+updated_date: '2026-10-15 13:15'
 labels:
   - doorbell
   - coordinator
@@ -32,7 +33,7 @@ Review points agreed so far (draft review, not yet posted):
 - KeyPressed is believed to fire for keypad keys too; only call buttons may ring (key values to be confirmed from a real device).
 - After TASK-31 a press that starts a call already rings via CallStateChanged direction=outgoing; KeyPressed for the same press must not cause a second pulse or snapshot.
 - A KeyPressed-only ring should capture the ring snapshot like the call path.
-Open question before this is ready: which key values IP Force 2.0 fw 3.3.x and the DS2 emit for call buttons vs keypad (capture /api/log/caps and a KeyPressed sequence). Related: DRAFT-1 (per-button doorbell, last_key_pressed).
+Open question before this is ready: which key values the E2E intercom (fw 3.x) and the PR author's Control4 unit emit for call buttons vs keypad (capture /api/log/caps and a KeyPressed sequence). Related: DRAFT-1 (per-button doorbell, last_key_pressed).
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -44,5 +45,5 @@ Open question before this is ready: which key values IP Force 2.0 fw 3.3.x and t
 - [ ] #5 Full sequence KeyPressed + CallStateChanged(outgoing) + CallSessionStateChanged for one press gives exactly one ring and one snapshot - unit test
 - [ ] #6 A KeyPressed-only ring captures the ring snapshot when ring snapshots are enabled - unit test
 - [ ] #7 README options table documents the option, that called_id does not apply to button presses, and the keypad behaviour
-- [ ] #8 Full unit suite, validate.py, py_compile green; PR check e2e-pi green; Jan verifies a press on the IP Force with the option on and off (manual-close)
+- [ ] #8 Full unit suite, validate.py, py_compile green; PR check e2e-pi green; Jan verifies a press on the E2E intercom with the option on and off (manual-close)
 <!-- AC:END -->
