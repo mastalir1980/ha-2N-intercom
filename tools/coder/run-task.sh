@@ -14,14 +14,19 @@
 # criteria (takes effect on main only when Jan merges; label manual-close opts out). Never merges. State: /var/lib/ha2n-coder/runs/<run>/{status,run.log,*.patch}; see ha2n-task-status.
 set -uo pipefail
 umask 027
-PATH=/usr/local/bin:/usr/bin:/bin
+if [ "${HA2N_CODER_TEST_ROOT+x}" = x ]; then
+  REAL_USER="$(/usr/bin/id -un)" || { echo "cannot determine user for test override" >&2; exit 2; }
+  [ "$REAL_USER" != ha2n-coder ] || { echo "test override refused for the production user" >&2; exit 2; }
+fi
+# Hermetic tests use a temporary root; sudo env_reset strips this override in production.
+PATH="${HA2N_CODER_TEST_ROOT:+$HA2N_CODER_TEST_ROOT/bin:}/usr/local/bin:/usr/bin:/bin"
 ME="$(id -un)"; [ "$ME" = ha2n-coder ] || { echo "must run as ha2n-coder" >&2; exit 2; }
 HOME="$(getent passwd "$ME" | cut -d: -f6)"; export HOME
 REPO="mastalir1980/ha-2N-intercom"
-BASE="/var/lib/ha2n-coder"; CLONE="$BASE/repo"; RUNS="$BASE/runs"
-LIB=/usr/local/lib/ha2n-coder
+BASE="${HA2N_CODER_TEST_ROOT:-}/var/lib/ha2n-coder"; CLONE="$BASE/repo"; RUNS="$BASE/runs"
+LIB="${HA2N_CODER_TEST_ROOT:-}/usr/local/lib/ha2n-coder"
 SANDBOX=(sudo -n -u ha2n-copilot "$LIB/sandbox.sh")
-REPO_TOKEN_FILE=/etc/ha2n-coder/repo.token
+REPO_TOKEN_FILE="${HA2N_CODER_TEST_ROOT:-}/etc/ha2n-coder/repo.token"
 PROTECTED='(^|/)\.git|^(\.github/|e2e/ci/|e2e/scripts/|e2e/run\.sh$|e2e/nightly\.sh$|e2e/e2e\.sh$|e2e/staging/|e2e/\.env|e2e/tests/conftest\.py$|tools/coder/|CLAUDE\.md$|backlog/config\.yml$)'
 MAX_FILES=40; MAX_LINES=2500; LOCAL_ROUNDS=2; CI_ROUNDS=3; CHECKS_TIMEOUT=$((45*60))
 COST_CSV="$BASE/cost.csv"   # one line per Copilot call; stays on the VM (the repo is public)
@@ -47,6 +52,10 @@ status() {  # status <state> <message>  — states: running, stopped, green, fai
   echo "[$(date +%H:%M:%S)] $1: $2"
 }
 stop() { status stopped "$*"; exit 1; }
+stop_clean() {
+  git reset -q --hard && git clean -qfdx || stop "cannot clean own clone after: $*"
+  stop "$@"
+}
 
 exec 9>"$BASE/run.lock"
 flock -n 9 || stop "another task is running (one at a time)"
@@ -66,7 +75,8 @@ cd "$CLONE" || stop "no clone"
 git config user.name "ha2n-coder (Copilot)"; git config user.email "ha2n-coder@localhost"
 git config core.hooksPath /dev/null
 gitauth fetch -q --prune origin || stop "git fetch failed"
-{ git checkout -q --detach origin/main && git reset -q --hard && git clean -qfdx; } || stop "cannot reset own clone"
+{ git reset -q --hard && git clean -qfdx && git checkout -q --detach -f origin/main \
+    && git reset -q --hard origin/main && git clean -qfdx; } || stop "cannot reset own clone"
 backlog task view "$TASK" --plain > "$DIR/task.txt" 2>&1 || stop "task $TASK not found"
 HEADER="$(sed '/^Description:/q' "$DIR/task.txt")"   # only the metadata part, not the free text
 grep -q '^Status: .*To Do' <<<"$HEADER"   || stop "task is not 'To Do' — not ready for the coder"
@@ -155,22 +165,22 @@ publish() {  # take the diff from the sandbox, apply it, check what is ACTUALLY 
   "${SANDBOX[@]}" patch > "$DIR/change-$ROUND.diff" 2> "$DIR/patch-$ROUND.log" || stop "no changes produced"
   { git checkout -q -B "$BRANCH" origin/main && git reset -q --hard && git clean -qfdx; } || stop "cannot reset own clone"
   git apply --index --whitespace=nowarn "$DIR/change-$ROUND.diff" 2> "$DIR/apply-$ROUND.log" \
-    || stop "diff does not apply on main (apply-$ROUND.log)"
+    || stop_clean "diff does not apply on main (apply-$ROUND.log)"
   git diff --cached --no-renames --name-only -z | tr '\0' '\n' > "$DIR/files-$ROUND.txt"
-  [ -s "$DIR/files-$ROUND.txt" ] || stop "no changes produced"
+  [ -s "$DIR/files-$ROUND.txt" ] || stop_clean "no changes produced"
   if grep -E "$PROTECTED" "$DIR/files-$ROUND.txt" > "$DIR/protected.txt"; then
-    stop "change touches protected paths: $(head -5 "$DIR/protected.txt" | tr '\n' ' ')"
+    stop_clean "change touches protected paths: $(head -5 "$DIR/protected.txt" | tr '\n' ' ')"
   fi
   git diff --cached --no-renames --summary | grep -Eq 'mode (120000|160000)|mode change' \
-    && stop "symlinks, submodules and file-mode changes are not allowed"
-  git diff --cached --no-renames --numstat | awk '$1=="-"' | grep -q . && stop "binary files are not allowed"
+    && stop_clean "symlinks, submodules and file-mode changes are not allowed"
+  git diff --cached --no-renames --numstat | awk '$1=="-"' | grep -q . && stop_clean "binary files are not allowed"
   local n lines
   n="$(wc -l < "$DIR/files-$ROUND.txt")"
   lines="$(git diff --cached --no-renames --numstat | awk '{a+=$1; d+=$2} END {print a+d}')"
-  [ "$n" -le "$MAX_FILES" ] && [ "$lines" -le "$MAX_LINES" ] || stop "change too big for one PR ($n files, $lines lines)"
+  [ "$n" -le "$MAX_FILES" ] && [ "$lines" -le "$MAX_LINES" ] || stop_clean "change too big for one PR ($n files, $lines lines)"
   git commit -q -m "$TASK: $TITLE" -m "Implemented by GitHub Copilot CLI (headless, ha2n-coder), round $ROUND." \
-    || stop "commit failed"
-  gitauth push -q --force-with-lease origin "$BRANCH" || stop "push failed"
+    || stop_clean "commit failed"
+  gitauth push -q --force-with-lease origin "$BRANCH" || stop_clean "push failed"
   status running "pushed $(git rev-parse --short HEAD) ($n files, $lines lines)"
 }
 
