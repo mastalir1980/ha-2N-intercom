@@ -5,13 +5,18 @@ status: To Do
 assignee:
   - '@copilot'
 created_date: '2026-10-15 12:13'
-updated_date: '2026-10-15 12:13'
+updated_date: '2026-10-15 19:23'
 labels:
   - release
 milestone: m-0
 dependencies:
   - TASK-15
   - TASK-31
+  - TASK-41
+  - TASK-42
+  - TASK-43
+  - TASK-44
+  - TASK-45
 references:
   - CHANGELOG.md
   - custom_components/2n_intercom/manifest.json
