@@ -2,7 +2,13 @@ name: hassfest
 
 on:
   push:
+    branches: [main]
   pull_request:
+    paths:
+      - '**'
+      - '!backlog/**'
+      - '!docs/**/*.md'
+      - 'backlog/config.yml'
   workflow_dispatch:
 
 jobs:

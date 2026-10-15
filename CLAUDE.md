@@ -161,6 +161,7 @@ Never run `e2e/e2e.sh relays`, `--relays` or `reset-entry` unless Jan asks in th
   (except `backlog/config.yml`) or `docs/**/*.md`. GitHub evaluates the whole PR diff, not just the last commit;
   any other changed file keeps E2E enabled. `workflow_dispatch` is unaffected. Keep `e2e-pi` optional in
   required checks: a path-filtered workflow stays pending and would block backlog-only PRs.
+  `hacs.yml` and `hassfest.yml` use the same `pull_request` path filter and run on push only for `main` (TASK-40).
 
 ## Architecture rules you must not break
 

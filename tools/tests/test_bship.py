@@ -362,6 +362,24 @@ class E2EPathFilterTests(unittest.TestCase):
             source,
         )
 
+    def test_hacs_and_hassfest_push_only_main_and_skip_backlog_only_prs(self) -> None:
+        for name in ("hacs.yml", "hassfest.yml"):
+            with self.subTest(workflow=name):
+                source = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
+                self.assertIn(
+                    "on:\n"
+                    "  push:\n"
+                    "    branches: [main]\n"
+                    "  pull_request:\n"
+                    "    paths:\n"
+                    "      - '**'\n"
+                    "      - '!backlog/**'\n"
+                    "      - '!docs/**/*.md'\n"
+                    "      - 'backlog/config.yml'\n"
+                    "  workflow_dispatch:\n",
+                    source,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

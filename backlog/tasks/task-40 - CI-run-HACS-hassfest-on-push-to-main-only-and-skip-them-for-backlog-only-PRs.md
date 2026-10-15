@@ -1,10 +1,11 @@
 ---
 id: TASK-40
 title: 'CI: run HACS/hassfest on push to main only and skip them for backlog-only PRs'
-status: To Do
+status: In Progress
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-15 14:23'
+updated_date: '2026-10-15 14:29'
 labels:
   - ci
   - infra
@@ -23,8 +24,8 @@ Every bship PR now shows a red HACS check: bship merges and deletes the backlog-
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 hacs.yml and hassfest.yml run on push only for main (plus pull_request and workflow_dispatch as today)
-- [ ] #2 Their pull_request trigger uses the same path filter as e2e-pi.yml (skip when all changed files are under backlog/ except backlog/config.yml, or match docs/**/*.md)
+- [x] #1 hacs.yml and hassfest.yml run on push only for main (plus pull_request and workflow_dispatch as today)
+- [x] #2 Their pull_request trigger uses the same path filter as e2e-pi.yml (skip when all changed files are under backlog/ except backlog/config.yml, or match docs/**/*.md)
 - [ ] #3 A code PR (e.g. the next coder PR) still gets one hassfest and one HACS check each, both green; the coder's wait_checks still sees e2e-pi
 - [ ] #4 Verified live: the next bship PR shows no failed check; result written to the task notes
 <!-- AC:END -->
@@ -36,3 +37,9 @@ Every bship PR now shows a red HACS check: bship merges and deletes the backlog-
 2. Extend tools/tests/test_bship.py E2EPathFilterTests (or a sibling test) to assert the same filter in all three workflows.
 3. Note in e2e/ci/README.md (Czech) next to the e2e-pi filter. Keep hassfest/HACS out of required checks (path-filtered checks stay pending).
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Changed .github/workflows/hacs.yml and hassfest.yml: added push trigger limited to main; pull_request paths copied from e2e-pi.yml (backlog/** except backlog/config.yml, docs/**/*.md); workflow_dispatch kept. Jobs unchanged. Added test_hacs_and_hassfest_push_only_main_and_skip_backlog_only_prs in tools/tests/test_bship.py. Validation: tools/tests 16 OK, tests/ 587 OK, validate.py OK, py_compile OK, both YAML files parsed with Ruby (PyYAML and actionlint not installed). Czech note added to e2e/ci/README.md after TASK-32. Open: AC 3 and 4 need live runs (next bship PR and a code PR). Follow-up: CLAUDE.md and .github/copilot-instructions.md do not mention the new trigger rule; tools/coder/run-task.sh comments still mention hassfest/HACS. Not committed.
+<!-- SECTION:NOTES:END -->
