@@ -1,4 +1,4 @@
-# E2E on the Pi (self-hosted runner)
+# E2E na Pi pro každý PR (self-hosted runner)
 
 První stavební kámen autonomní pipeline (TASK-22). Agent, který kóduje mimo lokální síť
 (virtuál), pushne větev a otevře PR. Pi, které vidí na interkom, větev otestuje a výsledek
@@ -123,29 +123,33 @@ Běží s plnými právy dockeru, takže nesmí nasazovat cizí větve. PR a vě
 
 Ruční spuštění: **Actions → E2E on the Pi → Run workflow**, zadej plné SHA commitu z větve repa.
 
-## Backlog-only PRs (TASK-32)
+## PR pouze se změnami Backlogu a dokumentace (TASK-32)
 
-The `pull_request_target` path filter skips PRs changing only `backlog/**` (except
-`backlog/config.yml`) or `docs/**/*.md`. Changes to any other file, including root `README.md`,
-non-Markdown docs, and `backlog/config.yml`, still trigger E2E with all existing safety guards.
-GitHub evaluates the whole PR diff, not just the last commit: a coder PR still runs E2E after
-a final backlog-only commit. `workflow_dispatch` is unaffected.
+Filtr cest pro `pull_request_target` přeskočí PR, který mění jen `backlog/**` (kromě
+`backlog/config.yml`) nebo `docs/**/*.md`. Změna jakéhokoli jiného souboru, včetně kořenového
+`README.md`, dokumentace v jiném formátu nebo `backlog/config.yml`, E2E stále spustí se všemi
+dosavadními bezpečnostními podmínkami. GitHub vyhodnocuje celý diff PR, ne jen poslední commit:
+PR s kódem proto spustí E2E i po závěrečném commitu pouze do Backlogu. `workflow_dispatch`
+se filtr netýká.
 
-Keep `e2e-pi` out of required checks: GitHub leaves checks for path-filtered workflows pending,
-so making it required would block backlog-only PRs. GitHub path filters consider at most the
-first 300 changed files; use manual dispatch if a larger PR could hide a relevant file.
+`e2e-pi` nepřidávej mezi povinné kontroly: GitHub nechává kontroly workflow přeskočeného filtrem
+cest ve stavu čekání, takže by blokovaly PR pouze se změnami Backlogu. Filtry GitHubu pracují
+nejvýše s prvními 300 změněnými soubory; pokud by větší PR mohl skrýt relevantní soubor,
+spusť workflow ručně.
 
-Source `tools/bship.zsh` from `~/.zshrc` using the line in its header. `BSHIP_REPO` overrides
-the checkout location. `bship "Backlog update"` requires `main` and refuses any changed files
-outside `backlog/` and `docs/`, including staged and untracked files. It pulls `main` with
-`--ff-only` while preserving those uncommitted changes, then runs `backlog doctor` before
-branching or committing. A failed pull or non-clean diagnosis stops shipping. For duplicate
-IDs, run `backlog doctor --fix` manually and review the repair; `bship` never runs `--fix`.
+Do `~/.zshrc` přidej načtení `tools/bship.zsh` podle řádku v hlavičce skriptu. Proměnná
+`BSHIP_REPO` umožňuje zvolit jiný checkout. `bship "Backlog update"` vyžaduje větev `main`
+a odmítne změny mimo `backlog/` a `docs/`, včetně změn v indexu a nesledovaných souborů.
+Nejprve aktualizuje `main` pomocí `git pull --ff-only` se zachováním necommitnutých změn,
+potom před vytvořením větve a commitu spustí `backlog doctor`. Neúspěšný pull, nenulový návratový
+kód `doctor` nebo hlášení duplicit zastaví odeslání. Ostatní výstupy `doctor` s nulovým návratovým
+kódem jsou povolené; skript nevyžaduje přesné znění zprávy o úspěchu. Při duplicitních ID spusť
+`backlog doctor --fix` ručně a opravu zkontroluj; `bship` nikdy nespouští `--fix` automaticky.
 
-On success it commits only `backlog/` and `docs/` to `backlog-<timestamp>`, pushes, opens a PR
-with an explicit title/body, merges with `--merge --delete-branch`, and returns to up-to-date
-`main`. This is a local helper, not a write-capable auto-merge workflow. Changes to the workflow
-must first be reviewed and merged into `main` before live path-filter verification.
+Při úspěchu vytvoří commit pouze z `backlog/` a `docs/` na větvi `backlog-<timestamp>`, pushne ji,
+otevře PR s výslovně zadaným názvem a tělem, sloučí ho pomocí `--merge --delete-branch` a vrátí se
+na aktuální `main`. Jde o lokální pomocnou funkci, ne o workflow s právem zápisu pro automatické
+slučování. Před živým ověřením filtru je nutné změnu workflow zkontrolovat a sloučit do `main`.
 
 ## Provoz
 - reporty: `/var/lib/ha2n-ci/reports/` (posledních 50), `latest` je symlink na poslední,

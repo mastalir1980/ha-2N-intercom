@@ -12,8 +12,12 @@ import tempfile
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[1]
-CLEAN_DIAGNOSIS = "No duplicate task IDs found in active or completed tasks."
+ROOT = Path(__file__).resolve().parents[2]
+CLEAN_DIAGNOSIS = "No duplicate IDs, self-referential dependencies, or dependency cycles found."
+DUPLICATE_DIAGNOSIS = (
+    "WARNING: 1 duplicate task ID group affects 2 files.\n"
+    "Repair preview (no files changed):"
+)
 STUB = """\
 import json
 import os
@@ -252,8 +256,12 @@ class BshipTests(unittest.TestCase):
         self.assertIn("pull failed", result.stderr)
         self.assertNotIn(["backlog", "doctor"], self._calls())
 
-    def test_refuses_duplicate_and_unknown_diagnoses_even_with_zero_exit(self) -> None:
-        for diagnosis in ("Duplicate task IDs found: TASK-1", "Unexpected doctor output", ""):
+    def test_refuses_duplicate_diagnoses_even_with_zero_exit(self) -> None:
+        for diagnosis in (
+            DUPLICATE_DIAGNOSIS,
+            "WARNING: 1 DuPlIcAtE task Id GrOuP affects 2 files.",
+            "RePaIr PrEvIeW (no files changed):",
+        ):
             with self.subTest(diagnosis=diagnosis):
                 self.env["BSHIP_TEST_DIAGNOSIS"] = diagnosis
                 result = self._run()
@@ -263,6 +271,23 @@ class BshipTests(unittest.TestCase):
                     [call for call in self._calls() if call[0] == "backlog"],
                     [["backlog", "doctor"]],
                 )
+
+    def test_accepts_other_successful_diagnoses(self) -> None:
+        for index, diagnosis in enumerate((
+            "No duplicate task IDs found in active or completed tasks.",
+            "Doctor check completed.",
+            "",
+        )):
+            with self.subTest(diagnosis=diagnosis):
+                self.env["BSHIP_TEST_DIAGNOSIS"] = diagnosis
+                (self.repo / "docs/guide.md").write_text(f"Update {index}\n", encoding="utf-8")
+                result = self._run()
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                branch = next(
+                    call[3] for call in self._calls()
+                    if call[:3] == ["git", "switch", "-c"]
+                )
+                self._git(self.repo, "branch", "-D", branch)
 
     def test_stops_when_doctor_fails(self) -> None:
         self.env["BSHIP_TEST_DOCTOR_EXIT"] = "1"
@@ -277,7 +302,7 @@ class BshipTests(unittest.TestCase):
         (self.repo / "docs/guide.md").write_text("Local update\n", encoding="utf-8")
         result = self._run()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn(CLEAN_DIAGNOSIS, result.stdout)
+        self.assertIn("No duplicate", result.stdout)
 
     def test_real_doctor_refuses_duplicate_pulled_from_main(self) -> None:
         if self.backlog is None:

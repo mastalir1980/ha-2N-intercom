@@ -57,13 +57,21 @@ Work on this repo is split between two agents:
   the architecture rules and the definition of done; report findings, do not fix them silently.
 - Do not edit files under `custom_components/`, `tests/` or `e2e/tests/` unless Jan asks.
   Editing `docs/*`, `CLAUDE.md`, `.github/copilot-instructions.md` and Backlog (via CLI) is fine.
-- **Backlog and analysis changes ship through `bship`** (Jan's standing instruction): source `tools/bship.zsh`
-  from `~/.zshrc` as documented in its header; `BSHIP_REPO` selects the checkout. Run it on `main` with only
-  `backlog/` and `docs/` changes. It pulls with `--ff-only`, requires a clean `backlog doctor` diagnosis,
-  then commits to a fresh `backlog-<timestamp>` branch, opens a PR with an explicit body, merges with
-  `--merge --delete-branch`, and updates `main`. Duplicate IDs require a manual `backlog doctor --fix`
-  and review; `bship` never repairs them automatically. `main` stays PR-only; there is no auto-merge workflow.
-  Changes outside these directories need a separate reviewed PR. Code and its task notes stay on task branches.
+- **Backlog and analysis changes ship with `bship`** (Jan's standing instruction, 2026-10-15): Claude makes
+  Backlog changes (via CLI) and `docs/*` findings in Jan's main checkout on an up-to-date `main`
+  (`git pull --ff-only` first), leaves them **uncommitted** and ends its reply with the one line Jan runs:
+  `bship "Backlog: <what changed>"`. `bship` is a zsh function on Jan's Mac: it commits only `backlog/` and
+  `docs/` to a fresh `backlog-<timestamp>` branch, opens the PR, merges it and returns to an updated `main`;
+  it refuses when anything else is changed. Before editing, check that the main checkout is on `main` with no
+  unrelated changes. Never commit Backlog changes to a task branch or leave them on another branch.
+  Changes outside `backlog/` and `docs/` (e.g. this file, `.github/copilot-instructions.md`) do not fit `bship`:
+  they go on a `backlog-<topic>` branch from `origin/main`, and Claude gives Jan the exact push and
+  `gh pr create` commands (explicit `--title`/`--body`, not `--fill`). `main` is protected (changes only via PR).
+  `bship` is versioned in `tools/bship.zsh` (source line in its header), pulls `--ff-only`, and stops on duplicate
+  IDs found by `backlog doctor` without ever running `--fix`.
+- **Task work runs in git worktrees**, one per task (`git worktree add ../ha2n-task-<id> -b task-<id>-slug origin/main`),
+  never in Jan's main checkout, which stays on `main` for Backlog changes and `bship`. Code changes go through
+  `task-<id>-…` branches and PRs.
 - Claude's shell on Jan's Mac is a Linux VM that does not see the macOS `backlog`. If `backlog` is missing,
   install it there: `npm install --prefix $HOME/.backlog backlog.md` and call `$HOME/.backlog/node_modules/.bin/backlog`
   from the repo root. Only if that fails, give Jan the exact command to run.

@@ -1,6 +1,7 @@
 # Add to ~/.zshrc:
 #   source "${BSHIP_REPO:-$HOME/programing/ha-2n-intercom}/tools/bship.zsh"
 # Set BSHIP_REPO to use a different checkout; it must be on main.
+# Tests (from the repo root): python3 -m unittest discover -s tools/tests
 
 bship() {
   emulate -L zsh
@@ -30,8 +31,8 @@ bship() {
     return 1
   fi
   print -r -- "$doctor_output"
-  if [[ "$doctor_output" != 'No duplicate task IDs found in active or completed tasks.' ]]; then
-    print -u2 -- "bship: backlog doctor did not report a clean result. Run backlog doctor --fix and review the repair."
+  if [[ "${doctor_output:l}" =~ 'duplicate .*id group|repair preview' ]]; then
+    print -u2 -- "bship: duplicate task IDs found. Run backlog doctor --fix and review the repair."
     return 1
   fi
 

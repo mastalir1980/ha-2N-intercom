@@ -79,15 +79,14 @@ adds one last commit that does it (takes effect when Jan merges; label `manual-c
   before finishing `backlog instructions task-finalization`.
 - When you start: status `In Progress`. While working: add implementation notes (what changed, decisions, follow-ups).
 - **One task per branch/PR**, branch name `task-<id>-short-slug`.
-- New tasks and analysis-only Backlog changes made by Claude ship in separate `backlog-<topic>` PRs from `main`;
-  do not expect them in your task branch. Your own task's status/notes/AC updates still belong in your task branch.
-- **Backlog and analysis changes ship through `bship`** (Jan's standing instruction): source `tools/bship.zsh`
-  from `~/.zshrc` as documented in its header; `BSHIP_REPO` selects the checkout. Run it on `main` with only
-  `backlog/` and `docs/` changes. It pulls with `--ff-only`, requires a clean `backlog doctor` diagnosis,
-  then commits to a fresh `backlog-<timestamp>` branch, opens a PR with an explicit body, merges with
-  `--merge --delete-branch`, and updates `main`. Duplicate IDs require a manual `backlog doctor --fix`
-  and review; `bship` never repairs them automatically. `main` stays PR-only; there is no auto-merge workflow.
-  Changes outside these directories need a separate reviewed PR. Code and its task notes stay on task branches.
+- New tasks and analysis-only Backlog changes made by Claude reach `main` through separate backlog-only PRs
+  (Jan's `bship` command); do not expect them in your task branch and never commit them yourself. Your own task's
+  status/notes/AC updates belong in your task branch. `main` is protected: nothing is committed or pushed to it directly.
+  `bship` is versioned in `tools/bship.zsh` (source line in its header), pulls `--ff-only`, and stops on duplicate
+  IDs found by `backlog doctor` without ever running `--fix`.
+- **Work in a git worktree per task** (`git worktree add ../ha2n-task-<id> -b task-<id>-slug origin/main`), not in
+  Jan's main checkout, which stays on `main` for Backlog changes. Commit with Jan's GitHub noreply address
+  (`164862832+mastalir1980@users.noreply.github.com`), never a work or private e-mail: the repo is public.
 - **Respect `dependencies`** in the task frontmatter — do not start a task whose dependencies are not Done.
 - When done: tick the acceptance criteria, add a short final summary, set status `Done` (via CLI) —
   only after the full definition of done below, including a green `e2e.sh wip`. Put this in the PR's last commit so
