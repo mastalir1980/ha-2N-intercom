@@ -1,11 +1,11 @@
 ---
 id: TASK-33
 title: 'Headless coder: independent review by a second model after green checks'
-status: To Do
+status: In Progress
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-14 14:32'
-updated_date: '2026-10-14 14:32'
+updated_date: '2026-10-15 14:33'
 labels:
   - agent
   - infra
@@ -32,14 +32,14 @@ Copilot may adjust tests until they pass, so every coder PR needs an independent
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 With /etc/ha2n-coder/review-model set, after wait_checks is green the orchestrator runs one review round in the sandbox with that model (and /etc/ha2n-coder/review-effort if set); without the file the review is skipped and the run behaves as today, with a note in the status message
-- [ ] #2 The reviewer gets the task (description, acceptance criteria, plan), the full diff against origin/main and the architecture rules + definition of done from CLAUDE.md, and writes a JSON verdict {verdict: approve|changes, findings: [{severity: blocking|minor, file, line, summary}]}; any file change it makes is discarded
-- [ ] #3 The verdict and findings are posted as one PR comment (no cost figures, no secrets, no host data); unparsable reviewer output is reported as "review failed" and never as approve
-- [ ] #4 Blocking findings are fed back to the coder as one extra fix round (label review-fix-1), followed by checks and one more review; at most one review-fix round per run
-- [ ] #5 close_task (TASK-25) runs only after verdict approve; with remaining blocking findings the run ends in a new state "review" with the findings in the message, and the task stays In Progress
-- [ ] #6 Each reviewer call is logged in cost.csv with label review-N and its model; ha2n-task-status shows the verdict
-- [ ] #7 Stub simulation covers: approve, changes then fixed, changes not fixed, missing review-model, unparsable output; bash -n clean
-- [ ] #8 Rules and docs updated in sync: CLAUDE.md, .github/copilot-instructions.md (definition of done: review by second model for coder PRs; Claude reviews on request), tools/coder/README.md (Czech: setup of review-model, states), "Pro Hermese" instructions (message includes verdict)
+- [x] #1 With /etc/ha2n-coder/review-model set, after wait_checks is green the orchestrator runs one review round in the sandbox with that model (and /etc/ha2n-coder/review-effort if set); without the file the review is skipped and the run behaves as today, with a note in the status message
+- [x] #2 The reviewer gets the task (description, acceptance criteria, plan), the full diff against origin/main and the architecture rules + definition of done from CLAUDE.md, and writes a JSON verdict {verdict: approve|changes, findings: [{severity: blocking|minor, file, line, summary}]}; any file change it makes is discarded
+- [x] #3 The verdict and findings are posted as one PR comment (no cost figures, no secrets, no host data); unparsable reviewer output is reported as "review failed" and never as approve
+- [x] #4 Blocking findings are fed back to the coder as one extra fix round (label review-fix-1), followed by checks and one more review; at most one review-fix round per run
+- [x] #5 close_task (TASK-25) runs only after verdict approve; with remaining blocking findings the run ends in a new state "review" with the findings in the message, and the task stays In Progress
+- [x] #6 Each reviewer call is logged in cost.csv with label review-N and its model; ha2n-task-status shows the verdict
+- [x] #7 Stub simulation covers: approve, changes then fixed, changes not fixed, missing review-model, unparsable output; bash -n clean
+- [x] #8 Rules and docs updated in sync: CLAUDE.md, .github/copilot-instructions.md (definition of done: review by second model for coder PRs; Claude reviews on request), tools/coder/README.md (Czech: setup of review-model, states), "Pro Hermese" instructions (message includes verdict)
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -51,3 +51,15 @@ Copilot may adjust tests until they pass, so every coder PR needs an independent
 4. task-status.sh: show verdict; README + rules.
 Must not change: the protected-path guard, token handling (reviewer never sees the repo token), max fix rounds for CI, the never-merge rule.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented in tools/coder: prompts/review.md (new), prompts/fix.md, sandbox.sh (run_copilot helper + 'review' verb: restores tree, returns only .review.json), run-task.sh (review(), main loop with CI_USED/REVIEWS/REVIEW_FIX counters, state 'review', review= status line, cost label review-N). Per Jan's decision, AC7 is covered by extending the hermetic suite tools/coder/tests/test_run_task.py (31 tests, green with Bash 5 + flock) instead of a separate stub simulation. sandbox.sh itself is only syntax-checked (needs the real sandbox user). The reviewer reads the diff and CLAUDE.md in the sandbox itself (prompt goes via argv, so it is not embedded). Reviewer output is validated strictly and sanitised before being posted. ha2n-task-status shows the verdict via the review= line of the status file (no code change). Docs: CLAUDE.md, .github/copilot-instructions.md, tools/coder/README.md updated. Follow-up: a real end-to-end run on the VM with /etc/ha2n-coder/review-model set is still needed (Jan).
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Second-model review added to the headless coder: after green checks the orchestrator runs a review (review-model), posts a sanitised verdict comment, feeds blocking findings back in one review-fix-1 round and closes the task only after approve; otherwise state 'review'. Covered by extended hermetic tests in tools/coder/tests/; rules and README updated.
+<!-- SECTION:FINAL_SUMMARY:END -->

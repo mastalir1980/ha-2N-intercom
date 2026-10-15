@@ -8,6 +8,8 @@
 #
 #   sandbox.sh prepare <branch>   fresh clone of main into ~/work/src, new local branch
 #   sandbox.sh copilot            run Copilot CLI headless on the prompt read from stdin
+#   sandbox.sh review             same with the review model; prints the transcript, then a
+#                                 "=== REVIEW JSON ===" line and .review.json; the tree is restored
 #   sandbox.sh gates              unit tests + validate.py + py_compile (Python 3.12 venv)
 #   sandbox.sh patch              the whole change vs origin/main as one plain diff (stdout)
 #
@@ -25,6 +27,38 @@ COPILOT_TOKEN_FILE=/etc/ha2n-coder/copilot.token
 die() { echo "sandbox: $*" >&2; exit 2; }
 [ "$ME" = ha2n-copilot ] || die "must run as ha2n-copilot"
 mkdir -p "$WORK"
+
+run_copilot() {  # run_copilot <model-file> <effort-file> — headless Copilot on $WORK/prompt.md (stdin), inside $SRC
+  local m e
+  [ -r "$COPILOT_TOKEN_FILE" ] || die "missing $COPILOT_TOKEN_FILE (sudo ha2n-coder-set-token copilot)"
+  cat > "$WORK/prompt.md"
+  [ -s "$WORK/prompt.md" ] || die "empty prompt"
+  MODEL_ARGS=()   # optional, root-owned: the model file holds one model id (else Copilot's default)
+  if [ -r "$1" ]; then
+    m="$(tr -d '[:space:]' < "$1")"
+    [[ "$m" =~ ^[A-Za-z0-9._-]{1,64}$ ]] || die "invalid model id in $1"
+    MODEL_ARGS=(--model "$m"); echo "model: $m"
+  else
+    echo "model: Copilot default"
+  fi
+  if [ -r "$2" ]; then   # optional, root-owned: reasoning effort
+    e="$(tr -d '[:space:]' < "$2")"
+    [[ "$e" =~ ^(none|minimal|low|medium|high|xhigh|max)$ ]] || die "invalid effort in $2"
+    MODEL_ARGS+=(--reasoning-effort "$e"); echo "reasoning effort: $e"
+  fi
+  cd "$SRC" || exit 1
+  rm -f .agent-stop
+  # Clean environment: only what Copilot needs. No repo token exists for this user at all.
+  # No -s (silent): with it Copilot prints nothing but the answer, and run-task.sh needs the
+  # "AI Credits" / "Tokens" summary at the end of the output to log the cost (cost.csv).
+  # Keep env/timeout/copilot one command: a comment inside the line continuation would split it
+  # and run copilot outside `env -i`, i.e. without COPILOT_GITHUB_TOKEN.
+  env -i HOME="$HOME" PATH="$PATH" LANG=C.UTF-8 TERM=dumb \
+    COPILOT_GITHUB_TOKEN="$(cat "$COPILOT_TOKEN_FILE")" \
+    timeout "${COPILOT_TIMEOUT:-50m}" \
+    copilot -p "$(cat "$WORK/prompt.md")" --no-ask-user "${MODEL_ARGS[@]}" \
+      --allow-all-tools --deny-tool 'shell(git push)' --deny-tool 'shell(gh)' --deny-tool 'url'
+}
 
 case "${1:-}" in
   prepare)
@@ -44,38 +78,30 @@ case "${1:-}" in
 
   copilot)
     [ -d "$SRC/.git" ] || die "run prepare first"
-    [ -r "$COPILOT_TOKEN_FILE" ] || die "missing $COPILOT_TOKEN_FILE (sudo ha2n-coder-set-token copilot)"
-    cat > "$WORK/prompt.md"
-    [ -s "$WORK/prompt.md" ] || die "empty prompt"
-    MODEL_ARGS=()   # optional, root-owned: /etc/ha2n-coder/model holds one model id (else Copilot's default)
-    if [ -r /etc/ha2n-coder/model ]; then
-      m="$(tr -d '[:space:]' < /etc/ha2n-coder/model)"
-      [[ "$m" =~ ^[A-Za-z0-9._-]{1,64}$ ]] || die "invalid model id in /etc/ha2n-coder/model"
-      MODEL_ARGS=(--model "$m"); echo "model: $m"
-    else
-      echo "model: Copilot default"
-    fi
-    if [ -r /etc/ha2n-coder/effort ]; then   # optional, root-owned: reasoning effort
-      e="$(tr -d '[:space:]' < /etc/ha2n-coder/effort)"
-      [[ "$e" =~ ^(none|minimal|low|medium|high|xhigh|max)$ ]] || die "invalid effort in /etc/ha2n-coder/effort"
-      MODEL_ARGS+=(--reasoning-effort "$e"); echo "reasoning effort: $e"
-    fi
-    cd "$SRC" || exit 1
-    rm -f .agent-stop
-    # Clean environment: only what Copilot needs. No repo token exists for this user at all.
-    # No -s (silent): with it Copilot prints nothing but the answer, and run-task.sh needs the
-    # "AI Credits" / "Tokens" summary at the end of the output to log the cost (cost.csv).
-    # Keep env/timeout/copilot one command: a comment inside the line continuation would split it
-    # and run copilot outside `env -i`, i.e. without COPILOT_GITHUB_TOKEN.
-    env -i HOME="$HOME" PATH="$PATH" LANG=C.UTF-8 TERM=dumb \
-      COPILOT_GITHUB_TOKEN="$(cat "$COPILOT_TOKEN_FILE")" \
-      timeout "${COPILOT_TIMEOUT:-50m}" \
-      copilot -p "$(cat "$WORK/prompt.md")" --no-ask-user "${MODEL_ARGS[@]}" \
-        --allow-all-tools --deny-tool 'shell(git push)' --deny-tool 'shell(gh)' --deny-tool 'url'
+    run_copilot /etc/ha2n-coder/model /etc/ha2n-coder/effort
     rc=$?
     if [ -f .agent-stop ]; then
       echo "=== Copilot asked to stop ==="; cat .agent-stop; rm -f .agent-stop; exit 3
     fi
+    exit "$rc" ;;
+
+  review)
+    # Independent review by a second model: root-owned /etc/ha2n-coder/review-model (required) and
+    # review-effort (optional). The reviewer writes .review.json; whatever else it changed is thrown away,
+    # so a fix round after the review starts from exactly the tree that was published.
+    [ -d "$SRC/.git" ] || die "run prepare first"
+    [ -r /etc/ha2n-coder/review-model ] || die "missing /etc/ha2n-coder/review-model"
+    cd "$SRC" || exit 1
+    br="$(git rev-parse --abbrev-ref HEAD)"; before="$(git rev-parse HEAD)"
+    git reset -q --hard && git clean -qfdx || exit 1
+    run_copilot /etc/ha2n-coder/review-model /etc/ha2n-coder/review-effort
+    rc=$?
+    rm -f "$WORK/review.json"
+    [ -f .review.json ] && [ ! -L .review.json ] && head -c 200000 .review.json > "$WORK/review.json"
+    git checkout -q -f "$br" && git reset -q --hard "$before" && git clean -qfdx \
+      || { echo "sandbox: cannot restore the tree after the review" >&2; exit 1; }
+    echo; echo "=== REVIEW JSON ==="
+    [ -f "$WORK/review.json" ] && cat "$WORK/review.json"
     exit "$rc" ;;
 
   gates)
@@ -97,5 +123,5 @@ case "${1:-}" in
     [ "$(git rev-list --count origin/main..HEAD)" -gt 0 ] || { echo "no commits" >&2; exit 1; }
     git diff --no-renames --full-index origin/main HEAD ;;
 
-  *) die "usage: sandbox.sh prepare <branch> | copilot < prompt | gates | patch" ;;
+  *) die "usage: sandbox.sh prepare <branch> | copilot < prompt | review < prompt | gates | patch" ;;
 esac

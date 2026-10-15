@@ -70,6 +70,9 @@ orchestrator pushes; you cannot push (no token) and must not edit `.github/`, `e
 `e2e/run.sh`, `e2e/nightly.sh`, `e2e/e2e.sh`, `e2e/staging/`, `tools/coder/`, `CLAUDE.md` or `backlog/config.yml`
 (the patch is rejected). Do not tick criteria or set Done: once the PR checks incl. `e2e-pi` are green the orchestrator
 adds one last commit that does it (takes effect when Jan merges; label `manual-close` opts out). Commit your work locally with `TASK-<id>: …` messages.
+Every coder PR is then reviewed independently by a second model (TASK-33) against the task's criteria and the architecture rules;
+the orchestrator feeds its `blocking` findings back to you as one extra fix round and sets the task Done only after `approve`
+(Claude reviews on request in addition). Never weaken, skip or delete a test to satisfy a finding or a red check.
 
 ## Working with the backlog
 
