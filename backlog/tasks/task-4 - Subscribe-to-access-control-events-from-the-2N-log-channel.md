@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-08-30 09:27'
-updated_date: '2026-10-15 12:12'
+updated_date: '2026-10-15 12:47'
 labels:
   - access-control
   - coordinator
@@ -21,7 +21,7 @@ ordinal: 4000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-The intercom is also an access-control unit, but the integration only subscribes to call/switch/IO/registration/config events plus MotionDetected, so card, PIN, mobile-key and fingerprint access is invisible to Home Assistant. Extend the /api/log/subscribe event list in coordinator.py with access-control events. Event names verified against the 2N HTTP API docs (5.10.1 api log caps, 2026-10-11): CardEntered, CodeEntered, MobKeyEntered, FingerEntered (note: NOT 'FingerEnteredData', which does not exist), UserAuthenticated, UserRejected, AccessTaken, AccessBlocked, AccessLimited, ApiAccessRequested (emitted by /api/accesspoint/grantaccess, see TASK-8). Which events a device supports depends on model, hardware (card reader, keypad, Bluetooth, fingerprint module) and licence: query /api/log/caps and subscribe only to the intersection, instead of probing; an unsupported or malformed event must never break the subscription (same degradation pattern as MotionDetected). Store the latest access event (type, user uuid, resolved user name, credential type, access point / direction, granted or denied, timestamp) in coordinator data for TASK-5 (event entities) and TASK-6 (bus events). Resolve the user uuid to a display name via the existing /api/dir/query client method, with caching. Event payload field names must be taken from the 2N docs or a real device, not guessed. Ground-truth device: IP Force 2.0 fw 3.3.x (see CLAUDE.md); E2E there is currently blocked by TASK-12.
+The intercom is also an access-control unit, but the integration only subscribes to call/switch/IO/registration/config events plus MotionDetected, so card, PIN, mobile-key and fingerprint access is invisible to Home Assistant. Extend the /api/log/subscribe event list in coordinator.py with access-control events. Event names verified against the 2N HTTP API docs (5.10.1 api log caps, 2026-10-11): CardEntered, CodeEntered, MobKeyEntered, FingerEntered (note: NOT 'FingerEnteredData', which does not exist), UserAuthenticated, UserRejected, AccessTaken, AccessBlocked, AccessLimited, ApiAccessRequested (emitted by /api/accesspoint/grantaccess, see TASK-8). Which events a device supports depends on model, hardware (card reader, keypad, Bluetooth, fingerprint module) and licence: query /api/log/caps and subscribe only to the intersection, instead of probing; an unsupported or malformed event must never break the subscription (same degradation pattern as MotionDetected). Store the latest access event (type, user uuid, resolved user name, credential type, access point / direction, granted or denied, timestamp) in coordinator data for TASK-5 (event entities) and TASK-6 (bus events). Resolve the user uuid to a display name via the existing /api/dir/query client method, with caching. Event payload field names must be taken from the 2N docs or a real device, not guessed. Ground-truth E2E device: fw 3.x (see CLAUDE.md); E2E there is currently blocked by TASK-12.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -47,7 +47,7 @@ The intercom is also an access-control unit, but the integration only subscribes
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Validation: python3 -m unittest discover -s tests -t tests (530 OK), python3 validate.py OK, py_compile OK. E2E 'bash e2e/e2e.sh wip' on staging (2N IP Force fw 3.3.1.82.4, HA 2026.10.1): 13 passed, 3 skipped, 1 failed — the failure is the pre-existing, unrelated TASK-18 options-flow test. test_50_access_control.py::test_subscribed_access_events_match_device_log_caps passed. Event param names verified against 2N wiki api/log/caps event table (AccessBlocked 'ap,state', AccessLimited 'ap,type,state', AccessTaken 'ap,session', ApiAccessRequested 'ap,valid' + 'session,uuid').
+Validation: python3 -m unittest discover -s tests -t tests (530 OK), python3 validate.py OK, py_compile OK. E2E 'bash e2e/e2e.sh wip' on staging (E2E intercom fw 3.x, HA 2026.10.1): 13 passed, 3 skipped, 1 failed — the failure is the pre-existing, unrelated TASK-18 options-flow test. test_50_access_control.py::test_subscribed_access_events_match_device_log_caps passed. Event param names verified against 2N wiki api/log/caps event table (AccessBlocked 'ap,state', AccessLimited 'ap,type,state', AccessTaken 'ap,session', ApiAccessRequested 'ap,valid' + 'session,uuid').
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

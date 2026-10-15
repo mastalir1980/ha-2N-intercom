@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-13 19:03'
-updated_date: '2026-10-13 19:55'
+updated_date: '2026-10-15 12:47'
 labels:
   - ring-detection
   - github-issue
@@ -31,12 +31,12 @@ Fact from code: `coordinator.py` treats a call event as a ring when state is in 
 
 Hypothesis to verify (not yet confirmed): on a real button press the 2N reports the call from its own point of view, and the direction value for a button press vs. a call into the intercom differs from what the code assumes. Our tests only use synthetic events, and the docs were validated on IP Verso fw 2.50.
 
-Goal of the spike: capture real log events (CallStateChanged, CallSessionStateChanged, and any button/key events) on the ground-truth IP Force 2.0 fw 3.3.x for (a) a visitor button press and (b) a call placed into the intercom (e.g. from the 2N app or a SIP phone), then decide how ring detection should tell them apart. Output is a decision plus a follow-up feature/bug task, not code.
+Goal of the spike: capture real log events (CallStateChanged, CallSessionStateChanged, and any button/key events) on the ground-truth E2E intercom fw 3.x for (a) a visitor button press and (b) a call placed into the intercom (e.g. from the 2N app or a SIP phone), then decide how ring detection should tell them apart. Output is a decision plus a follow-up feature/bug task, not code.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [x] #1 Raw log events for a button press and for a call into the intercom are recorded on fw 3.3.x (secrets redacted) and attached to the task notes
+- [x] #1 Raw log events for a button press and for a call into the intercom are recorded on fw 3.x (secrets redacted) and attached to the task notes
 - [x] #2 Notes state which field(s) reliably distinguish a visitor ring from a call into the intercom, or that none exists
 - [x] #3 A follow-up task (bug or enhancement) is created with the proposed ring-detection change, or the task records why the called_id filter is the answer
 - [x] #4 docs/API_REFERENCE.md records the observed direction semantics as a firmware fact
@@ -45,7 +45,7 @@ Goal of the spike: capture real log events (CallStateChanged, CallSessionStateCh
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Captured 2026-10-13 on IP Force 2.0 fw 3.3.x with e2e/scripts/capture_call_events.py (read-only log subscribe/pull). Peers redacted.
+Captured 2026-10-13 on E2E intercom fw 3.x with e2e/scripts/capture_call_events.py (read-only log subscribe/pull). Peers redacted.
 
 (a) Visitor button press (sessions 31, 32):
 - CallSessionStateChanged state=initialized session=32 originator=button info="1"
@@ -79,5 +79,5 @@ Decision (Jan, 2026-10-13): everything the intercom started rings - CallStateCha
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Captured real call events on IP Force 2.0 fw 3.3.x for a button press and a call into the intercom (notes). direction/originator are from the intercom's point of view; the current check rings on incoming calls and on button presses only via CallSessionStateChanged without direction. Rule decided with Jan; fix in TASK-31, per-button doorbell in DRAFT-1; firmware fact added to docs/API_REFERENCE.md.
+Captured real call events on E2E intercom fw 3.x for a button press and a call into the intercom (notes). direction/originator are from the intercom's point of view; the current check rings on incoming calls and on button presses only via CallSessionStateChanged without direction. Rule decided with Jan; fix in TASK-31, per-button doorbell in DRAFT-1; firmware fact added to docs/API_REFERENCE.md.
 <!-- SECTION:FINAL_SUMMARY:END -->

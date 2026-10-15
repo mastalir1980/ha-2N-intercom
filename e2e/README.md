@@ -1,19 +1,19 @@
 # E2E pipeline — ha-2n-intercom
 
 Automatické ověření integrace na **skutečném HA a skutečném interkomu**. Běží na Macu,
-nasazuje na **staging HA** na Rob's Berry (Pi) a chyby zakládá jako bugy v Backlog.md.
+nasazuje na **staging HA** na Raspberry Pi a chyby zakládá jako bugy v Backlog.md.
 
 ```
 Mac (e2e/e2e.sh run / launchd 03:30)
  ├─ 1. unit testy + validate.py            (lokálně)
  ├─ 2. deploy git ref ──ssh──▶ Pi: ~/ha-staging  (HA kontejner ha-staging, port 8124)
- │                                   └─ 2N integrace ──HTTPS─▶ IP Force 2.0 (domácí, fw 3.3)
+ │                                   └─ 2N integrace ──HTTPS─▶ 2N interkom (fw 3.x)
  │     + úklid osiřelých entit z deploye jiné větve (scripts/prune_orphans.py)
  ├─ 3. pytest e2e/tests: stav v HA  ⇄  přímé dotazy na 2N API (ground truth)
  └─ 4. při chybě: claude -p (agent/triage.md) ─▶ backlog task create/edit  (type bug, label e2e)
 ```
 
-Produkční HA na Pi (`~/homeassistant`, port 8123) pipeline **nikdy nemění**.
+Produkční HA na Pi (port 8123) pipeline **nikdy nemění**.
 
 ## Bezpečnost
 

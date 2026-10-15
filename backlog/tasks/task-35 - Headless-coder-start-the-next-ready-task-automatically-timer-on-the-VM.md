@@ -5,7 +5,7 @@ status: To Do
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-14 14:48'
-updated_date: '2026-10-15 12:23'
+updated_date: '2026-10-15 12:47'
 labels:
   - agent
   - infra
@@ -26,7 +26,7 @@ ordinal: 43000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Jan decided on 14 Oct 2026 that the coder on the VM (Trufalín) starts by itself instead of waiting for "vezmi TASK-N" via Hermes. The human gate moves to the grooming step ("ber") and to the merge. Signal = a ready task on main: To Do, assigned @copilot, dependencies Done. Chain after this task: grooming proposal -> Jan says "ber" -> backlog PR (auto-merged by TASK-32) -> within ~10 minutes the coder picks the task -> PR -> checks -> review (TASK-33) -> one message to Jan -> Jan merges. Guard rails are needed so autostart cannot burn credits in a loop or pick work that is on hold.
+Jan decided on 14 Oct 2026 that the coder on the VM starts by itself instead of waiting for "vezmi TASK-N" via Hermes. The human gate moves to the grooming step ("ber") and to the merge. Signal = a ready task on main: To Do, assigned @copilot, dependencies Done. Chain after this task: grooming proposal -> Jan says "ber" -> backlog PR (auto-merged by TASK-32) -> within ~10 minutes the coder picks the task -> PR -> checks -> review (TASK-33) -> one message to Jan -> Jan merges. Guard rails are needed so autostart cannot burn credits in a loop or pick work that is on hold.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

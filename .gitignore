@@ -60,6 +60,8 @@ Thumbs.db
 # Local documentation files
 docs-local/
 AGENT.md
+CLAUDE.local.md
+*.local.md
 
 # Build artifacts
 *.zip

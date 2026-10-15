@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-11 19:29'
-updated_date: '2026-10-11 19:48'
+updated_date: '2026-10-15 12:47'
 labels:
   - e2e
   - config-flow
@@ -36,7 +36,7 @@ Evidence (pytest.log):
   1 failed, 11 passed, 2 skipped
 All other E2E tests pass; ha_system_log.json shows no integration errors (only an unrelated third-party rich/segment SyntaxWarning in HA core components/image). Container log lines (RTSP probe skipped, MJPEG 401 with no RTSP creds, unsubscribe code=12 during reload) are expected debug, not failures.
 
-Versions: integration sha 369e923-dirty (worktree), HA 2026.9.0, 2N IP Force 2.0 fw 3.3.1.82.4.
+Versions: integration sha 369e923-dirty (worktree), HA 2026.9.0, E2E intercom fw 3.x.
 Reproduce: e2e/run.sh --ref 369e923 (no --relays; the relay step is skipped by this test and never switches a relay).
 <!-- SECTION:DESCRIPTION:END -->
 
@@ -52,7 +52,7 @@ Reproduce: e2e/run.sh --ref 369e923 (no --relays; the relay step is skipped by t
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Recurred: run 20261011-214345, sha 369e923-dirty, HA 2026.10.1 (was 2026.9.0), 2N IP Force 2.0 fw 3.3.1.82.4. Same root cause — test_40_options_flow.py:60 `assert None is ((not True))`: options flow still returns last_step: None. 1 failed, 13 passed, 3 skipped (test suite grew: now 17 items). All other tests green; no integration errors in ha_system_log.json (only unrelated rich/segment SyntaxWarning).
+Recurred: run 20261011-214345, sha 369e923-dirty, HA 2026.10.1 (was 2026.9.0), E2E intercom fw 3.x. Same root cause — test_40_options_flow.py:60 `assert None is ((not True))`: options flow still returns last_step: None. 1 failed, 13 passed, 3 skipped (test suite grew: now 17 items). All other tests green; no integration errors in ha_system_log.json (only unrelated rich/segment SyntaxWarning).
 
 Not a bug. The run deployed the wrong code: a parallel session had switched the shared checkout from task-14-15-options-flow-ux to main, so --worktree deploys pushed main (which lacks the TASK-14/15 implementation) while the untracked E2E test expected the new behavior. TASK-14 and TASK-15 do exist — their task files were committed on the feature branch in this session, so they were invisible while the checkout sat on main. The features are implemented and verified on branch task-14-15-options-flow-ux (unit suite + a passing staging run of test_40_options_flow at 21:37).
 <!-- SECTION:NOTES:END -->

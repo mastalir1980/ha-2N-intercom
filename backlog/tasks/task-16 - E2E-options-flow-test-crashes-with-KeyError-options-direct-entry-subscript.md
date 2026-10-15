@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-11 19:19'
-updated_date: '2026-10-11 19:48'
+updated_date: '2026-10-15 12:47'
 labels:
   - e2e
   - test
@@ -32,7 +32,7 @@ Evidence (pytest.log):
 
 Suspected location: e2e/tests/test_40_options_flow.py:50 — replace the direct subscript with the existing helper (e.g. _current_options(entry).get("enable_camera", entry["data"].get("enable_camera", True))).
 
-Versions: integration sha 6ac5ad2-dirty (worktree), HA 2026.9.0, 2N IP Force 2.0 fw 3.3.1.82.4.
+Versions: integration sha 6ac5ad2-dirty (worktree), HA 2026.9.0, E2E intercom fw 3.x.
 Reproduce: e2e/run.sh --ref 6ac5ad2 (no --relays; the relay step is skipped by this test and never switches a relay).
 <!-- SECTION:DESCRIPTION:END -->
 
@@ -45,7 +45,7 @@ Reproduce: e2e/run.sh --ref 6ac5ad2 (no --relays; the relay step is skipped by t
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Update (E2E run 20261011-212644, sha 369e923-dirty, fw 3.3.1.82.4): the line-50 KeyError no longer reproduces — the worktree test now reads options safely and advances to line 60, where it fails on a different root cause (options flow missing last_step/go_back/RTSP-password masking). That new cause is tracked separately in TASK-18. Verify this KeyError fix is intended, then this task can likely be closed.
+Update (E2E run 20261011-212644, sha 369e923-dirty, fw 3.x): the line-50 KeyError no longer reproduces — the worktree test now reads options safely and advances to line 60, where it fails on a different root cause (options flow missing last_step/go_back/RTSP-password masking). That new cause is tracked separately in TASK-18. Verify this KeyError fix is intended, then this task can likely be closed.
 
 Fixed: test_40_options_flow.py now reads options via the safe accessor (entry.get('options') or {}). Confirmed — the KeyError no longer reproduces in later runs; the test progressed to real flow assertions and passed on staging at 21:37.
 <!-- SECTION:NOTES:END -->

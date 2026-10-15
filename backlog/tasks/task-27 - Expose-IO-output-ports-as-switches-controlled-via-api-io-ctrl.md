@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-13 19:03'
-updated_date: '2026-10-15 12:12'
+updated_date: '2026-10-15 12:47'
 labels:
   - io
   - ha-platform
@@ -59,7 +59,7 @@ Switching `relay1` directly via `/api/io/ctrl` bypasses the timing of the logica
 
 ## Known risks for the implementer
 - The 2N API account needs the I/O control privilege; without it the device answers 401 / an error (see TASK-13 for the same problem with the Switch API). This must surface as a clear error, not a silent failure.
-- Ground-truth E2E device is IP Force 2.0 fw 3.3.x without an extension module; it has fewer outputs than the reporter. Exact output list is unknown until the E2E run - read it from `/api/io/caps`, do not hard-code it in tests.
+- Ground-truth E2E device: fw 3.x without an extension module; it has fewer outputs than the reporter. Exact output list is unknown until the E2E run - read it from `/api/io/caps`, do not hard-code it in tests.
 - Any E2E that actually switches an output changes hardware and must be marked `@pytest.mark.relay` (never runs in `e2e.sh wip` / `e2e-pi`).
 <!-- SECTION:DESCRIPTION:END -->
 

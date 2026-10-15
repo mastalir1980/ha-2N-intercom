@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-12 07:11'
-updated_date: '2026-10-12 08:54'
+updated_date: '2026-10-15 12:47'
 labels:
   - e2e
   - bug
@@ -28,7 +28,7 @@ ordinal: 20000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Nightly run `20261012-033028` (branch `origin/e2e-pipeline` @ a9ab87f, HA 2026.10.1, IP Force 2.0 fw 3.3.1.82.4) failed 2 tests, both on the same entity:
+Nightly run `20261012-033028` (branch `origin/e2e-pipeline` @ a9ab87f, HA 2026.10.1, E2E intercom fw 3.x) failed 2 tests, both on the same entity:
 
 - `test_entities_available`: `unavailable entities: {'lock.2n_e2e': 'unavailable'}`
 - `test_reload_entry`: `timeout after 60s waiting for entities available after reload`
@@ -79,7 +79,7 @@ Implemented on task-20-e2e-orphan-entities @ 1f732b3 (from origin/e2e-pipeline a
 - Follow-up: TASK-19 is an exact duplicate of TASK-20 (same title/description) - should be archived/closed by Claude/Jan.
 - Note: e2e/unit is not run by run.sh stage 1 (out of scope); could be added later.
 
-Live E2E by Jan on the Pi (report 20261012-092517, run from ~/ha2n-t20, PI_SSH=local): ref task-20-e2e-orphan-entities, deployed_sha 1f732b3, HA 2026.10.1, IP Force 2.0 fw 3.3.1.82.4, status passed (11 passed, 2 skipped: SIP sensor disabled, relay test). prune.log: 'removed orphaned lock.2n_e2e (no lock.py deployed)'; pruned_entities.json: pruned [lock.2n_e2e], entry_state loaded, restored_kept []; context.json pruned_entities [lock.2n_e2e]. ha_url http://localhost:8124 (staging), no relays, no reset-entry. Deviation from AC #3 wording: second run used --ref task-20-e2e-orphan-entities instead of origin/e2e-pipeline - same platform set (no lock.py), and the branch is needed for run.sh to include the prune step. AC #2 is proven by the offline unit tests (test_restored_entity_with_existing_platform_is_kept); the live run had no such entity (restored_kept empty).
+Live E2E by Jan on the Pi (report 20261012-092517, run from ~/ha2n-t20, PI_SSH=local): ref task-20-e2e-orphan-entities, deployed_sha 1f732b3, HA 2026.10.1, E2E intercom fw 3.x, status passed (11 passed, 2 skipped: SIP sensor disabled, relay test). prune.log: 'removed orphaned lock.2n_e2e (no lock.py deployed)'; pruned_entities.json: pruned [lock.2n_e2e], entry_state loaded, restored_kept []; context.json pruned_entities [lock.2n_e2e]. ha_url http://localhost:8124 (staging), no relays, no reset-entry. Deviation from AC #3 wording: second run used --ref task-20-e2e-orphan-entities instead of origin/e2e-pipeline - same platform set (no lock.py), and the branch is needed for run.sh to include the prune step. AC #2 is proven by the offline unit tests (test_restored_entity_with_existing_platform_is_kept); the live run had no such entity (restored_kept empty).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

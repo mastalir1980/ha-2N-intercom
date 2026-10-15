@@ -1,12 +1,12 @@
 # E2E na Pi pro každý PR (self-hosted runner)
 
-První stavební kámen autonomní pipeline (TASK-22). Agent, který kóduje mimo domácí síť
+První stavební kámen autonomní pipeline (TASK-22). Agent, který kóduje mimo lokální síť
 (virtuál), pushne větev a otevře PR. Pi, které vidí na interkom, větev otestuje a výsledek
-pověsí k PR jako check `e2e-pi`. **Mezi virtuálem a domovem není potřeba žádná VPN.** Pi se jen
+pověsí k PR jako check `e2e-pi`. **Mezi virtuálem a lokální sítí není potřeba žádná VPN.** Pi se jen
 samo připojuje ven na GitHub.
 
 ```
-VM (agent)  ──push / PR──▶  GitHub  ◀──runner se ptá ven──  Pi (robsberry)
+VM (agent)  ──push / PR──▶  GitHub  ◀──runner se ptá ven──  Pi
                                      ──job──▶  pr-e2e.sh
                                                  ├─ sudo -u <staging-user> ha2n-staging lock/deploy/logs
                                                  ├─ pytest z PR větve (read-only 2N účet)
@@ -27,11 +27,11 @@ stavíme jinde:
 | Compose a deploy mimo dosah větve | produkční HA a hostitel | Helper používá vlastní compose `/etc/ha2n-ci/staging-compose.yml` (root, kontrolovaný při instalaci), ne `~/ha-staging/docker-compose.yml`. Před deployem staging zastaví a soubory maže a rozbaluje v jednorázovém kontejneru, který vidí jen `config/`. Symlink, který tam nechal kód z předchozí větve, tak nedosáhne na hostitele. |
 | Brána na Pi (job hook) | proti cizím workflow | Runner před každým jobem spustí `/usr/local/lib/ha2n-ci/job-started.sh` (root). Povolí jen `e2e-pi.yml` z `main`, událost `pull_request_target` nebo `workflow_dispatch`, PR z tohoto repa do `main` a autora i spouštěče ze seznamu `/etc/ha2n-ci/allowed-actors`. Workflow přidané ve forku nebo na jiné větvi Pi odmítne, i když na GitHubu někdo klikne na *Approve and run*. |
 | Workflow z `main` | integritu checku | `pull_request_target` bere workflow a `e2e/ci/*` vždy z `main`. Spustí se jen pro PR z větví tohoto repa a jen pro lidi v `E2E_PI_ACTORS`. |
-| Očištěný výstup | data z domácí sítě | Do veřejného logu jde jen stav, verze a názvy padlých testů. IP, MAC, hostname, sériová čísla a hodnoty z `e2e.env` se maskují. |
+| Očištěný výstup | data z lokální sítě | Do veřejného logu jde jen stav, verze a názvy padlých testů. IP, MAC, hostname, sériová čísla a hodnoty z `e2e.env` se maskují. |
 | Sdílený zámek | staging | Mac, noční běh (Hermes) i CI používají jeden zámek `~/ha-staging/.e2e.lock`, takže dva deploye se nikdy nepřekryjí. |
 
 **Zbytková rizika (vědomě přijatá pro fázi 1):**
-- Kód z větve běží pod stejným uživatelem jako runner. Vidí domácí síť, staging HA token
+- Kód z větve běží pod stejným uživatelem jako runner. Vidí lokální síť, staging HA token
   a read-only 2N účet (včetně kamery a logů). Může poškodit instalaci runneru a **zfalšovat
   výsledek checku** (přepsat skript, který právě běží).
 - **Zelený `e2e-pi` proto nikdy není sám o sobě důvodem k auto-merge.** Merge vyžaduje i nezávislé
@@ -61,7 +61,7 @@ automatické běhy (Mac, noc, CI) testují read-only.
 
 ### 2. Instalace na Pi
 ```bash
-ssh mastix@robsberry.local
+ssh <user>@<pi-host>
 cd ~/ha-2n-intercom && git pull --ff-only
 sudo bash e2e/ci/install-pi.sh
 ```
@@ -86,7 +86,7 @@ sudo -u ha2n-ci -H bash
 mkdir -p /var/lib/ha2n-ci/actions-runner && cd /var/lib/ha2n-ci/actions-runner
 # … curl + tar řádky z GitHubu …
 ./config.sh --url https://github.com/mastalir1980/ha-2N-intercom --token <TOKEN> \
-  --name robsberry --labels ha2n-pi --unattended
+  --name <runner-name> --labels ha2n-pi --unattended
 exit
 cd /var/lib/ha2n-ci/actions-runner && sudo ./svc.sh install ha2n-ci && sudo ./svc.sh start
 ```
@@ -125,6 +125,6 @@ Ruční spuštění: **Actions → E2E on the Pi → Run workflow**, zadej plné
 
 ## Provoz
 - reporty: `/var/lib/ha2n-ci/reports/` (posledních 50), `latest` je symlink na poslední,
-- kdo drží staging: `sudo -u ha2n-ci sudo -n -u mastix /usr/local/sbin/ha2n-staging status`,
+- kdo drží staging: `sudo -u ha2n-ci sudo -n -u <staging-user> /usr/local/sbin/ha2n-staging status`,
 - logy runneru: `journalctl -u 'actions.runner.*' -f`,
 - po změně `e2e/ci/ha2n-staging` nebo `install-pi.sh` znovu spustit `sudo bash e2e/ci/install-pi.sh`.

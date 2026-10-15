@@ -119,8 +119,8 @@ New code comes with unit tests in the style of the existing `tests/test_*.py`.
 
 Unit tests and `validate.py` need **Python 3.12+**; results on older Python do not count.
 
-**E2E** (`e2e/`) runs from Jan's Mac against **staging** HA on the Raspberry Pi (port **8124**) and
-the real 2N IP Force 2.0 (fw 3.3.x). Every new feature gets an E2E test in `e2e/tests/`
+**E2E** (`e2e/`) runs from Jan's Mac against **staging** HA on a Raspberry Pi (port **8124**) and
+a real 2N intercom (fw 3.x). Every new feature gets an E2E test in `e2e/tests/`
 ("HA says X ⇄ 2N API says X"); anything that physically switches a relay is marked `@pytest.mark.relay`.
 
 ```bash
@@ -133,7 +133,11 @@ bash e2e/e2e.sh report   # last result + triage
   for same-repo PRs by actors in `E2E_PI_ACTORS`; check name `e2e-pi`. Staging is reached only via the root-owned helper
   `e2e/ci/ha2n-staging`; all runs share one staging lock (`e2e/scripts/lock.sh`). Runbook: `e2e/ci/README.md`.
   Changes to `.github/` and `e2e/ci/` always need Jan's review — never weaken the guards, never add `--relays`.
-- **Never touch production HA** (port 8123, `~/homeassistant` on the Pi).
+- **Never touch production HA** (port 8123 on the Pi).
+- **This repo is public.** Never write host names, user names, LAN IPs, home paths, serial numbers or MACs,
+  the exact model/firmware build of the E2E intercom, or anything about Jan's home into tracked files, Backlog
+  tasks, commits or PRs. Use neutral terms ("the Pi", "the E2E intercom", "fw 3.x", `<lan-ip>`). Exact local
+  details live in `CLAUDE.local.md` (gitignored) when present.
 - Never print, copy or commit values from `e2e/.env`.
 - If E2E fails, follow `e2e/agent/triage.md`: a failure caused by your change is fixed in the task;
   an unrelated or pre-existing failure goes to Backlog as a bug (type `bug`, label `e2e`) and Jan is told.
@@ -165,7 +169,7 @@ Also: docs touched by the change updated (`README.md`, `docs/*`); one task per b
 - Call control uses **GET**, not POST. Error code 14 is overloaded — disambiguate by `description`.
 - Snapshot resolution must come from `camera/caps`; MJPEG `fps` is valid 1–15.
 - RTSP has its own user database, independent of HTTP API accounts.
-- Code was validated on IP Verso fw 2.50; the E2E device runs fw 3.3.x — expect differences
+- Code was validated on IP Verso fw 2.50; the E2E device runs fw 3.x — expect differences
   (e.g. TASK-12, `code 7 "invalid connection type"`). Firmware < 2.40 is out of scope.
 
 ## Conventions

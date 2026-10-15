@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-08-30 09:27'
-updated_date: '2026-10-15 12:12'
+updated_date: '2026-10-15 12:47'
 labels:
   - camera
   - ha-platform
@@ -42,7 +42,7 @@ Add an image platform (image.py) with a 'Last ring' image entity. When the ring 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Validation: python3 -m unittest discover -s tests -t tests (530 OK), python3 validate.py OK, py_compile OK. E2E 'bash e2e/e2e.sh wip' on staging (2N IP Force fw 3.3.1.82.4, HA 2026.10.1): 13 passed, 3 skipped, 1 failed — the failure is the pre-existing, unrelated TASK-18 options-flow test. test_50_access_control.py::test_last_ring_image_follows_camera passed on staging.
+Validation: python3 -m unittest discover -s tests -t tests (530 OK), python3 validate.py OK, py_compile OK. E2E 'bash e2e/e2e.sh wip' on staging (E2E intercom fw 3.x, HA 2026.10.1): 13 passed, 3 skipped, 1 failed — the failure is the pre-existing, unrelated TASK-18 options-flow test. test_50_access_control.py::test_last_ring_image_follows_camera passed on staging.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

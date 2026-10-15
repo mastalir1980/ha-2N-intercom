@@ -7,7 +7,7 @@ status: To Do
 assignee:
   - '@copilot'
 created_date: '2026-10-13 19:54'
-updated_date: '2026-10-15 12:12'
+updated_date: '2026-10-15 12:47'
 labels:
   - bug
   - coordinator
@@ -32,7 +32,7 @@ ordinal: 39000
 <!-- SECTION:DESCRIPTION:BEGIN -->
 Why: GitHub issue #10 point 4 - when Control4 (or the My2N app, or a SIP phone) calls INTO the door station, the HA doorbell turns on: a false ring. Investigation in TASK-29 also showed that a real button press rings today only by accident.
 
-Evidence (TASK-29 notes, captured on IP Force 2.0 fw 3.3.x; direction is from the intercom's point of view, see docs/API_REFERENCE.md firmware quirks):
+Evidence (TASK-29 notes, captured on E2E intercom fw 3.x; direction is from the intercom's point of view, see docs/API_REFERENCE.md firmware quirks):
 - Button press: CallStateChanged state=ringing direction=outgoing; CallSessionStateChanged state=ringing originator=button info="1" (no direction key).
 - Call into the intercom: CallStateChanged state=ringing direction=incoming; CallSessionStateChanged state=ringing originator=incoming.
 
@@ -48,7 +48,7 @@ Expected behaviour (decided with Jan 2026-10-13: "everything the intercom starte
 - The called_id peer filter keeps working as today.
 
 Out of scope: per-button doorbell (DRAFT-1), new entities, polling-based ring detection.
-Label manual-close: a ring needs a physical button press, so Jan verifies on the IP Force after/at review and closes the task.
+Label manual-close: a ring needs a physical button press, so Jan verifies on the E2E intercom after/at review and closes the task.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -61,7 +61,7 @@ Label manual-close: a ring needs a physical button press, so Jan verifies on the
 - [ ] #6 "incoming" is no longer in _RING_STATES; call_state sensor and active_session_id tracking behave as before for both sequences - unit test
 - [ ] #7 docs/ARCHITECTURE.md ring-detection section describes the new rule (direction/originator from the intercom's point of view)
 - [ ] #8 Full unit suite, validate.py and py_compile green on Python 3.12+; PR check e2e-pi green (no new E2E test: ring needs a physical press)
-- [ ] #9 Manual (Jan, IP Force on staging): button press -> doorbell on; call into the intercom from My2N -> doorbell stays off
+- [ ] #9 Manual (Jan, E2E intercom on staging): button press -> doorbell on; call into the intercom from My2N -> doorbell stays off
 <!-- AC:END -->
 
 ## Implementation Plan
