@@ -139,6 +139,7 @@ bash e2e/e2e.sh report   # last result + triage
   (except `backlog/config.yml`) or `docs/**/*.md`. GitHub evaluates the whole PR diff, not just the last commit;
   any other changed file keeps E2E enabled. `workflow_dispatch` is unaffected. Keep `e2e-pi` optional in
   required checks: a path-filtered workflow stays pending and would block backlog-only PRs.
+  `hacs.yml` and `hassfest.yml` use the same `pull_request` path filter and run on push only for `main` (TASK-40).
 - **Never touch production HA** (port 8123 on the Pi).
 - **This repo is public.** Never write host names, user names, LAN IPs, home paths, serial numbers or MACs,
   the exact model/firmware build of the E2E intercom, or anything about Jan's home into tracked files, Backlog

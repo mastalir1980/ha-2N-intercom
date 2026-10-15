@@ -137,6 +137,10 @@ cest ve stavu čekání, takže by blokovaly PR pouze se změnami Backlogu. Filt
 nejvýše s prvními 300 změněnými soubory; pokud by větší PR mohl skrýt relevantní soubor,
 spusť workflow ručně.
 
+Stejný filtr cest a `push` pouze do `main` mají i `hacs.yml` a `hassfest.yml` (TASK-40), takže PR
+pouze se změnami Backlogu nebo dokumentace je nespustí. Ani tyto kontroly nepřidávej mezi povinné
+ze stejného důvodu jako `e2e-pi`.
+
 Do `~/.zshrc` přidej načtení `tools/bship.zsh` podle řádku v hlavičce skriptu. Proměnná
 `BSHIP_REPO` umožňuje zvolit jiný checkout. `bship "Backlog update"` vyžaduje větev `main`
 a odmítne změny mimo `backlog/` a `docs/`, včetně změn v indexu a nesledovaných souborů.
