@@ -7,12 +7,11 @@ status: To Do
 assignee:
   - '@copilot'
 created_date: '2026-10-13 19:54'
-updated_date: '2026-10-15 12:47'
+updated_date: '2026-10-15 13:15'
 labels:
   - bug
   - coordinator
   - manual-close
-  - on-hold
 milestone: m-0
 dependencies: []
 references:
@@ -78,5 +77,6 @@ Label manual-close: a ring needs a physical button press, so Jan verifies on the
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-2026-10-14 (Claude): ON HOLD until PR #32 (external, vemboy200) is decided. #32 adds ring_on_call (a toggle for the same false ring) and ring_on_keypress. Recommendation to Jan: land this task's rule fix and take only ring_on_keypress from #32 (opt-in). The headless coder and the grooming agent must not start this task while the label on-hold is set.
+2026-10-14 (Claude): put on hold while external PR #32 (ring_on_call + ring_on_keypress) was undecided.
+2026-10-15 (Jan): decided - this task goes ahead now and is ready for the headless coder. From PR #32 ring_on_call is not taken (this task fixes the false ring at the source); ring_on_keypress is tracked separately as TASK-39 (later). Do not add any KeyPressed handling or new options here.
 <!-- SECTION:NOTES:END -->
