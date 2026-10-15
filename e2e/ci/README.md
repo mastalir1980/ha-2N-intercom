@@ -1,4 +1,4 @@
-# E2E na Pi pro každý PR (self-hosted runner)
+# E2E on the Pi (self-hosted runner)
 
 První stavební kámen autonomní pipeline (TASK-22). Agent, který kóduje mimo lokální síť
 (virtuál), pushne větev a otevře PR. Pi, které vidí na interkom, větev otestuje a výsledek
@@ -122,6 +122,30 @@ Běží s plnými právy dockeru, takže nesmí nasazovat cizí větve. PR a vě
 4. Ověř, že `StartedAt` produkční HA je pořád stejný.
 
 Ruční spuštění: **Actions → E2E on the Pi → Run workflow**, zadej plné SHA commitu z větve repa.
+
+## Backlog-only PRs (TASK-32)
+
+The `pull_request_target` path filter skips PRs changing only `backlog/**` (except
+`backlog/config.yml`) or `docs/**/*.md`. Changes to any other file, including root `README.md`,
+non-Markdown docs, and `backlog/config.yml`, still trigger E2E with all existing safety guards.
+GitHub evaluates the whole PR diff, not just the last commit: a coder PR still runs E2E after
+a final backlog-only commit. `workflow_dispatch` is unaffected.
+
+Keep `e2e-pi` out of required checks: GitHub leaves checks for path-filtered workflows pending,
+so making it required would block backlog-only PRs. GitHub path filters consider at most the
+first 300 changed files; use manual dispatch if a larger PR could hide a relevant file.
+
+Source `tools/bship.zsh` from `~/.zshrc` using the line in its header. `BSHIP_REPO` overrides
+the checkout location. `bship "Backlog update"` requires `main` and refuses any changed files
+outside `backlog/` and `docs/`, including staged and untracked files. It pulls `main` with
+`--ff-only` while preserving those uncommitted changes, then runs `backlog doctor` before
+branching or committing. A failed pull or non-clean diagnosis stops shipping. For duplicate
+IDs, run `backlog doctor --fix` manually and review the repair; `bship` never runs `--fix`.
+
+On success it commits only `backlog/` and `docs/` to `backlog-<timestamp>`, pushes, opens a PR
+with an explicit title/body, merges with `--merge --delete-branch`, and returns to up-to-date
+`main`. This is a local helper, not a write-capable auto-merge workflow. Changes to the workflow
+must first be reviewed and merged into `main` before live path-filter verification.
 
 ## Provoz
 - reporty: `/var/lib/ha2n-ci/reports/` (posledních 50), `latest` je symlink na poslední,

@@ -3,11 +3,11 @@ id: TASK-32
 title: >-
   Backlog-only PRs: skip e2e-pi and ship them with a versioned bship (pull +
   duplicate-ID check)
-status: To Do
+status: In Progress
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-14 14:32'
-updated_date: '2026-10-15 13:53'
+updated_date: '2026-10-15 14:05'
 labels:
   - ci
   - infra
@@ -67,3 +67,17 @@ Current bship (lives only in Jan's ~/.zshrc today):
 4. Verify live (AC 8) and write results to notes.
 Must not change: e2e/ci/*, the runner hook on the Pi, the main ruleset, the coder (tools/coder/). Known limit: if e2e-pi ever becomes a required check, a skipped run would block backlog PRs; note this in e2e/ci/README.md.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implementation started on the task branch using the existing plan. Live PR verification (AC 8) requires explicit permission to push/merge and must wait until the trusted workflow is on main; no commit or push is authorized yet. Only e2e/ci/README.md will change under e2e/ci/, as explicitly required by AC 9; CI scripts, runner hooks, rulesets, and the coder remain untouched.
+
+Implemented the approved scope: ordered pull_request_target paths exclude backlog/** and docs/**/*.md, then re-include backlog/config.yml. A baseline comparison confirmed every other workflow byte (including guards, permissions, concurrency, and workflow_dispatch) is unchanged. Added tools/bship.zsh with BSHIP_REPO override and the documented source line, main-only/dirty-path checks, pull --ff-only before doctor/branching, fail-closed doctor output validation, explicit PR title/body and merge method, and actionable command-failure messages. Updated both project rule files with identical bship/path-filter paragraphs and e2e/ci/README.md, including required-check and GitHub 300-file filter limitations. No CI scripts, Pi hooks, rulesets, coder, integration code, or release metadata changed.
+
+Local verification: Python 3.14, full unit suite 601 tests passed; validate.py, integration py_compile, zsh -n, and git diff --check passed. The 14 TASK-32 tests exercise real local Git repositories with a stubbed gh CLI, dirty/staged/untracked/renamed outside paths, detached/non-main checkouts, conflicting and non-fast-forward pulls, doctor failure/non-clean output, shipping failures, and final main refresh. With the real installed Backlog CLI and its Node runtime, a clean backlog shipped in the fixture; a duplicate TASK-1 pulled from the fixture origin was explicitly diagnosed (including its task filename) and refused before branching or committing, preserving the local docs edit and printing the manual --fix hint. No doctor --fix was invoked.
+
+Remaining gates: bash e2e/e2e.sh wip exited 2 before unit/deploy/test stages with "run e2e/e2e.sh setup first"; this new worktree lacks e2e/.venv and e2e/.env. No staging or production HA was contacted; empty attempt artifacts were removed. AC 8 live GitHub PR verification has not run: the trusted workflow first needs review and merge to main, and commit/push/merge permission has not been granted. The fixture result is local evidence only, not a live PR result. Task remains In Progress with acceptance criteria unchecked pending the required gates; no commit or push performed.
+
+Jan authorized committing, pushing, and opening the implementation PR after local verification. Merge is explicitly reserved until his review; no merge or live bship PR is authorized in this turn. The local E2E setup and post-merge AC 8 checks remain outstanding.
+<!-- SECTION:NOTES:END -->

@@ -12,6 +12,11 @@ name: E2E on the Pi
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
+    paths:
+      - '**'
+      - '!backlog/**'
+      - '!docs/**/*.md'
+      - 'backlog/config.yml'
   workflow_dispatch:
     inputs:
       sha:

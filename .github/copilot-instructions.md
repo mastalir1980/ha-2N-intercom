@@ -81,10 +81,13 @@ adds one last commit that does it (takes effect when Jan merges; label `manual-c
 - **One task per branch/PR**, branch name `task-<id>-short-slug`.
 - New tasks and analysis-only Backlog changes made by Claude ship in separate `backlog-<topic>` PRs from `main`;
   do not expect them in your task branch. Your own task's status/notes/AC updates still belong in your task branch.
-- **Backlog and analysis changes go straight to `main`** (Jan's standing instruction): new or updated
-  tasks/drafts, analysis notes, `docs/*` findings and helper scripts from an analysis are committed directly
-  on `main` and pushed — never left on a feature branch. Use a clean checkout of `main` so Jan's working
-  branch is untouched. Code changes still go through task branches and PRs.
+- **Backlog and analysis changes ship through `bship`** (Jan's standing instruction): source `tools/bship.zsh`
+  from `~/.zshrc` as documented in its header; `BSHIP_REPO` selects the checkout. Run it on `main` with only
+  `backlog/` and `docs/` changes. It pulls with `--ff-only`, requires a clean `backlog doctor` diagnosis,
+  then commits to a fresh `backlog-<timestamp>` branch, opens a PR with an explicit body, merges with
+  `--merge --delete-branch`, and updates `main`. Duplicate IDs require a manual `backlog doctor --fix`
+  and review; `bship` never repairs them automatically. `main` stays PR-only; there is no auto-merge workflow.
+  Changes outside these directories need a separate reviewed PR. Code and its task notes stay on task branches.
 - **Respect `dependencies`** in the task frontmatter — do not start a task whose dependencies are not Done.
 - When done: tick the acceptance criteria, add a short final summary, set status `Done` (via CLI) —
   only after the full definition of done below, including a green `e2e.sh wip`. Put this in the PR's last commit so
@@ -133,6 +136,10 @@ bash e2e/e2e.sh report   # last result + triage
   for same-repo PRs by actors in `E2E_PI_ACTORS`; check name `e2e-pi`. Staging is reached only via the root-owned helper
   `e2e/ci/ha2n-staging`; all runs share one staging lock (`e2e/scripts/lock.sh`). Runbook: `e2e/ci/README.md`.
   Changes to `.github/` and `e2e/ci/` always need Jan's review — never weaken the guards, never add `--relays`.
+- **E2E path filter (TASK-32):** `pull_request_target` skips PRs changing only `backlog/**`
+  (except `backlog/config.yml`) or `docs/**/*.md`. GitHub evaluates the whole PR diff, not just the last commit;
+  any other changed file keeps E2E enabled. `workflow_dispatch` is unaffected. Keep `e2e-pi` optional in
+  required checks: a path-filtered workflow stays pending and would block backlog-only PRs.
 - **Never touch production HA** (port 8123 on the Pi).
 - **This repo is public.** Never write host names, user names, LAN IPs, home paths, serial numbers or MACs,
   the exact model/firmware build of the E2E intercom, or anything about Jan's home into tracked files, Backlog

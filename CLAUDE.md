@@ -57,13 +57,13 @@ Work on this repo is split between two agents:
   the architecture rules and the definition of done; report findings, do not fix them silently.
 - Do not edit files under `custom_components/`, `tests/` or `e2e/tests/` unless Jan asks.
   Editing `docs/*`, `CLAUDE.md`, `.github/copilot-instructions.md` and Backlog (via CLI) is fine.
-- **Backlog and analysis changes ship in their own PR from `main`** (Jan's standing instruction):
-  new or updated tasks and drafts, analysis notes, `docs/*` findings and helper scripts from an analysis
-  go on a fresh branch `backlog-<topic>` cut from `origin/main`, as a backlog/docs-only PR that Jan merges
-  right away. Never leave them on Jan's working branch, in his working tree or in a task branch.
-  `main` is protected (changes only via PR). Code changes still go through `task-<id>-…` branches.
-  If Claude cannot push or open the PR itself, it gives Jan the exact commands
-  (`gh pr create` with explicit `--title`/`--body`, not `--fill`, when the branch is not checked out locally).
+- **Backlog and analysis changes ship through `bship`** (Jan's standing instruction): source `tools/bship.zsh`
+  from `~/.zshrc` as documented in its header; `BSHIP_REPO` selects the checkout. Run it on `main` with only
+  `backlog/` and `docs/` changes. It pulls with `--ff-only`, requires a clean `backlog doctor` diagnosis,
+  then commits to a fresh `backlog-<timestamp>` branch, opens a PR with an explicit body, merges with
+  `--merge --delete-branch`, and updates `main`. Duplicate IDs require a manual `backlog doctor --fix`
+  and review; `bship` never repairs them automatically. `main` stays PR-only; there is no auto-merge workflow.
+  Changes outside these directories need a separate reviewed PR. Code and its task notes stay on task branches.
 - Claude's shell on Jan's Mac is a Linux VM that does not see the macOS `backlog`. If `backlog` is missing,
   install it there: `npm install --prefix $HOME/.backlog backlog.md` and call `$HOME/.backlog/node_modules/.bin/backlog`
   from the repo root. Only if that fails, give Jan the exact command to run.
@@ -149,6 +149,10 @@ Never run `e2e/e2e.sh relays`, `--relays` or `reset-entry` unless Jan asks in th
   for same-repo PRs by actors in `E2E_PI_ACTORS`; check name `e2e-pi`. Staging is reached only via the root-owned helper
   `e2e/ci/ha2n-staging`; all runs share one staging lock (`e2e/scripts/lock.sh`). Runbook: `e2e/ci/README.md`.
   Changes to `.github/` and `e2e/ci/` always need Jan's review — never weaken the guards, never add `--relays`.
+- **E2E path filter (TASK-32):** `pull_request_target` skips PRs changing only `backlog/**`
+  (except `backlog/config.yml`) or `docs/**/*.md`. GitHub evaluates the whole PR diff, not just the last commit;
+  any other changed file keeps E2E enabled. `workflow_dispatch` is unaffected. Keep `e2e-pi` optional in
+  required checks: a path-filtered workflow stays pending and would block backlog-only PRs.
 
 ## Architecture rules you must not break
 
