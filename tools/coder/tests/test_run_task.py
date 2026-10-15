@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import json
 import os
 from pathlib import Path
 import shutil
@@ -16,8 +18,10 @@ CODER_DIR = Path(__file__).resolve().parents[1]
 REPO_URL = "https://github.com/mastalir1980/ha-2N-intercom.git"
 
 STUB = """\
+import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 
 root = Path(os.environ["HA2N_CODER_TEST_ROOT"])
@@ -41,9 +45,62 @@ elif name == "backlog" and args == ["task", "view", "TASK-34", "--plain"]:
     print("Assignee: @copilot")
     print("Description:")
     print("Hermetic fixture")
-elif name == "copilot" and not args:
-    if "TASK-34" not in sys.stdin.read():
+    print("Acceptance Criteria:")
+    print("- [ ] #1 Fixture criterion")
+elif name == "backlog" and args[:3] == ["task", "edit", "TASK-34"]:
+    Path("backlog").mkdir(exist_ok=True)
+    Path("backlog/task-34.md").write_text("Status: Done\\n")
+elif name == "sleep":
+    pass
+elif name == "gh" and (root / "gh-ok").exists():
+    if args[:2] == ["label", "create"]:
+        pass
+    elif args[:2] == ["pr", "create"]:
+        print("https://github.com/mastalir1980/ha-2N-intercom/pull/99")
+    elif args[:2] == ["pr", "view"]:
+        print(subprocess.run(
+            ["git", "--git-dir", str(root / "origin.git"), "rev-parse",
+             "refs/heads/task-34-test-clone-recovery"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip())
+    elif args[:2] == ["pr", "checks"]:
+        counter = root / "checks-count"
+        index = int(counter.read_text()) + 1 if counter.exists() else 1
+        counter.write_text(str(index))
+        scripted = root / "checks" / f"{index}.json"
+        print(scripted.read_text() if scripted.exists() else json.dumps([
+            {"name": "e2e-pi", "bucket": "pass", "link": ""},
+            {"name": "hassfest", "bucket": "pass", "link": ""},
+        ]))
+    elif args[:2] == ["pr", "comment"]:
+        comments = root / "comments"
+        comments.mkdir(exist_ok=True)
+        body = (
+            Path(args[args.index("--body-file") + 1]).read_text()
+            if "--body-file" in args else args[args.index("--body") + 1]
+        )
+        (comments / f"{len(list(comments.iterdir())) + 1}.md").write_text(body)
+    else:
+        sys.exit(f"unexpected gh invocation: {args}")
+elif name == "copilot" and args in ([], ["--review"]):
+    prompts = root / "prompts"
+    prompts.mkdir(exist_ok=True)
+    prompt = sys.stdin.read()
+    if "TASK-34" not in prompt:
         sys.exit("missing task prompt")
+    kind = "review" if args else "coder"
+    index = len(list(prompts.glob(f"{kind}-*.md"))) + 1
+    (prompts / f"{kind}-{index}.md").write_text(prompt)
+    if args:
+        print("model: review-model-x")
+        output = root / "review-output"
+        output.unlink(missing_ok=True)
+        scripted = root / "reviews" / f"{index}.json"
+        if scripted.exists():
+            output.write_text(scripted.read_text())
+        if (root / "review-rc").exists():
+            sys.exit(int((root / "review-rc").read_text()))
+        sys.exit(0)
     if (root / "copilot-stop").exists():
         print("=== Copilot asked to stop ===")
         print("Fixture stops after the ready check")
@@ -112,11 +169,11 @@ class RunTaskCloneTests(unittest.TestCase):
         stub = self.bin / "stub"
         stub.write_text(f"#!{sys.executable}\n{STUB}", encoding="utf-8")
         stub.chmod(0o755)
-        for name in ("id", "getent", "sudo", "gh", "backlog", "copilot"):
+        for name in ("id", "getent", "sudo", "gh", "backlog", "copilot", "sleep"):
             (self.bin / name).symlink_to(stub)
         lib = self.root / "usr/local/lib/ha2n-coder"
         (lib / "prompts").mkdir(parents=True)
-        for name in ("implement.md", "fix.md"):
+        for name in ("implement.md", "fix.md", "review.md"):
             shutil.copyfile(CODER_DIR / "prompts" / name, lib / "prompts" / name)
         sandbox = lib / "sandbox.sh"
         sandbox.write_text(textwrap.dedent("""\
@@ -125,6 +182,12 @@ class RunTaskCloneTests(unittest.TestCase):
             case "$1" in
               prepare|gates) ;;
               copilot) copilot ;;
+              review)
+                rc=0
+                copilot --review || rc=$?
+                echo; echo "=== REVIEW JSON ==="
+                [ ! -f "$HA2N_CODER_TEST_ROOT/review-output" ] || cat "$HA2N_CODER_TEST_ROOT/review-output"
+                exit "$rc" ;;
               patch) cat "$HA2N_CODER_TEST_ROOT/change.diff" ;;
               *) exit 2 ;;
             esac
@@ -360,6 +423,242 @@ class RunTaskCloneTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertFalse((self.root / "calls.log").exists())
         self.assertFalse(self.clone.exists())
+
+    # ---- independent review (TASK-33): the whole pipeline against stubbed gh/copilot/sandbox ----
+
+    BRANCH = "refs/heads/task-34-test-clone-recovery"
+
+    def _pipeline(self, reviews=(), review_model: str | None = "review-model-x",
+                  checks=()) -> None:
+        """Set up a full run: an accepted change, working gh stub, scripted reviews and checks."""
+        (self.seed / "plain.txt").write_text("accepted change\n", encoding="utf-8")
+        self._write_patch()
+        (self.root / "gh-ok").touch()
+        if review_model is not None:
+            (self.root / "etc/ha2n-coder/review-model").write_text(review_model + "\n", encoding="utf-8")
+        (self.root / "reviews").mkdir()
+        for number, review in enumerate(reviews, 1):
+            text = review if isinstance(review, str) else json.dumps(review)
+            (self.root / "reviews" / f"{number}.json").write_text(text, encoding="utf-8")
+        (self.root / "checks").mkdir()
+        for number, bucket in enumerate(checks, 1):
+            (self.root / "checks" / f"{number}.json").write_text(json.dumps([
+                {"name": "e2e-pi", "bucket": bucket, "link": ""},
+            ]), encoding="utf-8")
+
+    def _run_pipeline(self, returncode: int) -> subprocess.CompletedProcess[str]:
+        self.run_id = "20260101-000001-TASK-34"
+        result = subprocess.run(
+            [self.bash, str(CODER_DIR / "run-task.sh"), "--foreground", "TASK-34", "--run", self.run_id],
+            cwd=self.root, env=self.env, capture_output=True, text=True, timeout=60,
+        )
+        self.assertEqual(result.returncode, returncode, result.stdout + result.stderr)
+        return result
+
+    def _status(self) -> dict[str, str]:
+        text = (self.base / "runs" / self.run_id / "status").read_text(encoding="utf-8")
+        return dict(line.split("=", 1) for line in text.splitlines())
+
+    def _comments(self) -> list[str]:
+        folder = self.root / "comments"
+        files = sorted(folder.glob("*.md"), key=lambda path: int(path.stem)) if folder.exists() else []
+        return [path.read_text(encoding="utf-8") for path in files]
+
+    def _labels(self) -> list[str]:
+        with (self.base / "cost.csv").open(newline="", encoding="utf-8") as handle:
+            return [row["label"] for row in csv.DictReader(handle)]
+
+    def _calls(self) -> str:
+        return (self.root / "calls.log").read_text(encoding="utf-8")
+
+    def _prompts(self, kind: str) -> list[str]:
+        folder = self.root / "prompts"
+        files = sorted(folder.glob(f"{kind}-*.md"), key=lambda path: int(path.stem.split("-")[1]))
+        return [path.read_text(encoding="utf-8") for path in files]
+
+    def _assert_closed(self, closed: bool) -> None:
+        self.assertEqual("task edit TASK-34 -s Done --check-ac 1" in self._calls(), closed)
+        tree = self._git(self.origin, "ls-tree", "-r", "--name-only", self.BRANCH)
+        self.assertEqual("backlog/task-34.md" in tree.splitlines(), closed)
+
+    @staticmethod
+    def _finding(severity: str = "blocking", summary: str = "Criterion #2 has no test",
+                 file: str | None = "custom_components/2n_intercom/api.py", line: int | None = 7) -> dict:
+        return {"severity": severity, "file": file, "line": line, "summary": summary}
+
+    def test_review_approve_closes_the_task(self) -> None:
+        self._pipeline(reviews=[{"verdict": "approve", "findings": [self._finding("minor", "Rename a helper")]}])
+        result = self._run_pipeline(0)
+        status = self._status()
+        self.assertEqual((status["state"], status["review"]), ("green", "approve"))
+        self.assertIn("review approved (1 minor finding(s))", status["message"])
+        self.assertEqual(self._labels(), ["implement", "review-1"])
+        self.assertEqual(len(self._prompts("review")), 1)
+        review_prompt = self._prompts("review")[0]
+        self.assertIn("TASK-34", review_prompt)
+        self.assertIn("git diff origin/main HEAD", review_prompt)
+        comments = self._comments()
+        self.assertEqual(len(comments), 2)
+        self.assertIn("**Verdict: approve**", comments[0])
+        self.assertIn("Rename a helper", comments[0])
+        self.assertNotIn("credit", comments[0].lower())
+        self.assertIn("Review: review approved", comments[1])
+        self._assert_closed(True)
+        self.assertIn("review-model-x", (self.base / "cost.csv").read_text(encoding="utf-8"))
+        self.assertIn("approve", result.stdout)
+
+    def test_review_changes_then_fixed_by_one_review_fix_round(self) -> None:
+        self._pipeline(reviews=[
+            {"verdict": "changes", "findings": [
+                self._finding("blocking", "Criterion #2 has no test"),
+                self._finding("minor", "Rename a helper"),
+            ]},
+            {"verdict": "approve", "findings": []},
+        ])
+        self._run_pipeline(0)
+        status = self._status()
+        self.assertEqual((status["state"], status["review"], status["round"]), ("green", "approve", "1"))
+        self.assertEqual(self._labels(), ["implement", "review-1", "review-fix-1", "review-2"])
+        fix_prompt = self._prompts("coder")[-1]
+        self.assertIn("Criterion #2 has no test", fix_prompt)
+        self.assertIn("custom_components/2n_intercom/api.py:7", fix_prompt)
+        self.assertNotIn("Rename a helper", fix_prompt)
+        comments = self._comments()
+        self.assertEqual(len(comments), 3)
+        self.assertIn("changes requested", comments[0])
+        self.assertIn("**Verdict: approve**", comments[1])
+        self._assert_closed(True)
+        calls = self._calls()
+        self.assertLess(calls.index("task edit TASK-34"), calls.rindex("pr comment"))
+
+    def test_review_changes_not_fixed_ends_in_review_state(self) -> None:
+        blocking = {"verdict": "changes", "findings": [self._finding()]}
+        self._pipeline(reviews=[blocking, blocking])
+        self._run_pipeline(1)
+        status = self._status()
+        self.assertEqual((status["state"], status["review"]), ("review", "changes"))
+        self.assertIn("changes requested (1 blocking, 0 minor)", status["message"])
+        self.assertIn("task stays In Progress", status["message"])
+        self.assertEqual(self._labels(), ["implement", "review-1", "review-fix-1", "review-2"])
+        self.assertEqual(len(self._prompts("review")), 2)
+        self.assertEqual(len(self._comments()), 2)
+        self._assert_closed(False)
+
+    def test_missing_review_model_skips_the_review(self) -> None:
+        self._pipeline(review_model=None)
+        self._run_pipeline(0)
+        status = self._status()
+        self.assertEqual((status["state"], status["review"]), ("green", "skipped"))
+        self.assertIn("review skipped (no review-model configured)", status["message"])
+        self.assertEqual(self._labels(), ["implement"])
+        self.assertNotIn("--review", self._calls())
+        comments = self._comments()
+        self.assertEqual(len(comments), 1)
+        self.assertIn("Review: review skipped", comments[0])
+        self._assert_closed(True)
+
+    def test_invalid_review_model_stops_before_any_work(self) -> None:
+        self._pipeline(review_model="bad model;id")
+        self._run_pipeline(1)
+        status = self._status()
+        self.assertEqual(status["state"], "stopped")
+        self.assertIn("unreadable or invalid /etc/ha2n-coder/review-model", status["message"])
+        self.assertNotIn("copilot", self._calls())
+
+    def _assert_unusable_review(self, output: str) -> None:
+        self._pipeline(reviews=[output])
+        self._run_pipeline(1)
+        status = self._status()
+        self.assertEqual((status["state"], status["review"]), ("review", "failed"))
+        self.assertIn("independent review failed", status["message"])
+        self.assertEqual(self._labels(), ["implement", "review-1"])
+        comments = self._comments()
+        self.assertEqual(len(comments), 1)
+        self.assertIn("Review failed", comments[0])
+        self.assertNotIn("Verdict: approve", comments[0])
+        self._assert_closed(False)
+
+    def test_unparsable_review_output_is_failed_and_never_approve(self) -> None:
+        self._assert_unusable_review("this is not json")
+
+    def test_empty_review_output_is_failed(self) -> None:
+        self._assert_unusable_review("")
+
+    def test_review_json_without_findings_is_failed(self) -> None:
+        self._assert_unusable_review(json.dumps({"verdict": "approve"}))
+
+    def test_review_json_with_unknown_verdict_is_failed(self) -> None:
+        self._assert_unusable_review(json.dumps({"verdict": "lgtm", "findings": []}))
+
+    def test_review_json_with_invalid_finding_is_failed(self) -> None:
+        self._assert_unusable_review(json.dumps(
+            {"verdict": "approve", "findings": [{"severity": "huge", "summary": "x"}]},
+        ))
+
+    def test_reviewer_exit_failure_is_failed_even_with_approve_json(self) -> None:
+        self._pipeline(reviews=[{"verdict": "approve", "findings": []}])
+        (self.root / "review-rc").write_text("7")
+        self._run_pipeline(1)
+        status = self._status()
+        self.assertEqual((status["state"], status["review"]), ("review", "failed"))
+        self.assertIn("exit code 7", self._comments()[0])
+        self._assert_closed(False)
+
+    def test_approve_with_a_blocking_finding_counts_as_changes(self) -> None:
+        self._pipeline(reviews=[{"verdict": "approve", "findings": [self._finding()]}] * 2)
+        self._run_pipeline(1)
+        status = self._status()
+        self.assertEqual((status["state"], status["review"]), ("review", "changes"))
+        self.assertEqual(self._labels(), ["implement", "review-1", "review-fix-1", "review-2"])
+        self._assert_closed(False)
+
+    def test_changes_without_blocking_findings_get_no_fix_round(self) -> None:
+        self._pipeline(reviews=[{"verdict": "changes", "findings": [self._finding("minor")]}])
+        self._run_pipeline(1)
+        status = self._status()
+        self.assertEqual((status["state"], status["review"]), ("review", "changes"))
+        self.assertEqual(self._labels(), ["implement", "review-1"])
+        self.assertIn("a human decides", self._comments()[0])
+        self._assert_closed(False)
+
+    def test_review_comment_is_sanitised(self) -> None:
+        token = "ghp_" + "a" * 30
+        hostile = f"see https://evil.example/x?t={token} and ping @someone <b>now</b> [x](y) {token}"
+        self._pipeline(reviews=[{"verdict": "approve", "findings": [self._finding("minor", hostile)]}])
+        self._run_pipeline(0)
+        comment = self._comments()[0]
+        for leaked in ("evil.example", "ghp_", "@someone", "<b>", "](y"):
+            self.assertNotIn(leaked, comment)
+        self.assertIn("[link removed]", comment)
+
+    def test_review_fix_round_does_not_use_up_the_ci_fix_rounds(self) -> None:
+        blocking = {"verdict": "changes", "findings": [self._finding()]}
+        self._pipeline(
+            reviews=[blocking, {"verdict": "approve", "findings": []}],
+            checks=("pass", "fail", "pass"),
+        )
+        self._run_pipeline(0)
+        self.assertEqual(self._status()["state"], "green")
+        self.assertEqual(
+            self._labels(), ["implement", "review-1", "review-fix-1", "ci-fix-1", "review-2"],
+        )
+        self._assert_closed(True)
+
+    def test_red_checks_never_reach_the_reviewer(self) -> None:
+        self._pipeline(checks=("fail", "fail", "fail", "fail"))
+        self._run_pipeline(1)
+        self.assertEqual(self._status()["state"], "failed")
+        self.assertEqual(self._labels(), ["implement", "ci-fix-1", "ci-fix-2", "ci-fix-3"])
+        self.assertNotIn("--review", self._calls())
+        self._assert_closed(False)
+
+    def test_scripts_have_valid_bash_syntax(self) -> None:
+        for script in sorted(CODER_DIR.glob("*.sh")):
+            with self.subTest(script=script.name):
+                result = subprocess.run(
+                    [self.bash, "-n", str(script)], capture_output=True, text=True, timeout=15,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

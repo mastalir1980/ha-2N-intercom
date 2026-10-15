@@ -8,9 +8,11 @@
 #
 # Flow: ready check → sandbox clone → Copilot implements → local gates (≤2 local fix rounds) →
 # patch checked for protected paths/size → applied in our own clone → push + PR (Jan's token) →
-# wait for PR checks incl. e2e-pi → on failure feed the public log back to Copilot (≤3 rounds) → report.
+# wait for PR checks incl. e2e-pi → on failure feed the public log back to Copilot (≤3 rounds) →
+# independent review by a second model (only with /etc/ha2n-coder/review-model; blocking findings get ONE
+# fix round, then checks and one more review) → report.
 # Copilot never sees the repo token; this script never runs code from the repo (only git, gh, backlog).
-# When everything is green it adds ONE last commit to the PR branch that sets the task Done and ticks its
+# When everything is green and the review approved (or is not configured) it adds ONE last commit to the PR branch that sets the task Done and ticks its
 # criteria (takes effect on main only when Jan merges; label manual-close opts out). Never merges. State: /var/lib/ha2n-coder/runs/<run>/{status,run.log,*.patch}; see ha2n-task-status.
 set -uo pipefail
 umask 027
@@ -27,8 +29,9 @@ BASE="${HA2N_CODER_TEST_ROOT:-}/var/lib/ha2n-coder"; CLONE="$BASE/repo"; RUNS="$
 LIB="${HA2N_CODER_TEST_ROOT:-}/usr/local/lib/ha2n-coder"
 SANDBOX=(sudo -n -u ha2n-copilot "$LIB/sandbox.sh")
 REPO_TOKEN_FILE="${HA2N_CODER_TEST_ROOT:-}/etc/ha2n-coder/repo.token"
+REVIEW_MODEL_FILE="${HA2N_CODER_TEST_ROOT:-}/etc/ha2n-coder/review-model"   # optional: its presence turns the review on
 PROTECTED='(^|/)\.git|^(\.github/|e2e/ci/|e2e/scripts/|e2e/run\.sh$|e2e/nightly\.sh$|e2e/e2e\.sh$|e2e/staging/|e2e/\.env|e2e/tests/conftest\.py$|tools/coder/|CLAUDE\.md$|backlog/config\.yml$)'
-MAX_FILES=40; MAX_LINES=2500; LOCAL_ROUNDS=2; CI_ROUNDS=3; CHECKS_TIMEOUT=$((45*60))
+MAX_FILES=40; MAX_LINES=2500; LOCAL_ROUNDS=2; CI_ROUNDS=3; REVIEW_ROUNDS=1; CHECKS_TIMEOUT=$((45*60))
 COST_CSV="$BASE/cost.csv"   # one line per Copilot call; stays on the VM (the repo is public)
 
 FG=0; [ "${1:-}" = "--foreground" ] && { FG=1; shift; }
@@ -46,9 +49,9 @@ RUN="${2:-}"; [ "${1:-}" = "--run" ] && [ -n "$RUN" ] || RUN="$(date +%Y%m%d-%H%
 [[ "$RUN" =~ ^[0-9]{8}-[0-9]{6}-TASK-[0-9]+(\.[0-9]+)?$ ]] || { echo "invalid run id" >&2; exit 2; }
 DIR="$RUNS/$RUN"; mkdir -p "$DIR"
 
-status() {  # status <state> <message>  — states: running, stopped, green, failed
+status() {  # status <state> <message>  — states: running, stopped, green, review, failed
   { echo "task=$TASK"; echo "state=$1"; echo "message=$2"; echo "branch=${BRANCH:-}"; echo "pr=${PR_URL:-}"
-    echo "round=${ROUND:-0}"; echo "updated=$(date -Is)"; } > "$DIR/status.tmp" && mv "$DIR/status.tmp" "$DIR/status"
+    echo "round=${ROUND:-0}"; echo "review=${REVIEW_VERDICT:-}"; echo "updated=$(date -Is)"; } > "$DIR/status.tmp" && mv "$DIR/status.tmp" "$DIR/status"
   echo "[$(date +%H:%M:%S)] $1: $2"
 }
 stop() { status stopped "$*"; exit 1; }
@@ -62,6 +65,12 @@ flock -n 9 || stop "another task is running (one at a time)"
 ln -sfn "$DIR" "$RUNS/latest"
 [ -r "$REPO_TOKEN_FILE" ] || stop "missing repo token (sudo ha2n-coder-set-token repo)"
 TOKEN="$(cat "$REPO_TOKEN_FILE")"
+REVIEW_ON=0; REVIEW_MODEL=""
+if [ -e "$REVIEW_MODEL_FILE" ]; then
+  REVIEW_MODEL="$(tr -d '[:space:]' < "$REVIEW_MODEL_FILE" 2>/dev/null)"
+  [[ "$REVIEW_MODEL" =~ ^[A-Za-z0-9._-]{1,64}$ ]] || stop "unreadable or invalid /etc/ha2n-coder/review-model"
+  REVIEW_ON=1
+fi
 AUTH="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
 export GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1
 # The token goes only to these two wrappers (env, not argv: invisible in `ps` to other users).
@@ -104,10 +113,10 @@ sys.stdout.write(s)
 PY
 }
 
-log_cost() {  # log_cost <label> — one cost.csv line from the summary Copilot printed in copilot-$ROUND.log
+log_cost() {  # log_cost <label> [log] — one cost.csv line from the summary Copilot printed in the log (default copilot-$ROUND.log)
   # Columns: time,run,task,label,model,effort,ai_credits,tokens_in,tokens_out,duration
   # Tokens are as printed (14.9k -> 14900). Never fails the run: missing/odd output -> empty fields.
-  python3 - "$COST_CSV" "$DIR/copilot-$ROUND.log" "$RUN" "$TASK" "$1" <<'PY' 2>/dev/null || true
+  python3 - "$COST_CSV" "${2:-$DIR/copilot-$ROUND.log}" "$RUN" "$TASK" "$1" <<'PY' 2>/dev/null || true
 import csv, datetime, os, re, sys
 path, log, run, task, label = sys.argv[1:6]
 try:
@@ -242,6 +251,82 @@ failure_text() {  # public logs of the failed checks (e2e-pi prints only its san
   echo "$f"
 }
 
+review() {  # one review round of the published PR head -> REVIEW_VERDICT (approve|changes|failed), REVIEW_BLOCKING, REVIEW_MINOR
+  # The reviewer never gets more than the coder did (no repo token); its JSON is validated and only the parsed,
+  # sanitised fields (no links, no token-like strings, no mentions) reach the PR comment. Anything unusable is
+  # "failed", never "approve".
+  REVIEWS=$((REVIEWS+1))
+  local n="$REVIEWS" rc parsed
+  status running "independent review $n by $REVIEW_MODEL"
+  render review.md - "" | "${SANDBOX[@]}" review > "$DIR/review-$n.raw" 2>&1
+  rc=$?
+  parsed="$(python3 - "$DIR/review-$n" "$rc" "$REVIEW_MODEL" <<'PY' 2>/dev/null
+import json, re, sys
+base, rc, model = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+MARK = "\n=== REVIEW JSON ===\n"
+text = open(base + ".raw", encoding="utf-8", errors="replace").read()
+i = ("\n" + text).rfind(MARK)
+log, raw = (text[:max(i - 1, 0)], text[i - 1 + len(MARK):]) if i >= 0 else (text, "")
+open(base + ".log", "w", encoding="utf-8").write(log)
+open(base + ".json", "w", encoding="utf-8").write(raw)
+SECRET = re.compile(r"(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|Bearer\s+\S+)")
+def clean(value, limit):
+    t = " ".join(str(value).split())
+    t = re.sub(r"[A-Za-z][A-Za-z0-9+.-]*://\S+", "[link removed]", t)
+    t = SECRET.sub("[redacted]", t)[:limit]
+    t = t.replace("<", "&lt;").replace(">", "&gt;").replace("](", "] (")
+    return re.sub(r"@(?=\w)", "@\u200b", t)
+def fail(reason):
+    open(base + ".comment.md", "w", encoding="utf-8").write(
+        f"## Independent review ({clean(model, 64)})\n\n**Review failed: {reason}.** "
+        "This is not an approval; the PR needs a human review.\n")
+    open(base + ".blocking.txt", "w", encoding="utf-8").write("")
+    print("failed 0 0")
+    sys.exit(0)
+if rc != 0:
+    fail(f"the reviewer run ended with exit code {rc}")
+try:
+    data = json.loads(raw)
+    assert isinstance(data, dict) and data.get("verdict") in ("approve", "changes")
+    assert isinstance(data.get("findings"), list) and len(data["findings"]) <= 100
+    findings = []
+    for f in data["findings"]:
+        assert isinstance(f, dict) and f.get("severity") in ("blocking", "minor")
+        assert isinstance(f.get("summary"), str) and f["summary"].strip()
+        assert f.get("file") is None or isinstance(f["file"], str)
+        line = f.get("line")
+        assert line is None or (isinstance(line, int) and not isinstance(line, bool) and line >= 1)
+        where = clean(f.get("file") or "", 200) + (f":{line}" if line else "")
+        findings.append((f["severity"], where, clean(f["summary"], 600)))
+except (ValueError, AssertionError):
+    fail("the reviewer output is not valid JSON in the expected shape")
+blocking = [x for x in findings if x[0] == "blocking"]
+minor = [x for x in findings if x[0] == "minor"]
+verdict = "approve" if data["verdict"] == "approve" and not blocking else "changes"
+def render(items):
+    return "".join(f"- `{w}` — {s}\n" if w else f"- {s}\n" for _, w, s in items)
+out = [f"## Independent review ({clean(model, 64)})\n\n",
+       "**Verdict: approve**\n" if verdict == "approve" else "**Verdict: changes requested**\n"]
+if blocking:
+    out.append("\n**Blocking**\n" + render(blocking))
+if minor:
+    out.append("\n**Minor**\n" + render(minor))
+if not findings:
+    out.append("\nNo findings.\n")
+if verdict == "changes" and not blocking:
+    out.append("\nThe reviewer asks for changes but named no blocking finding; a human decides.\n")
+open(base + ".comment.md", "w", encoding="utf-8").write("".join(out))
+open(base + ".blocking.txt", "w", encoding="utf-8").write("".join(
+    f"- [blocking] {w or 'general'}: {s}\n" for _, w, s in blocking))
+print(verdict, len(blocking), len(minor))
+PY
+)"
+  [ -n "$parsed" ] || { parsed="failed 0 0"; echo "Review failed: the review output could not be processed. This is not an approval." > "$DIR/review-$n.comment.md"; }
+  read -r REVIEW_VERDICT REVIEW_BLOCKING REVIEW_MINOR <<<"$parsed"
+  log_cost "review-$n" "$DIR/review-$n.log"
+  ghx pr comment "$PR_URL" -R "$REPO" --body-file "$DIR/review-$n.comment.md" >/dev/null 2>&1 || true
+}
+
 close_task() {  # last commit on the PR branch: task Done + criteria ticked. Never fails the run (sets CLOSE_NOTE).
   # Only called after wait_checks was green, so nothing waits for checks on this commit. Reaches main with Jan's merge.
   CLOSE_NOTE=""
@@ -282,7 +367,7 @@ PY
 }
 
 # ---- 2. implement --------------------------------------------------------------------------
-ROUND=0; CLOSE_NOTE=""
+ROUND=0; CI_USED=0; REVIEWS=0; REVIEW_FIX=0; REVIEW_VERDICT=""; REVIEW_BLOCKING=0; REVIEW_MINOR=0; CLOSE_NOTE=""
 "${SANDBOX[@]}" prepare "$BRANCH" > "$DIR/prepare.log" 2>&1 || stop "sandbox prepare failed (prepare.log)"
 status running "Copilot implementing"
 copilot_round implement.md - "" "implement"
@@ -290,20 +375,37 @@ local_gates
 publish
 open_pr
 
-# ---- 3. PR checks + fix rounds -------------------------------------------------------------
+# ---- 3. PR checks, independent review, fix rounds ------------------------------------------
 while :; do
   status running "waiting for PR checks (e2e-pi on the Pi)"
   if wait_checks; then
+    REVIEW_NOTE="review skipped (no review-model configured)"; REVIEW_VERDICT=skipped
+    if [ "$REVIEW_ON" = 1 ]; then
+      review
+      if [ "$REVIEW_VERDICT" = changes ] && [ "$REVIEW_BLOCKING" -gt 0 ] && [ "$REVIEW_FIX" -lt "$REVIEW_ROUNDS" ]; then
+        REVIEW_FIX=$((REVIEW_FIX+1)); ROUND=$((ROUND+1))
+        status running "review found $REVIEW_BLOCKING blocking finding(s) — Copilot fix review-fix-$REVIEW_FIX"
+        copilot_round fix.md "$DIR/review-$REVIEWS.blocking.txt" "independent code review (blocking findings; the PR checks are green)" "review-fix-$REVIEW_FIX"
+        local_gates
+        publish
+        continue
+      fi
+      case "$REVIEW_VERDICT" in
+        approve) REVIEW_NOTE="review approved (${REVIEW_MINOR} minor finding(s))" ;;
+        changes) status review "independent review: changes requested ($REVIEW_BLOCKING blocking, $REVIEW_MINOR minor) — findings in the PR comment; task stays In Progress: $PR_URL"; exit 1 ;;
+        *)       status review "independent review failed (output unusable, see review-$REVIEWS.log) — not approved; task stays In Progress: $PR_URL"; exit 1 ;;
+      esac
+    fi
     close_task
-    ghx pr comment "$PR_URL" -R "$REPO" --body "✅ All checks green (incl. \`e2e-pi\`) after $ROUND fix round(s). Ready for review — the coder never merges.${CLOSE_NOTE:+ Task: $CLOSE_NOTE.}" >/dev/null 2>&1 || true
-    status green "PR ready for review: $PR_URL${CLOSE_NOTE:+ — $CLOSE_NOTE}"; exit 0
+    ghx pr comment "$PR_URL" -R "$REPO" --body "✅ All checks green (incl. \`e2e-pi\`) after $ROUND fix round(s). Ready for review — the coder never merges. ${REVIEW_NOTE:+Review: $REVIEW_NOTE.}${CLOSE_NOTE:+ Task: $CLOSE_NOTE.}" >/dev/null 2>&1 || true
+    status green "PR ready for review: $PR_URL — $REVIEW_NOTE${CLOSE_NOTE:+ — $CLOSE_NOTE}"; exit 0
   fi
-  [ "$ROUND" -ge "$CI_ROUNDS" ] && { status failed "checks still red after $CI_ROUNDS fix rounds: $(cut -d' ' -f1 "$DIR/ci-$ROUND.txt" | tr '\n' ' ')"; exit 1; }
+  [ "$CI_USED" -ge "$CI_ROUNDS" ] && { status failed "checks still red after $CI_ROUNDS fix rounds: $(cut -d' ' -f1 "$DIR/ci-$ROUND.txt" | tr '\n' ' ')"; exit 1; }
   grep -q '^e2e-pi skipping' "$DIR/ci-$ROUND.txt" \
     && stop "e2e-pi was skipped — PR author not allowed for the Pi runner (E2E_PI_ACTORS / allowed-actors)?"
   FAIL_FILE="$(failure_text)"
-  ROUND=$((ROUND+1)); status running "checks red ($(cut -d' ' -f1 "$DIR/ci-$((ROUND-1)).txt" | tr '\n' ' ')) — Copilot fix $ROUND/$CI_ROUNDS"
-  copilot_round fix.md "$FAIL_FILE" "PR checks on GitHub (e2e-pi runs the E2E suite on the Pi; hassfest/HACS validate)" "ci-fix-$ROUND"
+  CI_USED=$((CI_USED+1)); ROUND=$((ROUND+1)); status running "checks red ($(cut -d' ' -f1 "$DIR/ci-$((ROUND-1)).txt" | tr '\n' ' ')) — Copilot fix $CI_USED/$CI_ROUNDS"
+  copilot_round fix.md "$FAIL_FILE" "PR checks on GitHub (e2e-pi runs the E2E suite on the Pi; hassfest/HACS validate)" "ci-fix-$CI_USED"
   local_gates
   publish
 done
