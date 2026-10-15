@@ -91,6 +91,20 @@ adds one last commit that does it (takes effect when Jan merges; label `manual-c
   that the merge closes the task (not for tasks labelled `manual-close`; parent tasks are closed by hand).
 - Bugs found by E2E carry type `bug` and label `e2e`; they include the report path and evidence.
 
+## Statuses and versions
+
+- **Statuses (board columns):** To Do → In Progress → **To Test** → Done. *To Test* = merged on `main`, automated
+  checks green, waiting for Jan to verify on the real device (criteria that need a ring button, relays, Control4 …;
+  label `manual-close`). A task moves from To Test to Done only after Jan's check (he does it, or tells Claude the result).
+  Until TASK-36 lands, Claude moves `manual-close` tasks to To Test by hand after the merge.
+- **Versions are Backlog milestones** (`v1.5.0`, …). Every user-facing task gets the next open milestone when it is
+  created (`-m vX.Y.Z`); pipeline/tooling tasks (`manual-path`, `ci`, `infra`) get none. `backlog milestone list` shows progress.
+- **PRs merge to `main` continuously.** HACS users install GitHub releases, not `main`, so `main` is the next version
+  in preparation. Do not hold PRs back for a release.
+- **Closing a version:** all tasks of the milestone are Done (Jan tests the To Test items and runs `e2e.sh relays` once)
+  → the task `Release vX.Y.Z` (@copilot) bumps `manifest.json` and writes the user-facing `CHANGELOG.md` section from
+  the milestone → Jan merges it and creates the GitHub release/tag → `backlog milestone archive vX.Y.Z`.
+
 ## Validation / definition of done — run all of these before calling a task done
 
 ```bash

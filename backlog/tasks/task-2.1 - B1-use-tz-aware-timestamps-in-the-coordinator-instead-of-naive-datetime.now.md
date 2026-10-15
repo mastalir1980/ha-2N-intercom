@@ -5,10 +5,11 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-12 19:54'
-updated_date: '2026-10-14 14:31'
+updated_date: '2026-10-15 12:12'
 labels:
   - tech-debt
   - coordinator
+milestone: m-0
 dependencies: []
 references:
   - docs/IMPROVEMENTS.md

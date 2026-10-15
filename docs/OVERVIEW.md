@@ -99,7 +99,14 @@ Změny v Backlogu jdou jako backlog-only PR z `main`. Do GitHub issues agent nic
 | *To Do*, `@copilot` | Claude | úkol splňuje Definition of Ready (`CLAUDE.md`): popis s důkazy, testovatelná kritéria, plán, reference, priorita, žádné otevřené otázky |
 | Na `main` | Claude → Jan | větev `backlog-<téma>` z `origin/main`, backlog-only PR, Jan ho hned mergne |
 | *In Progress* | kodér | větev `task-<id>-…`, jeden úkol = jedna větev = jeden PR |
-| *Done* | kodér | po zelených checkách poslední commit v PR (stav Done, odškrtnutá kritéria, shrnutí); na `main` až Janovým mergem. Štítek `manual-close` = zavírá se ručně. Rodičovské úkoly se zavírají ručně |
+| *To Test* | kodér → Jan | mergnuto na `main`, automatické testy zelené, čeká na Janovo ověření na skutečném zařízení (zvonění tlačítkem, relé, Control4; štítek `manual-close`) |
+| *Done* | kodér / Jan | po zelených checkách poslední commit v PR (stav Done, odškrtnutá kritéria, shrnutí); na `main` až Janovým mergem. Z *To Test* na *Done* až po Janově ověření. Rodičovské úkoly se zavírají ručně |
+
+### Verze
+
+- **Verze = milník v Backlogu** (`v1.5.0`, …). Každý úkol pro uživatele dostane při založení nejbližší otevřenou verzi, úkoly na nástrojích pipeline žádnou. Stav: `backlog milestone list`.
+- **PR se mergují na `main` průběžně.** Uživatelé přes HACS instalují GitHub releasy, ne `main`, takže na `main` vzniká příští verze.
+- **Uzavření verze:** všechny úkoly milníku jsou *Done* (Jan projde *To Test* a jednou pustí `e2e.sh relays`) → úkol `Release vX.Y.Z` (kodér) zvedne verzi v `manifest.json` a sepíše `CHANGELOG.md` → Jan mergne a vytvoří GitHub release → `backlog milestone archive vX.Y.Z`.
 
 Chyby z E2E zakládá triage jako úkoly typu `bug` se štítkem `e2e` ([`e2e/agent/triage.md`](../e2e/agent/triage.md)).
 Úkoly se mění **jen přes `backlog` CLI**.

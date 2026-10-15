@@ -3,15 +3,16 @@ id: TASK-15
 title: >-
   Clarify credential fields in the options flow and point users to Reconfigure
   for API credentials
-status: In Progress
+status: To Test
 assignee:
   - '@copilot'
 created_date: '2026-10-11 18:43'
-updated_date: '2026-10-12 13:58'
+updated_date: '2026-10-15 12:12'
 labels:
   - config-flow
   - ux
   - security
+milestone: m-0
 dependencies: []
 references:
   - custom_components/2n_intercom/strings.json
@@ -74,4 +75,6 @@ Implemented on branch task-14-15-options-flow-ux (commit 6ac5ad2). RTSP password
 2026-10-12 attached JUnit evidence inspected: report 20261012-144418 contains 13 test cases, 0 failures, 0 errors, 2 skipped, hence 11 passed. tests.test_00_setup::test_no_integration_errors_in_log passed. No tests.test_40_options_flow::test_options_flow_last_step_and_back_navigation test case is present at all; RTSP password masking was not verified by this run. Skips are SIP registration disabled and manual relay test disabled. In e2e/run.sh, --ref selects the integration deployment only; unittest and pytest use the runner's working-tree test files. A passed deployment of c28e833 does not establish that the Pi ran its corresponding test suite. AC #7 remains unchecked, TASK-15 remains In Progress. Need inspect the Pi checkout status before updating it or rerun from the current main checkout on the Mac with staging connectivity; no integration changes are needed.
 
 2026-10-12 checkout clarification: Jan reports the current Pi checkout is main at c28e833, synchronized with origin/main, with only an unrelated untracked deploy_test.sh artifact. Locally verified with git ls-tree that c28e833 tracks e2e/tests/test_40_options_flow.py, e2e/tests/test_50_access_control.py and the current tests/test_config_flow.py; there are no working-tree differences in these tests. Therefore a reset or pull to the same commit is not required. The cause of the earlier incomplete test collection remains unconfirmed; do not equate the current Pi checkout state with the test files used by report 20261012-144418. Rerun the read-only pipeline from the confirmed current Pi main checkout and inspect its new JUnit results for test_40 and the integration-log check. Leave deploy_test.sh untouched and do not run it (it is a production deployment artifact outside TASK-15).
+
+2026-10-15 (Claude): moved to To Test under the new status scheme: AC #1-#6 verified, only AC #7's E2E part is left (one clean e2e run on current main, e.g. in the v1.5.0 release test).
 <!-- SECTION:NOTES:END -->

@@ -7,10 +7,13 @@ status: To Do
 assignee:
   - '@copilot'
 created_date: '2026-10-13 19:54'
+updated_date: '2026-10-15 12:12'
 labels:
-  - ring-detection
-  - github-issue
+  - bug
+  - coordinator
   - manual-close
+  - on-hold
+milestone: m-0
 dependencies: []
 references:
   - custom_components/2n_intercom/coordinator.py
@@ -71,3 +74,9 @@ Label manual-close: a ring needs a physical button press, so Jan verifies on the
 5. Must not change: event-driven ring only (no polling-based ring), graceful handling of unknown/malformed call events, tz-aware timestamps (dt_util.utcnow), called_id semantics.
 6. Run unittest discover, validate.py, py_compile.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-14 (Claude): ON HOLD until PR #32 (external, vemboy200) is decided. #32 adds ring_on_call (a toggle for the same false ring) and ring_on_keypress. Recommendation to Jan: land this task's rule fix and take only ring_on_keypress from #32 (opt-in). The headless coder and the grooming agent must not start this task while the label on-hold is set.
+<!-- SECTION:NOTES:END -->

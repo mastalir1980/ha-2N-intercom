@@ -7,10 +7,11 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-11 18:42'
-updated_date: '2026-10-11 19:47'
+updated_date: '2026-10-15 12:12'
 labels:
   - config-flow
   - ux
+milestone: m-0
 dependencies: []
 references:
   - custom_components/2n_intercom/config_flow.py
