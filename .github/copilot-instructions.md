@@ -79,12 +79,12 @@ adds one last commit that does it (takes effect when Jan merges; label `manual-c
   before finishing `backlog instructions task-finalization`.
 - When you start: status `In Progress`. While working: add implementation notes (what changed, decisions, follow-ups).
 - **One task per branch/PR**, branch name `task-<id>-short-slug`.
-- New tasks and analysis-only Backlog changes made by Claude ship in separate `backlog-<topic>` PRs from `main`;
-  do not expect them in your task branch. Your own task's status/notes/AC updates still belong in your task branch.
-- **Backlog and analysis changes go straight to `main`** (Jan's standing instruction): new or updated
-  tasks/drafts, analysis notes, `docs/*` findings and helper scripts from an analysis are committed directly
-  on `main` and pushed — never left on a feature branch. Use a clean checkout of `main` so Jan's working
-  branch is untouched. Code changes still go through task branches and PRs.
+- New tasks and analysis-only Backlog changes made by Claude reach `main` through separate backlog-only PRs
+  (Jan's `bship` command); do not expect them in your task branch and never commit them yourself. Your own task's
+  status/notes/AC updates belong in your task branch. `main` is protected: nothing is committed or pushed to it directly.
+- **Work in a git worktree per task** (`git worktree add ../ha2n-task-<id> -b task-<id>-slug origin/main`), not in
+  Jan's main checkout, which stays on `main` for Backlog changes. Commit with Jan's GitHub noreply address
+  (`164862832+mastalir1980@users.noreply.github.com`), never a work or private e-mail: the repo is public.
 - **Respect `dependencies`** in the task frontmatter — do not start a task whose dependencies are not Done.
 - When done: tick the acceptance criteria, add a short final summary, set status `Done` (via CLI) —
   only after the full definition of done below, including a green `e2e.sh wip`. Put this in the PR's last commit so
