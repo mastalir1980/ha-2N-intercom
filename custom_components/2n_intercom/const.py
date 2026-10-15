@@ -11,6 +11,8 @@ CONF_ENABLE_DOORBELL = "enable_doorbell"
 # Opt-in flag for insecure transport: allow plaintext HTTP Basic-auth fallback.
 # Default off so credentials are never sent in cleartext without consent.
 CONF_ALLOW_INSECURE = "allow_insecure"
+CONF_RING_ON_KEYPRESS = "ring_on_keypress"
+CONF_RING_ON_CALL = "ring_on_call"
 CONF_RELAYS = "relays"
 CONF_CALLED_ID = "called_id"
 CALLED_ID_ALL = "__all__"
@@ -60,6 +62,8 @@ DEFAULT_VERIFY_SSL = False
 DEFAULT_ALLOW_INSECURE = False
 DEFAULT_ENABLE_CAMERA = True
 DEFAULT_ENABLE_DOORBELL = True
+DEFAULT_RING_ON_KEYPRESS = True
+DEFAULT_RING_ON_CALL = True
 DEFAULT_SCAN_INTERVAL = 60  # seconds — events deliver real-time updates; polling is a safety net
 SCAN_INTERVAL_MIN = 2  # seconds — below this we hammer the device for no benefit
 SCAN_INTERVAL_MAX = 600  # seconds — events handle real-time; polling only needs to catch missed updates

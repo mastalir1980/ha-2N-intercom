@@ -36,6 +36,8 @@ from .const import (
     CONF_PROTOCOL,
     CONF_RELAY_DEVICE_TYPE,
     CONF_RELAYS,
+    CONF_RING_ON_CALL,
+    CONF_RING_ON_KEYPRESS,
     CONF_RTSP_PASSWORD,
     CONF_RTSP_USERNAME,
     CONF_SCAN_INTERVAL,
@@ -44,6 +46,8 @@ from .const import (
     DEFAULT_ENABLE_CAMERA,
     DEFAULT_ENABLE_DOORBELL,
     DEFAULT_PROTOCOL,
+    DEFAULT_RING_ON_CALL,
+    DEFAULT_RING_ON_KEYPRESS,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_VERIFY_SSL,
     DEVICE_TYPE_GATE,
@@ -515,6 +519,12 @@ async def async_setup_entry(
         config_entry=entry,
         ring_snapshot_enabled=bool(
             _get_option(entry, CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA)
+        ),
+        ring_on_keypress=bool(
+            _get_option(entry, CONF_RING_ON_KEYPRESS, DEFAULT_RING_ON_KEYPRESS)
+        ),
+        ring_on_call=bool(
+            _get_option(entry, CONF_RING_ON_CALL, DEFAULT_RING_ON_CALL)
         ),
     )
 

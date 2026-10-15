@@ -40,6 +40,8 @@ from .const import (
     CONF_RELAY_NUMBER,
     CONF_RELAY_PULSE_DURATION,
     CONF_RELAYS,
+    CONF_RING_ON_CALL,
+    CONF_RING_ON_KEYPRESS,
     CONF_RTSP_PASSWORD,
     CONF_RTSP_USERNAME,
     CONF_SCAN_INTERVAL,
@@ -57,6 +59,8 @@ from .const import (
     DEFAULT_PORT_HTTPS,
     DEFAULT_PROTOCOL,
     DEFAULT_PULSE_DURATION,
+    DEFAULT_RING_ON_CALL,
+    DEFAULT_RING_ON_KEYPRESS,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_VERIFY_SSL,
     DEVICE_TYPE_DOOR,
@@ -384,6 +388,12 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
                     default=self._data.get(
                         CONF_ENABLE_DOORBELL, DEFAULT_ENABLE_DOORBELL
                     ),
+                ): cv.boolean,
+                vol.Required(
+                    CONF_RING_ON_KEYPRESS, default=DEFAULT_RING_ON_KEYPRESS
+                ): cv.boolean,
+                vol.Required(
+                    CONF_RING_ON_CALL, default=DEFAULT_RING_ON_CALL
                 ): cv.boolean,
                 vol.Optional(
                     CONF_CALLED_ID, default=default_called
@@ -827,6 +837,18 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
                     CONF_ENABLE_DOORBELL,
                     default=self._session_option(
                         CONF_ENABLE_DOORBELL, DEFAULT_ENABLE_DOORBELL
+                    ),
+                ): cv.boolean,
+                vol.Required(
+                    CONF_RING_ON_KEYPRESS,
+                    default=self._current_option(
+                        CONF_RING_ON_KEYPRESS, DEFAULT_RING_ON_KEYPRESS
+                    ),
+                ): cv.boolean,
+                vol.Required(
+                    CONF_RING_ON_CALL,
+                    default=self._current_option(
+                        CONF_RING_ON_CALL, DEFAULT_RING_ON_CALL
                     ),
                 ): cv.boolean,
                 vol.Required(
