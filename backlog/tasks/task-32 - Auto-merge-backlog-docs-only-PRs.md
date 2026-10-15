@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-14 14:32'
-updated_date: '2026-10-15 14:14'
+updated_date: '2026-10-15 14:16'
 labels:
   - ci
   - infra
@@ -47,15 +47,15 @@ Current bship (lives only in Jan's ~/.zshrc today):
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 e2e-pi.yml does not start for a pull_request_target PR whose changed files are all under backlog/ (except backlog/config.yml) or match docs/**/*.md; every existing guard in e2e-pi.yml (actor allow-list, same-repo, base branch, concurrency, permissions) is unchanged
-- [ ] #2 e2e-pi still runs for any PR that also changes another file, including coder PRs whose last commit only touches backlog/ (the filter evaluates the whole PR diff), and for workflow_dispatch
-- [ ] #3 bship lives in the repo as tools/bship.zsh (a zsh function, sourced from ~/.zshrc with one line documented in its header); the behaviour of the current function is kept
-- [ ] #4 bship refuses (non-zero, clear message, nothing committed) when the checkout is not on main or anything outside backlog/ and docs/ is changed
-- [ ] #5 bship runs git pull --ff-only on main before branching (with the uncommitted backlog/docs changes in place) and stops with a clear message if the pull fails
-- [ ] #6 bship runs backlog doctor before committing and stops when it reports duplicate IDs, printing the backlog doctor --fix hint; it never runs --fix by itself
-- [ ] #7 bship uses an explicit PR body and merge method (gh pr create --title/--body, gh pr merge --merge --delete-branch) and ends on an up-to-date main
+- [x] #1 e2e-pi.yml does not start for a pull_request_target PR whose changed files are all under backlog/ (except backlog/config.yml) or match docs/**/*.md; every existing guard in e2e-pi.yml (actor allow-list, same-repo, base branch, concurrency, permissions) is unchanged
+- [x] #2 e2e-pi still runs for any PR that also changes another file, including coder PRs whose last commit only touches backlog/ (the filter evaluates the whole PR diff), and for workflow_dispatch
+- [x] #3 bship lives in the repo as tools/bship.zsh (a zsh function, sourced from ~/.zshrc with one line documented in its header); the behaviour of the current function is kept
+- [x] #4 bship refuses (non-zero, clear message, nothing committed) when the checkout is not on main or anything outside backlog/ and docs/ is changed
+- [x] #5 bship runs git pull --ff-only on main before branching (with the uncommitted backlog/docs changes in place) and stops with a clear message if the pull fails
+- [x] #6 bship runs backlog doctor before committing and stops when it reports duplicate IDs, printing the backlog doctor --fix hint; it never runs --fix by itself
+- [x] #7 bship uses an explicit PR body and merge method (gh pr create --title/--body, gh pr merge --merge --delete-branch) and ends on an up-to-date main
 - [ ] #8 Verified live: one bship PR merged without an e2e-pi run, one PR touching a non-backlog file still got e2e-pi; bship refused a duplicate-ID case reproduced locally; results in the task notes
-- [ ] #9 CLAUDE.md and .github/copilot-instructions.md (in sync) and e2e/ci/README.md mention the e2e-pi path filter and tools/bship.zsh; the auto-merge idea is not documented as existing
+- [x] #9 CLAUDE.md and .github/copilot-instructions.md (in sync) and e2e/ci/README.md mention the e2e-pi path filter and tools/bship.zsh; the auto-merge idea is not documented as existing
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -84,4 +84,6 @@ Jan authorized committing, pushing, and opening the implementation PR after loca
 Jan requested the PR revision: merge origin/main, preserve its Backlog/worktree/noreply rules, remove the exact clean-output comparison, relocate tooling tests, and keep the runbook in Czech. The local Backlog binary is 1.48.0; clean and duplicate 1.53.0 output must be covered independently in fixtures. Task status remains In Progress; final status/criteria changes are deferred until green checks as requested.
 
 PR revision implemented: merged origin/main, retaining its Backlog/worktree/noreply rules verbatim and adding only the requested bship sentence; the existing E2E path-filter bullets are unchanged. Removed the exact clean-output comparison: bship now rejects non-zero doctor exits or case-insensitive duplicate ID-group/Repair preview reports, accepting all other successful output including empty output. The 1.53.0 clean sentence and duplicate warning/repair-preview strings were verified against upstream v1.53.0 sources and added to the stub fixtures; the local real CLI remains 1.48.0. Tooling tests now live under tools/tests with the discovery command documented in the bship header; the CI runbook title is restored and the new section is in Czech as requested. Verification: all 15 tooling tests and all 587 integration unit tests passed separately on Python 3.14; validate.py, integration py_compile, and zsh syntax checks passed. Commit email is set to the requested GitHub noreply address. Task status and criteria remain unchanged for a later final commit after checks are green; no PR merge performed.
+
+2026-10-15 (Claude): review after merge of PR #46 (df04b31). e2e-pi.yml: paths filter '**', '!backlog/**', '!docs/**/*.md', 'backlog/config.yml' (last match wins), all guards unchanged; E2EPathFilterTests green. tools/bship.zsh: on-main check, changes outside backlog/docs refused, git pull --ff-only, backlog doctor with duplicate detection by pattern 'duplicate .*id group|repair preview' (checked against real backlog 1.53.0 output: duplicate case matches, clean case does not), explicit PR title/body, --merge --delete-branch. Tests moved to tools/tests/test_bship.py (zsh tests skip without zsh). Rules in CLAUDE.md + copilot-instructions.md in sync, e2e/ci/README.md Czech. PR #46 itself (changes outside backlog/) ran e2e-pi. AC #8: first live bship PR without e2e-pi pending - this very change is the test.
 <!-- SECTION:NOTES:END -->
