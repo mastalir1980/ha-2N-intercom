@@ -88,6 +88,7 @@ Aktualizace po změně v `tools/coder/`: `git pull` v instalačním klonu a znov
   - `failed`: checky ani po 3 opravách nejsou zelené.
 - Logy celého běhu: `/var/lib/ha2n-coder/runs/<run>/` (prompt, výstup Copilotu, brány, patche,
   checky).
+- Pokud je vlastní klon poškozený, obnovíš ho příkazem `sudo rm -rf /var/lib/ha2n-coder/repo`; další běh ho znovu naklonuje (nejdřív ověř, že žádný běh neprobíhá).
 - Když jsou všechny checky zelené (včetně `e2e-pi`), kodér přidá do PR **jeden poslední commit**: úkol dostane
   stav *Done*, odškrtnou se kritéria a doplní se shrnutí (odkaz na PR, checky, počet oprav). Na `main` se to dostane
   až tvým mergem. Když PR nezamergeš, na `main` se nezmění nic. Úkol se štítkem `manual-close` kodér nechá být
@@ -95,6 +96,23 @@ Aktualizace po změně v `tools/coder/`: `git pull` v instalačním klonu a znov
   úkol musíš zavřít ručně. Rodičovské úkoly (třeba TASK-2) se zavírají ručně.
 - Omezení: poslední commit nemá žádné checky. Pokud někdy zapneš na `main` povinný check `e2e-pi`, GitHub tento
   commit zablokuje a zavírání se musí přesunout do workflow po mergi.
+
+## Regresní testy orchestrátoru
+
+```bash
+python3 -m unittest discover -s tools/coder/tests
+```
+
+Testy běží celé v dočasných adresářích s lokálním bare repozitářem a stuby `sudo`, `gh`,
+`backlog` a `copilot` na `PATH`. Nepřistupují na VM ani k síti či skutečným tokenům.
+Bez Bash 4+ nebo `flock` se korektně přeskočí (systémový Bash na macOS je 3.x).
+Ověřují úklid zamítnutého patche i další běh po změně stejného souboru na `main`.
+
+Proměnná `HA2N_CODER_TEST_ROOT` přesměruje pracovní adresáře, cestu k testovací náhradě tokenu
+a přidá testovací `bin` na `PATH`; kontrola uživatele zůstává platná. Je jen pro testy:
+produkční `sudo` ji díky `env_reset` odstraní. Nepřidávej ji do `env_keep` ani ji nepředávej
+přes `sudo -E`; bez ní zůstávají produkční cesty a `PATH` beze změny.
+Před změnou `PATH` se účet ověří přes `/usr/bin/id -un` a produkčnímu uživateli `ha2n-coder` se nastavený testovací override vždy odmítne.
 
 ## Pro Hermese (instrukce, které mu dáš)
 
