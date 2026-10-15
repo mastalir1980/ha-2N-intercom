@@ -279,7 +279,7 @@ class TwoNIntercomCoordinatorTests(unittest.IsolatedAsyncioTestCase):
             {
                 "event": "CallStateChanged",
                 "params": {
-                    "direction": "incoming",
+                    "direction": "outgoing",
                     "state": "ringing",
                     "peer": "sip:100@example.com",
                     "session": 42,
@@ -314,7 +314,7 @@ class TwoNIntercomCoordinatorTests(unittest.IsolatedAsyncioTestCase):
             {
                 "event": "CallStateChanged",
                 "params": {
-                    "direction": "incoming",
+                    "direction": "outgoing",
                     "state": "ringing",
                     "peer": "sip:100@example.com",
                     "session": 42,
@@ -325,7 +325,7 @@ class TwoNIntercomCoordinatorTests(unittest.IsolatedAsyncioTestCase):
             {
                 "event": "CallStateChanged",
                 "params": {
-                    "direction": "incoming",
+                    "direction": "outgoing",
                     "state": "terminated",
                     "session": 42,
                 },
@@ -356,7 +356,7 @@ class TwoNIntercomCoordinatorTests(unittest.IsolatedAsyncioTestCase):
             {
                 "event": "CallSessionStateChanged",
                 "params": {
-                    "direction": "incoming",
+                    "originator": "button",
                     "state": "ringing",
                     "address": "sip:100@example.com",
                     "sessionNumber": 42,
@@ -390,7 +390,7 @@ class TwoNIntercomCoordinatorTests(unittest.IsolatedAsyncioTestCase):
             {
                 "event": "CallSessionStateChanged",
                 "params": {
-                    "direction": "incoming",
+                    "originator": "button",
                     "state": "ringing",
                     "address": "sip:100@example.com",
                     "sessionNumber": 42,
@@ -405,7 +405,7 @@ class TwoNIntercomCoordinatorTests(unittest.IsolatedAsyncioTestCase):
             {
                 "event": "CallSessionStateChanged",
                 "params": {
-                    "direction": "incoming",
+                    "originator": "button",
                     "state": "idle",
                     "sessionNumber": 42,
                     "callSequenceNumber": 7,
@@ -446,6 +446,238 @@ class TwoNIntercomCoordinatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(api.unsubscribed, [287363148])
         self.assertIsNone(coordinator._log_subscription_id)
         self.assertIsNone(coordinator._log_listener_task)
+
+
+class CallRingDetectionTests(unittest.IsolatedAsyncioTestCase):
+    """Only calls started by the intercom generate a doorbell ring."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.coordinator_module = load_coordinator_module()
+
+    def _make_coordinator(self, **kwargs):
+        tasks = []
+
+        def create_task(coro):
+            task = asyncio.create_task(coro)
+            tasks.append(task)
+            return task
+
+        api = types.SimpleNamespace(
+            async_get_snapshot=AsyncMock(return_value=b"ring-jpeg")
+        )
+        coordinator = self.coordinator_module.TwoNIntercomCoordinator(
+            types.SimpleNamespace(async_create_task=create_task),
+            api,
+            ring_snapshot_enabled=True,
+            **kwargs,
+        )
+        coordinator.data = self.coordinator_module.TwoNIntercomData(
+            call_status={}, last_ring_time=None, caller_info=None,
+            active_session_id=None, available=True, phone_status={},
+            switch_caps={}, switch_status={}, io_caps={}, io_status={},
+        )
+        return coordinator, tasks, api
+
+    async def test_outgoing_ring_sets_timestamp_and_captures_once(self) -> None:
+        coordinator, tasks, api = self._make_coordinator()
+        event = {
+            "event": "CallStateChanged",
+            "params": {"state": "ringing", "direction": "outgoing", "session": 42},
+        }
+
+        self.assertTrue(coordinator._process_log_event(event))
+        self.assertTrue(coordinator.ring_active)
+        self.assertIsNotNone(coordinator.last_ring_time.tzinfo)
+        self.assertTrue(coordinator._process_log_event(event))
+        await asyncio.gather(*tasks)
+
+        self.assertEqual(len(tasks), 1)
+        api.async_get_snapshot.assert_awaited_once_with(source=None)
+        self.assertEqual(coordinator.ring_snapshot, b"ring-jpeg")
+        self.assertEqual(coordinator.data.last_ring_time, coordinator.last_ring_time)
+        self.assertEqual(coordinator.data.ring_snapshot, b"ring-jpeg")
+        self.assertEqual(coordinator.active_session_id, "42")
+
+    async def test_call_state_requires_outgoing_direction(self) -> None:
+        for direction, rings in (
+            ("incoming", False),
+            (" INCOMING ", False),
+            (None, False),
+            ("", False),
+            ("unknown", False),
+            (" OUTGOING ", True),
+        ):
+            with self.subTest(direction=direction):
+                coordinator, tasks, api = self._make_coordinator()
+                params = {"state": "ringing", "session": 42}
+                if direction is not None:
+                    params["direction"] = direction
+                self.assertTrue(coordinator._process_log_event({
+                    "event": "CallStateChanged", "params": params,
+                }))
+                self.assertEqual(coordinator.ring_active, rings)
+                self.assertEqual(coordinator.last_ring_time is not None, rings)
+                self.assertEqual(coordinator.active_session_id, "42")
+                self.assertEqual(coordinator.call_state, "ringing")
+                await asyncio.gather(*tasks)
+                self.assertEqual(api.async_get_snapshot.await_count, int(rings))
+
+    async def test_call_session_requires_non_incoming_originator(self) -> None:
+        for originator, rings in (
+            ("button", True),
+            (" BUTTON ", True),
+            ("keypad", True),
+            ("display", True),
+            ("api", True),
+            ("incoming", False),
+            (" INCOMING ", False),
+            (None, False),
+            ("", False),
+            ("  ", False),
+            ({}, False),
+            ([], False),
+        ):
+            with self.subTest(originator=originator):
+                coordinator, tasks, api = self._make_coordinator()
+                params = {"state": "ringing", "session": 42}
+                if originator is not None:
+                    params["originator"] = originator
+                self.assertTrue(coordinator._process_log_event({
+                    "event": "CallSessionStateChanged", "params": params,
+                }))
+                self.assertEqual(coordinator.ring_active, rings)
+                self.assertEqual(coordinator.last_ring_time is not None, rings)
+                self.assertEqual(coordinator.active_session_id, "42")
+                self.assertEqual(coordinator.call_state, "ringing")
+                await asyncio.gather(*tasks)
+                self.assertEqual(api.async_get_snapshot.await_count, int(rings))
+
+    async def test_ring_states_exclude_incoming(self) -> None:
+        self.assertEqual(
+            self.coordinator_module.TwoNIntercomCoordinator._RING_STATES,
+            {"ringing", "alerting", "ring"},
+        )
+        for event_name, signal in (
+            ("CallStateChanged", {"direction": "outgoing"}),
+            ("CallSessionStateChanged", {"originator": "button"}),
+        ):
+            for state in ("ringing", "alerting", "ring", "incoming"):
+                with self.subTest(event=event_name, state=state):
+                    coordinator, tasks, api = self._make_coordinator()
+                    self.assertTrue(coordinator._process_log_event({
+                        "event": event_name,
+                        "params": {"state": state, **signal},
+                    }))
+                    rings = state != "incoming"
+                    self.assertEqual(coordinator.ring_active, rings)
+                    self.assertEqual(coordinator.call_state, state)
+                    await asyncio.gather(*tasks)
+                    self.assertEqual(api.async_get_snapshot.await_count, int(rings))
+
+    async def test_outgoing_ring_peer_filter(self) -> None:
+        for peer, rings in (("sip:100@example.com", False), ("sip:200@example.com", True)):
+            with self.subTest(peer=peer):
+                coordinator, tasks, api = self._make_coordinator(
+                    called_id="sip:200@example.com"
+                )
+                self.assertTrue(coordinator._process_log_event({
+                    "event": "CallStateChanged",
+                    "params": {
+                        "state": "ringing", "direction": "outgoing",
+                        "peer": peer, "session": 42,
+                    },
+                }))
+                self.assertEqual(coordinator.ring_active, rings)
+                self.assertEqual(coordinator.last_ring_time is not None, rings)
+                await asyncio.gather(*tasks)
+                self.assertEqual(api.async_get_snapshot.await_count, int(rings))
+
+    async def _replay_call_sequence(self, sequence, active_sessions, ring_states) -> None:
+        coordinator, tasks, api = self._make_coordinator()
+        ring_count = 0
+        for (event_name, params), active_session, ring_active in zip(
+            sequence, active_sessions, ring_states, strict=True
+        ):
+            with self.subTest(event=event_name, params=params):
+                was_ringing = coordinator.ring_active
+                self.assertTrue(coordinator._process_log_event({
+                    "event": event_name, "params": params,
+                }))
+                coordinator._publish_event_state()
+                self.assertEqual(coordinator.call_state, params["state"])
+                self.assertEqual(coordinator.active_session_id, active_session)
+                self.assertEqual(coordinator.data.active_session_id, active_session)
+                self.assertEqual(coordinator.ring_active, ring_active)
+                if ring_active and not was_ringing:
+                    ring_count += 1
+                await asyncio.gather(*tasks)
+                self.assertEqual(api.async_get_snapshot.await_count, ring_count)
+
+        expected_rings = int(any(ring_states))
+        self.assertEqual(ring_count, expected_rings)
+        self.assertEqual(len(tasks), expected_rings)
+        self.assertEqual(coordinator.last_ring_time is not None, bool(expected_rings))
+        self.assertEqual(coordinator.data.last_ring_time, coordinator.last_ring_time)
+        self.assertEqual(coordinator.called_peer, "100")
+        self.assertEqual(coordinator.call_state, "terminated")
+        self.assertIsNone(coordinator.active_session_id)
+        self.assertFalse(coordinator.ring_active)
+
+    async def test_captured_button_press_sequence_rings_once(self) -> None:
+        # TASK-29 capture, with a fake peer; missing session/direction keys are intentional.
+        await self._replay_call_sequence(
+            [
+                ("CallSessionStateChanged", {
+                    "state": "initialized", "session": 32, "originator": "button", "info": "1",
+                }),
+                ("CallStateChanged", {
+                    "state": "connecting", "direction": "outgoing", "session": 32,
+                    "peer": "sip:100@example.com:5061",
+                }),
+                ("CallSessionStateChanged", {
+                    "state": "connecting", "originator": "button", "info": "1",
+                }),
+                ("CallStateChanged", {
+                    "state": "ringing", "direction": "outgoing", "session": 32,
+                }),
+                ("CallSessionStateChanged", {
+                    "state": "ringing", "originator": "button", "info": "1",
+                }),
+                ("CallStateChanged", {
+                    "state": "terminated", "direction": "outgoing", "reason": "normal",
+                }),
+                ("CallSessionStateChanged", {
+                    "state": "terminated", "originator": "button", "info": "1",
+                }),
+            ],
+            [None, None, None, "32", "32", None, None],
+            [False, False, False, True, True, False, False],
+        )
+
+    async def test_captured_incoming_call_sequence_never_rings(self) -> None:
+        await self._replay_call_sequence(
+            [
+                ("CallSessionStateChanged", {
+                    "state": "initialized", "session": 33, "originator": "incoming",
+                }),
+                ("CallStateChanged", {
+                    "state": "ringing", "direction": "incoming", "session": 33,
+                    "peer": "sip:100@example.com",
+                }),
+                ("CallSessionStateChanged", {
+                    "state": "ringing", "originator": "incoming",
+                }),
+                ("CallStateChanged", {"state": "connected", "direction": "incoming"}),
+                ("CallSessionStateChanged", {"state": "connected", "originator": "incoming"}),
+                ("CallStateChanged", {
+                    "state": "terminated", "direction": "incoming", "reason": "normal",
+                }),
+                ("CallSessionStateChanged", {"state": "terminated", "originator": "incoming"}),
+            ],
+            [None, "33", "33", "33", "33", None, None],
+            [False] * 7,
+        )
 
 
 class ExtractCallPeerTests(unittest.TestCase):
@@ -650,7 +882,7 @@ class ProcessLogEventEdgeCaseTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-    def test_outgoing_ring_does_not_trigger(self) -> None:
+    def test_incoming_ring_does_not_trigger(self) -> None:
         c = self._make_coordinator()
         c.data = self.coordinator_module.TwoNIntercomData(
             call_status={}, last_ring_time=None, caller_info=None,
@@ -659,7 +891,7 @@ class ProcessLogEventEdgeCaseTests(unittest.IsolatedAsyncioTestCase):
         )
         c._process_log_event({
             "event": "CallStateChanged",
-            "params": {"state": "ringing", "direction": "outgoing", "session": "s1"},
+            "params": {"state": "ringing", "direction": "incoming", "session": "s1"},
         })
         self.assertFalse(c._ring_detected)
 
@@ -672,7 +904,7 @@ class ProcessLogEventEdgeCaseTests(unittest.IsolatedAsyncioTestCase):
         )
         c._process_log_event({
             "event": "CallStateChanged",
-            "params": {"state": "ringing", "direction": "incoming",
+            "params": {"state": "ringing", "direction": "outgoing",
                        "peer": "sip:100@device", "session": "s1"},
         })
         self.assertFalse(c._ring_detected)
@@ -816,7 +1048,7 @@ class LogListenerTests(unittest.IsolatedAsyncioTestCase):
                         {
                             "event": "CallStateChanged",
                             "params": {"state": "ringing", "session": "s1",
-                                       "direction": "incoming"},
+                                       "direction": "outgoing"},
                         }
                     ]
                 raise RuntimeError("done")

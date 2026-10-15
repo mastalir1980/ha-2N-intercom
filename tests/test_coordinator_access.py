@@ -539,9 +539,14 @@ class DirectoryNameResolutionTests(_CoordinatorTestCase):
 
 
 class RingSnapshotTests(_CoordinatorTestCase):
-    def _ring(self, coordinator, event="CallStateChanged", direction="incoming", state="ringing"):
+    def _ring(self, coordinator, event="CallStateChanged", direction="outgoing", state="ringing"):
+        params = {"state": state, "session": 1}
+        if event == "CallSessionStateChanged":
+            params["originator"] = "button"
+        else:
+            params["direction"] = direction
         return coordinator._process_log_event(
-            {"event": event, "params": {"state": state, "direction": direction, "session": 1}}
+            {"event": event, "params": params}
         )
 
     async def test_ring_captures_snapshot_once_per_ring(self) -> None:
@@ -571,14 +576,14 @@ class RingSnapshotTests(_CoordinatorTestCase):
         self.assertEqual(len(api.snapshot_calls), 2)
         self.assertEqual(coordinator.ring_snapshot, b"jpeg-2")
 
-    async def test_no_capture_when_disabled_or_outgoing(self) -> None:
+    async def test_no_capture_when_disabled_or_incoming(self) -> None:
         coordinator, hass, api = self._make()
         self._ring(coordinator)
         await hass.drain()
         self.assertEqual(api.snapshot_calls, [])
 
         coordinator, hass, api = self._make(ring_snapshot_enabled=True)
-        self._ring(coordinator, direction="outgoing")
+        self._ring(coordinator, direction="incoming")
         await hass.drain()
         self.assertEqual(api.snapshot_calls, [])
 
