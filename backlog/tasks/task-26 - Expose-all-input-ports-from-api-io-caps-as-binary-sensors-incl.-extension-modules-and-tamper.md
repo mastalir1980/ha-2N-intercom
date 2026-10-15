@@ -7,11 +7,12 @@ status: To Do
 assignee:
   - '@copilot'
 created_date: '2026-10-13 19:01'
-updated_date: '2026-10-13 19:16'
+updated_date: '2026-10-15 12:23'
 labels:
   - io
   - ha-platform
   - github-issue
+milestone: m-0
 dependencies:
   - TASK-27
 references:
@@ -85,3 +86,9 @@ Ground-truth E2E device is IP Force 2.0 fw 3.3.x without an extension module - E
 
 Must not change: input1 unique_id/translation_key, doorbell/relay/motion sensors, dual auth in api.py, entry.data/options split, E2E client independence. Do not add any tamper entity based on log events (see decision in description).
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-15 (Claude): added to v1.5.0 together with TASK-27 (both halves of issue #13).
+<!-- SECTION:NOTES:END -->

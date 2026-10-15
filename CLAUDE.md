@@ -172,6 +172,8 @@ Never run `e2e/e2e.sh relays`, `--relays` or `reset-entry` unless Jan asks in th
   Until TASK-36 lands, Claude moves `manual-close` tasks to To Test by hand after the merge.
 - **Versions are Backlog milestones** (`v1.5.0`, …). Every user-facing task gets the next open milestone when it is
   created (`-m vX.Y.Z`); pipeline/tooling tasks (`manual-path`, `ci`, `infra`) get none. `backlog milestone list` shows progress.
+- **Order of work for the headless coder:** ready tasks of the earliest open milestone first (by version number),
+  then later milestones, tasks without a milestone last; inside a group by priority, then task id.
 - **PRs merge to `main` continuously.** HACS users install GitHub releases, not `main`, so `main` is the next version
   in preparation. Do not hold PRs back for a release.
 - **Closing a version:** all tasks of the milestone are Done (Jan tests the To Test items and runs `e2e.sh relays` once)

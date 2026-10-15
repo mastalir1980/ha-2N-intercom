@@ -5,7 +5,7 @@ status: To Do
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-14 14:48'
-updated_date: '2026-10-14 14:49'
+updated_date: '2026-10-15 12:23'
 labels:
   - agent
   - infra
@@ -31,13 +31,13 @@ Jan decided on 14 Oct 2026 that the coder on the VM (Trufalín) starts by itself
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 ha2n-run-task --next fetches main, and when no run is in state running it starts the highest-priority ready task (To Do, assignee @copilot, all dependencies Done, no label on-hold or manual-path; order: priority high > medium > low, then lowest task id); with nothing ready it exits 0 without output noise
-- [ ] #2 Kill switch: without the root-owned file /etc/ha2n-coder/autostart, --next does nothing; a daily limit (/etc/ha2n-coder/max-runs-per-day, default 3) counts runs started by --next in the last 24 h
-- [ ] #3 No retry loops: a task whose last run ended stopped or failed is not picked again until its task file on origin/main has changed after that run started
-- [ ] #4 install-vm.sh installs a systemd service + timer (every 10 min, user ha2n-coder) that runs --next; the timer is enabled but does nothing until /etc/ha2n-coder/autostart exists
-- [ ] #5 Jan is told about every run without asking: the "Pro Hermese" instructions in tools/coder/README.md let Hermes report each new end state (green, review, stopped, failed) from ha2n-task-status --list exactly once
-- [ ] #6 Stub simulation: nothing ready; one ready task started; running run blocks a second start; on-hold and manual-path skipped; stopped task not retried until its file changes; kill switch and daily limit; bash -n clean
-- [ ] #7 Rules and docs in sync: CLAUDE.md, .github/copilot-instructions.md (ready = picked automatically; label on-hold), tools/coder/README.md (Czech), docs/OVERVIEW.md pipeline section
+- [ ] #1 Kill switch: without the root-owned file /etc/ha2n-coder/autostart, --next does nothing; a daily limit (/etc/ha2n-coder/max-runs-per-day, default 3) counts runs started by --next in the last 24 h
+- [ ] #2 No retry loops: a task whose last run ended stopped or failed is not picked again until its task file on origin/main has changed after that run started
+- [ ] #3 install-vm.sh installs a systemd service + timer (every 10 min, user ha2n-coder) that runs --next; the timer is enabled but does nothing until /etc/ha2n-coder/autostart exists
+- [ ] #4 Jan is told about every run without asking: the "Pro Hermese" instructions in tools/coder/README.md let Hermes report each new end state (green, review, stopped, failed) from ha2n-task-status --list exactly once
+- [ ] #5 Stub simulation: nothing ready; one ready task started; running run blocks a second start; on-hold and manual-path skipped; stopped task not retried until its file changes; kill switch and daily limit; bash -n clean
+- [ ] #6 Rules and docs in sync: CLAUDE.md, .github/copilot-instructions.md (ready = picked automatically; label on-hold), tools/coder/README.md (Czech), docs/OVERVIEW.md pipeline section
+- [ ] #7 ha2n-run-task --next fetches main, and when no run is in state running it starts the next ready task (To Do, assignee @copilot, all dependencies Done, no label on-hold or manual-path). Order (decided by Jan, 15 Oct 2026): tasks of the earliest open milestone first (open milestones sorted by version number, e.g. v1.5.0 before v1.6.0), then tasks of later milestones, tasks without a milestone last; inside each group priority high > medium > low, then lowest task id. With nothing ready it exits 0 without output noise
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -48,4 +48,6 @@ Jan decided on 14 Oct 2026 that the coder on the VM (Trufalín) starts by itself
 3. task-status.sh: mark auto-started runs in --list.
 4. README (Czech): how to switch autostart on/off, limit, Hermes instructions for reporting end states once (Hermes keeps its own list of reported run ids).
 Must not change: the ready check of a normal run, protected paths, token handling, never-merge.
+
+Ordering: read open milestones from `backlog milestone list --plain` (active only), sort by semantic version of the name; a task's milestone comes from `backlog task view` (Milestone line). Unit-test the sort in the stub simulation (two milestones + one task without milestone).
 <!-- SECTION:PLAN:END -->
