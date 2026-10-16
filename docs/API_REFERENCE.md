@@ -32,7 +32,7 @@ Basic**, pokud zařízení vrátí `401` s `WWW-Authenticate: Basic`.
 | `/api/io/status` | GET | `async_get_io_status` | cached input/output states, patched by InputChanged/OutputChanged events |
 | `/api/io/ctrl` | GET | `async_io_control` | `port`, `action=on\|off`; latching output control, requires I/O control privilege and bypasses logical-switch timing |
 | `/api/camera/caps` | GET | `async_get_camera_caps` | rozlišení JPEG, zdroje (internal/external) |
-| `/api/camera/snapshot` | GET | `async_get_snapshot` / MJPEG | `source`, `width`, `height`, (`fps` pro MJPEG) |
+| `/api/camera/snapshot` | GET | `async_get_snapshot` / MJPEG | `source`, `width`, `height`, (`fps` for MJPEG); snapshot sizes map to supported JPEG resolutions from `camera/caps` |
 | `/api/log/caps` | GET | `async_get_log_caps` | `events` = seznam podporovaných událostí; průnik s přístupovými událostmi |
 | `/api/log/subscribe` | GET | `async_subscribe_log` | `filter` = seznam událostí → vrací `id` |
 | `/api/log/pull` | GET | `async_pull_log` | `id`, `timeout` (long-poll, server blokuje) |
@@ -109,8 +109,15 @@ uuid spustí refresh adresáře, nejvýš jednou za 60 s.
   "Unsupported Content-Type"`, hovor dál vyzvání.
 - **`reason` u hangupu** je u outgoing-ringing session tiše ignorován (firmware
   vrátí `success: true`), proto se posílá jen na explicitní žádost.
-- **Snapshot rozlišení** musí být z `camera/caps jepgResolution`; HA preview
-  zkouší 80×80 → `code 12` → integrace retryuje na `640×480`.
+- **Snapshot resolution** is mapped to `camera/caps` JPEG resolutions: exact
+  match, otherwise the smallest size covering both requested dimensions, or
+  the largest supported size when none covers the request. Aspect ratio is
+  not matched; HA scales the image. Without JPEG capabilities, the requested
+  size is retained and this fallback is logged once at debug level. A device
+  `code 12` rejection permits one retry at `640x480`, sent without caps mapping,
+  only when the first size differs from `640x480`. This is a last resort for
+  unavailable caps or firmware rejecting a size it lists; a rejected retry is
+  logged as a warning and returns no image.
 - **Kód 14** je přetížený – disambiguace podle `description`, ne podle kódu.
 - **`log/pull` nemusí blokovat.** Některý firmware vrátí prázdný `log/pull`
   okamžitě i s `timeout=1`; listener proto po prázdném pullu čeká

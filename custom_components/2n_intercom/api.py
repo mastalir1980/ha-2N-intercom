@@ -462,6 +462,7 @@ class TwoNIntercomAPI:
         self._session_factory = session_factory
         self._base_url = f"{protocol}://{host}:{port}"
         self._camera_capabilities = CameraCapabilities()
+        self._snapshot_caps_fallback_logged = False
         self._camera_transport_info = CameraTransportInfo(
             requested_mode=DEFAULT_LIVE_VIEW_MODE,
             selected_mode=LIVE_VIEW_MODE_RTSP,
@@ -576,6 +577,30 @@ class TwoNIntercomAPI:
             reverse=True,
         )
         return sorted_available[0]
+
+    @staticmethod
+    def _select_snapshot_resolution(
+        capabilities: CameraCapabilities,
+        *,
+        width: int,
+        height: int,
+    ) -> tuple[int, int] | None:
+        """Return the smallest supported size covering the request, else the largest."""
+        requested = (width, height)
+        available = [resolution.as_tuple() for resolution in capabilities.jpeg_resolutions]
+        if not available:
+            return None
+        if requested in available:
+            return requested
+
+        sorted_available = sorted(
+            available,
+            key=lambda item: (item[0] * item[1], item[0], item[1]),
+        )
+        for candidate in sorted_available:
+            if candidate[0] >= width and candidate[1] >= height:
+                return candidate
+        return sorted_available[-1]
 
     def build_snapshot_url(
         self,
@@ -1921,19 +1946,48 @@ class TwoNIntercomAPI:
         source: str | None = None,
     ) -> bytes | None:
         """Get camera snapshot from /api/camera/snapshot."""
-        try:
-            resolved_source = (
-                source.strip()
-                if isinstance(source, str) and source.strip()
-                else DEFAULT_CAMERA_SOURCE
+        resolved_source = (
+            source.strip()
+            if isinstance(source, str) and source.strip()
+            else DEFAULT_CAMERA_SOURCE
+        )
+        if width is None:
+            width = 640
+        if height is None:
+            height = 480
+
+        capabilities = await self.async_get_camera_caps()
+        resolution = self._select_snapshot_resolution(
+            capabilities, width=width, height=height
+        )
+        if resolution is not None:
+            width, height = resolution
+        elif not self._snapshot_caps_fallback_logged:
+            _LOGGER.debug(
+                "camera/caps has no JPEG resolutions; snapshot uses requested "
+                "size with 640x480 fallback"
             )
-            params: dict[str, Any] = {"source": resolved_source}
-            if width is None:
-                width = 640
-            if height is None:
-                height = 480
-            params["width"] = width
-            params["height"] = height
+            self._snapshot_caps_fallback_logged = True
+
+        return await self._async_fetch_snapshot(
+            width=width, height=height, source=resolved_source, allow_retry=True
+        )
+
+    async def _async_fetch_snapshot(
+        self,
+        *,
+        width: int,
+        height: int,
+        source: str,
+        allow_retry: bool,
+    ) -> bytes | None:
+        """Fetch a snapshot without caps mapping, allowing at most one size retry."""
+        try:
+            params: dict[str, Any] = {
+                "source": source,
+                "width": width,
+                "height": height,
+            }
 
             async with async_timeout.timeout(API_TIMEOUT):
                 async with self._async_request(
@@ -1953,14 +2007,12 @@ class TwoNIntercomAPI:
 
                         error = parse_device_error(payload)
 
-                        # 2N firmware refuses any width/height that is not in
-                        # /api/camera/caps jpegResolution. HA's entity-registry
-                        # preview probes the camera at 80x80, which always falls
-                        # outside that list. We retry once at the always-supported
-                        # 640x480 size and only escalate if that also fails.
+                        # Last resort when caps are unavailable or firmware
+                        # rejects a listed size. Bypass caps mapping on the retry.
                         if (
                             error is not None
                             and error.code == 12
+                            and allow_retry
                             and (width, height) != (640, 480)
                         ):
                             _LOGGER.debug(
@@ -1970,8 +2022,11 @@ class TwoNIntercomAPI:
                                 height,
                                 error.format(),
                             )
-                            return await self.async_get_snapshot(
-                                width=640, height=480, source=resolved_source
+                            return await self._async_fetch_snapshot(
+                                width=640,
+                                height=480,
+                                source=source,
+                                allow_retry=False,
                             )
 
                         if error is not None:
