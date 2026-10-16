@@ -113,4 +113,5 @@ sudo -u ha2n-copilot test -w /opt/ha2n-coder/py312/bin && { echo "!! ha2n-copilo
 sudo -u "$CALLER" sudo -n -u ha2n-coder /usr/local/bin/ha2n-task-status --list >/dev/null && echo "    $CALLER -> ha2n-task-status OK"
 systemctl is-active --quiet ha2n-coder-next.timer || { echo "!! ha2n-coder-next.timer is not active"; ok=0; }
 [ -e /etc/ha2n-coder/autostart ] && echo "    autostart: ON (/etc/ha2n-coder/autostart)" || echo "    autostart: off (sudo touch /etc/ha2n-coder/autostart to enable)"
+[ -e /etc/ha2n-coder/automerge ] && echo "    automerge: ON (/etc/ha2n-coder/automerge)" || echo "    automerge: off (sudo touch /etc/ha2n-coder/automerge to enable; never created by this script)"
 [ "$ok" = 1 ] && echo "OK." || { echo "self-check FAILED" >&2; exit 1; }

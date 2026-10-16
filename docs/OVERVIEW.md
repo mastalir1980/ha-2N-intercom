@@ -56,12 +56,22 @@ flowchart LR
   G -- ano --> PR[push + PR, štítek agent]
   PR --> CH{checky<br/>e2e-pi, hassfest, HACS}
   CH -- červené --> FIX[log zpět Copilotovi<br/>max. 3 kola] --> CH
-  CH -- zelené --> DONE[commit: úkol Done]
-  DONE --> R([Jan: review přes Claude]) --> M2([Jan: merge]) --> MAIN
+  CH -- zelené --> RV{review druhým modelem}
+  RV -- approve --> DONE[commit: úkol Done]
+  DONE --> AM{auto-merge?<br/>/etc/ha2n-coder/automerge}
+  AM -- ne / odmítnuto --> R([Jan: review přes Claude]) --> M2([Jan: merge]) --> MAIN
+  AM -- ano --> M3[kodér: merge<br/>pak jednou režim next] --> MAIN
   CH -. e2e-pi .-> PI[Pi runner: zámek, deploy na staging,<br/>pytest read-only, očištěný souhrn]
 ```
 
 Kroky v kulatých rámečcích dělá Jan.
+
+**Auto-merge (TASK-46, opt-in):** jen když existuje `/etc/ha2n-coder/automerge` (root, `install-vm.sh` ho nevytváří).
+Kodér pak mergne vlastní PR, když jsou všechny checky včetně `e2e-pi` zelené na hlavním commitu a review druhým modelem
+dalo `approve` (`gh pr merge --merge --match-head-commit --delete-branch`), zapíše stav `merged` a jednou spustí `--next` (ten dál hlídá
+`autostart`, denní limit a připravenost). Nikdy nemerguje: bez nastaveného review modelu, úkoly se štítkem `release` nebo
+`manual-path`, PR sahající na chráněné cesty, PR, které neotevřel ten běh. Odmítnutý merge = stav `green`, důvod v komentáři
+PR, žádné opakování. Jan dál ověřuje *To Test* na zařízení a merguje/taguje release.
 
 ### Grooming (fáze 0)
 
@@ -88,7 +98,7 @@ Změny v Backlogu jdou jako backlog-only PR z `main`. Do GitHub issues agent nic
 
 | Cesta | Kdy | Jak |
 |---|---|---|
-| **Headless** (VM) | běžný kód integrace, testy, dokumentace | Hermes → `ha2n-run-task` → PR → checky → Jan mergne |
+| **Headless** (VM) | běžný kód integrace, testy, dokumentace | Hermes / časovač → `ha2n-run-task` → PR → checky → review → Jan mergne (nebo kodér s opt-in auto-merge) |
 | **Ruční** (Mac, úkoly `@copilot-mac`) | změny v chráněných cestách: `.github/`, `e2e/ci/`, `e2e/scripts/`, `e2e/run.sh`, `e2e/nightly.sh`, `e2e/e2e.sh`, `e2e/staging/`, `tools/coder/`, `CLAUDE.md`, `backlog/config.yml` | Copilot ve VS Code, `bash e2e/e2e.sh wip`, PR, review, merge. Změny `e2e/ci/` a `tools/coder/` se projeví až po ruční instalaci na Pi / VM |
 
 ## 4. Životní cyklus úkolu
@@ -101,7 +111,7 @@ Změny v Backlogu jdou jako backlog-only PR z `main`. Do GitHub issues agent nic
 | Na `main` | Claude → Jan | větev `backlog-<téma>` z `origin/main`, backlog-only PR, Jan ho hned mergne |
 | *In Progress* | kodér | větev `task-<id>-…`, jeden úkol = jedna větev = jeden PR |
 | *To Test* | kodér → Jan | mergnuto na `main`, automatické testy zelené, čeká na Janovo ověření na skutečném zařízení (zvonění tlačítkem, relé, Control4; štítek `manual-close`) |
-| *Done* | kodér / Jan | po zelených checkách poslední commit v PR (stav Done, odškrtnutá kritéria, shrnutí); na `main` až Janovým mergem. Z *To Test* na *Done* až po Janově ověření. Rodičovské úkoly se zavírají ručně |
+| *Done* | kodér / Jan | po zelených checkách poslední commit v PR (stav Done, odškrtnutá kritéria, shrnutí); na `main` až mergem (Jan, nebo kodér s opt-in auto-merge). Z *To Test* na *Done* až po Janově ověření. Rodičovské úkoly se zavírají ručně |
 
 ### Verze
 
@@ -131,8 +141,10 @@ Chyby z E2E zakládá triage jako úkoly typu `bug` se štítkem `e2e` ([`e2e/ag
   Repo je veřejné, ven jde jen očištěný souhrn.
 - Interkom v CI: účet jen s *Monitoring*, kód z větve relé nesepne.
 - Kodér: Copilot nemá token k repu, ven jde jen patch; orchestrátor odmítne chráněné cesty a velké patche.
-- `main`: jen přes PR, žádný force push. **Merge dělá vždy Jan**, auto-merge kódu zatím ne
-  (runner na Pi je ve fázi 1, kód z větve může ovlivnit výsledek `e2e-pi`).
+- `main`: jen přes PR, žádný force push. **Merge dělá Jan**, kromě opt-in auto-merge kodéra (TASK-46, viz sekce 3):
+  ten vyžaduje zelené checky na hlavním commitu a `approve` od druhého modelu a nikdy se netýká release, `manual-path`
+  ani chráněných cest. Pozor: runner na Pi je ve fázi 1, kód z větve může ovlivnit výsledek `e2e-pi`, proto je auto-merge
+  vypnutý, dokud Jan nevytvoří `/etc/ha2n-coder/automerge`.
 - Změny `.github/`, `e2e/ci/`, `tools/coder/` vždy reviewuje Jan (`.github/CODEOWNERS`).
 
 ## 7. Běžné úkony
@@ -142,6 +154,7 @@ Chyby z E2E zakládá triage jako úkoly typu `bug` se štítkem `e2e` ([`e2e/ag
 | Nový úkol z nápadu nebo issue | řeknu Claudovi; připraví úkol a backlog PR |
 | Pustit kodéra | Hermesovi „vezmi TASK-N“, nebo na VM `sudo -n -u ha2n-coder /usr/local/bin/ha2n-run-task TASK-N` |
 | Zapnout / vypnout automatický start kodéra | na VM `sudo touch /etc/ha2n-coder/autostart` / `sudo rm /etc/ha2n-coder/autostart` (podrobnosti a denní limit v `tools/coder/README.md`) |
+| Zapnout / vypnout auto-merge kodéra | na VM `sudo touch /etc/ha2n-coder/automerge` / `sudo rm /etc/ha2n-coder/automerge` |
 | Stav kodéra | `sudo -n -u ha2n-coder /usr/local/bin/ha2n-task-status` (`--list` = přehled s kredity) |
 | Otestovat rozpracovanou změnu | `bash e2e/e2e.sh wip` |
 | Poslední výsledek E2E | `bash e2e/e2e.sh report` |

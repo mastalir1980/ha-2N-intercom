@@ -3,10 +3,11 @@ id: TASK-46
 title: >-
   Headless coder: auto-merge a green, approved coder PR and start the next ready
   task
-status: To Do
+status: In Progress
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-15 19:32'
+updated_date: '2026-10-16 09:01'
 labels:
   - agent
   - infra
@@ -50,3 +51,33 @@ Approach (for the implementer to confirm in the plan): after the green/approve s
 - [ ] #8 Stub simulation covers: switch off; green+approve merges and starts next; review changes-requested or missing does not merge; release/manual-path/protected-path never merge; changed head refused; merge refusal keeps green; bash -n clean
 - [ ] #9 Rules and docs in sync: CLAUDE.md and .github/copilot-instructions.md ("the coder never merges" replaced by the auto-merge rule and its exceptions), tools/coder/README.md (Czech), docs/OVERVIEW.md pipeline section
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. run-task.sh: AUTOMERGE_FILE=/etc/ha2n-coder/automerge (opt-in, existence check at merge time). After the green/approve step and close_task: auto_merge() checks eligibility (switch on; review-model configured and verdict approve; task labels not release/manual-path; git diff origin/main...HEAD has no PROTECTED path; only the PR_URL opened by this run).
+2. close_task pushes a new head (backlog-only) and GitHub re-runs all checks incl. e2e-pi on it (verified on PR #37), so when the head moved since the checks ran, wait_checks runs again in a soft mode (timeout/red -> no merge, state green) before merging.
+3. gh pr merge --merge --match-head-commit <head the checks were green on>. Success -> state merged, release run.lock (fd 9) and run $0 --next once (kill switch, daily limit, readiness stay in --next); status gets next= field. Refusal -> state green with the reason + PR comment, no retry.
+4. Switch off -> unchanged comment/status. install-vm.sh only reports the switch state.
+5. Tests: gh stub pr merge (success/refusal/changed head); cases of AC #8.
+6. Docs: CLAUDE.md + copilot-instructions (in sync), tools/coder/README.md (incl. Hermes), docs/OVERVIEW.md.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented (uncommitted, stacked on TASK-35):
+- run-task.sh: opt-in switch /etc/ha2n-coder/automerge (root-owned, never created by install-vm.sh; self-check prints ON/off). New auto_merge(): merges only this run's own PR ($PR_URL from open_pr) when REVIEW_ON and verdict approve, task labels exclude release/manual-path, PR diff touches no PROTECTED path, and checks are green on the exact head; uses gh pr merge --merge --match-head-commit <sha>. No retry on refusal; state stays green with the reason in the status message and a PR comment.
+- Decision: the close commit is a new PR head and GitHub re-runs all checks incl. e2e-pi on it (seen on PR #37), so auto_merge waits for checks again (wait_checks soft: timeout/red -> no merge). manual-close tasks get no close commit and merge on the already-checked head; the task is not set Done.
+- After a merge: state merged, status line next=, and trigger_next releases run.lock (fd 9) and runs $0 --next once (output in runs/<run>/next.log). --next keeps its kill switch, daily limit and readiness rules: without /etc/ha2n-coder/autostart nothing is started (auto-merge then only merges).
+- Assumption: 'PR opened by this run' is guaranteed by merging only $PR_URL of this run plus --match-head-commit; there is no separate gh author check.
+- Tests: gh stub handles pr merge (success/refusal/head moved); 12 new tests cover every AC #8 case; protected paths are tested by running the auto_merge body in a harness (end-to-end it is unreachable because publish/close_task already reject protected paths).
+- Docs: CLAUDE.md + .github/copilot-instructions.md (auto-merge rule and exceptions), tools/coder/README.md (Auto-merge section, merged state, Hermes reporting), docs/OVERVIEW.md.
+- Validation: coder suite 54/54, unit tests 594 OK, validate.py OK, bash -n, git diff --check.
+- Untested (VM only): real gh pr merge messages, real e2e-pi re-run on the close commit, systemd/sudo detach of the run started by --next.
+- Open for Jan: accept the second e2e-pi wait per PR? Should merged branches be deleted (currently not)? Should a manual run also trigger --next (currently yes, if autostart is on)?
+
+Rebased (uncommitted work) onto TASK-35 d421faa: no conflicts; auto_merge reads labels from HEADER only, does not use deps_done. Re-validated: coder suite 57/57, unit tests OK, validate.py OK, bash -n, git diff --check.
+
+Jan's decisions (2026-10-16): (1) keep waiting for the re-run of all checks incl. e2e-pi on the close commit; (2) delete the remote branch on merge: gh pr merge --merge --match-head-commit <sha> --delete-branch (local cleanup unchanged; stub deletes the ref, tests assert it is gone after a merge and kept when not merged; README/CLAUDE.md/copilot-instructions/OVERVIEW updated); (3) any run that merges starts --next once, the autostart file stays the master switch. TASK-35 review findings were already fixed in d421faa (deps_done via --json with fallbacks, stopped runs without branch do not block, backlog version in install-vm.sh); TASK-46 sits on it. Validation: coder suite 57/57, unit tests OK, validate.py OK, bash -n, git diff --check.
+<!-- SECTION:NOTES:END -->
