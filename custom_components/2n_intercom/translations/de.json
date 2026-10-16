@@ -1,5 +1,6 @@
 {
   "config": {
+    "flow_title": "{name} ({host})",
     "step": {
       "user": {
         "title": "2N Gegensprechanlage einrichten",
@@ -71,6 +72,8 @@
     },
     "abort": {
       "already_configured": "Diese 2N Gegensprechanlage ist bereits konfiguriert.",
+      "cannot_connect": "Die Adresse des Geräts konnte aus seiner Netzwerkankündigung nicht ermittelt werden.",
+      "no_mac": "Die Netzwerkankündigung des Geräts enthielt keine verwendbare Kennung.",
       "reauth_successful": "Zugangsdaten erfolgreich aktualisiert.",
       "reconfigure_successful": "Gerätekonfiguration erfolgreich aktualisiert."
     }

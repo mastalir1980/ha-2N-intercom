@@ -6,6 +6,7 @@ from typing import Any
 import logging
 import json
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import voluptuous as vol
 
@@ -15,6 +16,12 @@ from homeassistant.core import callback
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers import selector
 from homeassistant.helpers.selector import SelectOptionDict
+from homeassistant.helpers.service_info.ssdp import (
+    ATTR_UPNP_FRIENDLY_NAME,
+    ATTR_UPNP_PRESENTATION_URL,
+    ATTR_UPNP_SERIAL,
+    SsdpServiceInfo,
+)
 import homeassistant.helpers.config_validation as cv
 
 from .api import TwoNIntercomAPI, extract_directory_users
@@ -31,6 +38,7 @@ from .const import (
     CONF_GO_BACK,
     CONF_GRANT_ACCESS_USER,
     CONF_LIVE_VIEW_MODE,
+    CONF_MAC,
     CONF_MJPEG_FPS,
     CONF_MJPEG_HEIGHT,
     CONF_MJPEG_WIDTH,
@@ -78,6 +86,17 @@ def _all_calls_label(language: str) -> str:
     if language.startswith("cs"):
         return "Vsechny hovory"
     return "All calls"
+
+
+def _normalize_mac(mac: str) -> str:
+    """Return *mac* as bare uppercase hex, stripping any `:`/`-` separators.
+
+    2N's own ``/api/system/info`` reports it as e.g. ``7c-1e-b3-00-00-00``
+    while SSDP's ``serialNumber``/``UDN`` fields report the same address as
+    ``7C1EB3000000`` — normalizing both to the same form is what lets SSDP
+    discovery recognize an already-configured device regardless of IP.
+    """
+    return mac.replace(":", "").replace("-", "").strip().upper()
 
 
 def _read_integration_info(manifest_path: Path) -> tuple[str, str]:
@@ -160,6 +179,7 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
         self._default_device_name: str | None = None
         self._reauth_entry: config_entries.ConfigEntry | None = None
         self._reconfigure_entry: config_entries.ConfigEntry | None = None
+        self._discovered_host: str | None = None
 
     async def _ensure_integration_info(self) -> None:
         """Load and cache integration name/version."""
@@ -273,6 +293,16 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
                         # Going back and pointing at another host must not
                         # keep the previous device's identity in the draft.
                         self._data.pop(CONF_SERIAL_NUMBER, None)
+                    # Store the MAC independently of serial_number — on
+                    # Control4-rebranded units serialNumber is a Control4
+                    # part number, not the MAC, so it can't double as the
+                    # cross-reference SSDP discovery needs to recognize an
+                    # already-configured device regardless of serial scheme.
+                    mac_addr = sys_info.get("macAddr")
+                    if mac_addr:
+                        user_input[CONF_MAC] = _normalize_mac(str(mac_addr))
+                    else:
+                        self._data.pop(CONF_MAC, None)
                     # Build a descriptive default name from device identity
                     variant = sys_info.get("variant", "").strip()
                     sn = str(serial).strip() if serial else ""
@@ -307,7 +337,8 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
         data_schema = vol.Schema(
             {
                 vol.Required(
-                    CONF_HOST, default=prefill.get(CONF_HOST, "")
+                    CONF_HOST,
+                    default=prefill.get(CONF_HOST, self._discovered_host or ""),
                 ): cv.string,
                 vol.Required(
                     CONF_USERNAME,
@@ -326,6 +357,59 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
             errors=errors,
             last_step=False,
         )
+
+    async def async_step_ssdp(
+        self, discovery_info: SsdpServiceInfo
+    ) -> ConfigFlowResult:
+        """Handle a 2N device discovered via SSDP.
+
+        2N's ``serialNumber``/``UDN`` SSDP fields report the device's MAC
+        address, not the same value ``/api/system/info`` calls
+        ``serialNumber`` (a Control4 part number on Control4-rebranded
+        units) — see ``_normalize_mac`` for why the MAC, not that field,
+        is the cross-reference used here.
+        """
+        upnp = discovery_info.upnp
+        raw_mac = upnp.get(ATTR_UPNP_SERIAL)
+        if not raw_mac:
+            return self.async_abort(reason="no_mac")
+        mac = _normalize_mac(str(raw_mac))
+
+        presentation_url = upnp.get(ATTR_UPNP_PRESENTATION_URL)
+        host = urlsplit(str(presentation_url)).hostname if presentation_url else None
+        if not host:
+            host = urlsplit(discovery_info.ssdp_location or "").hostname
+        if not host:
+            return self.async_abort(reason="cannot_connect")
+
+        # Already configured under the old host — update it in place rather
+        # than offering a second setup flow for the same physical device.
+        for entry in self._async_current_entries(include_ignore=False):
+            if _normalize_mac(str(entry.data.get(CONF_MAC, ""))) == mac:
+                if entry.data.get(CONF_HOST) != host:
+                    self.hass.config_entries.async_update_entry(
+                        entry, data={**entry.data, CONF_HOST: host}
+                    )
+                    self.hass.async_create_task(
+                        self.hass.config_entries.async_reload(entry.entry_id)
+                    )
+                return self.async_abort(reason="already_configured")
+
+        # Collapses duplicate in-progress flows if the device announces
+        # itself more than once (e.g. on multiple network interfaces).
+        await self.async_set_unique_id(mac)
+        self._abort_if_unique_id_configured()
+
+        self._discovered_host = host
+        friendly_name = upnp.get(ATTR_UPNP_FRIENDLY_NAME)
+        if friendly_name:
+            self._default_device_name = str(friendly_name)
+        self.context["title_placeholders"] = {
+            "name": str(friendly_name) if friendly_name else "2N Intercom",
+            "host": host,
+        }
+
+        return await self.async_step_user()
 
     async def async_step_device(
         self, user_input: dict[str, Any] | None = None

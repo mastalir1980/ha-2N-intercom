@@ -39,15 +39,23 @@ rules:
   devices: done
   diagnostics: done
   discovery-update-info:
-    status: exempt
+    status: done
     comment: |
-      The intercom is configured with a static host/IP and does not advertise
-      itself for discovery updates.
+      async_step_ssdp cross-references the device's MAC (from SSDP's
+      serialNumber/UDN fields) against each configured entry's stored
+      mac_address. On a match, if the host has changed, the entry is
+      updated in place and reloaded — no user action needed when a 2N
+      device's IP changes. Entries created before this existed have
+      mac_address backfilled from /api/system/info on next setup.
   discovery:
-    status: exempt
+    status: done
     comment: |
-      The 2N IP intercom does not broadcast a discoverable mDNS/SSDP service
-      that maps to a unique device id, so the integration uses manual setup.
+      2N devices advertise themselves over SSDP (manufacturer "2N, part of
+      Axis group" — see manifest.json's ssdp matcher) with a description.xml
+      exposing serialNumber/UDN (MAC-based), presentationURL, and
+      friendlyName. async_step_ssdp in config_flow.py handles discovery,
+      including Control4-rebranded units (DS2/DS2 Mini), which advertise
+      under the same manufacturer with a Control4-branded friendlyName.
   docs-data-update: done
   docs-examples: done
   docs-known-limitations: done

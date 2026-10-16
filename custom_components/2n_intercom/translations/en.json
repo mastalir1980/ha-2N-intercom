@@ -1,5 +1,6 @@
 {
   "config": {
+    "flow_title": "{name} ({host})",
     "step": {
       "user": {
         "title": "2N Intercom Setup",
@@ -71,6 +72,8 @@
     },
     "abort": {
       "already_configured": "This 2N Intercom device is already configured.",
+      "cannot_connect": "Could not determine the device's address from its network announcement.",
+      "no_mac": "The device's network announcement did not include a usable identifier.",
       "reauth_successful": "Authentication updated successfully.",
       "reconfigure_successful": "Device configuration updated successfully."
     }

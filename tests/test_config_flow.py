@@ -14,6 +14,7 @@ in the contracts that broke (or got added) during the HA 2026.4+ remediation:
 
 from __future__ import annotations
 
+import asyncio
 import sys
 import types
 import unittest
@@ -136,6 +137,9 @@ def _install_homeassistant_stubs() -> None:
         def async_create_entry(self, *, title, data):
             return _FormResult(type="create_entry", title=title, data=data)
 
+        def _async_current_entries(self, include_ignore=True):
+            return self.hass.config_entries.async_entries("2n_intercom")
+
     class ConfigFlow(_BaseFlow):
         def __init_subclass__(cls, **kwargs):
             kwargs.pop("domain", None)
@@ -217,6 +221,21 @@ def _install_homeassistant_stubs() -> None:
     sys.modules["homeassistant.helpers.config_validation"] = cv_module
     helpers.selector = selector_module
     helpers.config_validation = cv_module
+
+    ensure_package("homeassistant.helpers.service_info")
+    ssdp_module = types.ModuleType("homeassistant.helpers.service_info.ssdp")
+
+    class SsdpServiceInfo:
+        def __init__(self, *, upnp, ssdp_location=None):
+            self.upnp = upnp
+            self.ssdp_location = ssdp_location
+
+    ssdp_module.SsdpServiceInfo = SsdpServiceInfo
+    ssdp_module.ATTR_UPNP_FRIENDLY_NAME = "friendlyName"
+    ssdp_module.ATTR_UPNP_PRESENTATION_URL = "presentationURL"
+    ssdp_module.ATTR_UPNP_SERIAL = "serialNumber"
+    sys.modules["homeassistant.helpers.service_info.ssdp"] = ssdp_module
+    helpers.service_info = ssdp_module
 
 
 def load_config_flow_module():
@@ -324,6 +343,11 @@ class FakeHass:
     async def async_add_executor_job(self, func, *args):
         return func(*args)
 
+    def async_create_task(self, coro):
+        import asyncio
+
+        return asyncio.get_event_loop().create_task(coro)
+
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -369,6 +393,12 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
     def _make_flow(self, hass: FakeHass | None = None):
         flow = self.config_flow_module.TwoNIntercomConfigFlow()
         flow.hass = hass or FakeHass([])
+        # Real HA's FlowHandler provides `context` as a class-level default
+        # (not via __init__), so our own __init__ override never needing to
+        # call super() is fine in production — the stub's _BaseFlow.__init__
+        # just never runs for a subclass with its own __init__, so set it
+        # explicitly here instead.
+        flow.context = {}
         return flow
 
     async def test_user_step_happy_path_advances_to_device(self) -> None:
@@ -1008,6 +1038,96 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result["type"], "abort")
         self.assertEqual(result["reason"], "already_configured")
+
+    # --- SSDP discovery ---
+
+    def _make_ssdp_info(
+        self,
+        *,
+        mac: str = "7C1EB3000000",
+        host: str = "192.0.2.60",
+        friendly_name: str | None = "Control4 DS2 Door Station",
+        via_location: bool = False,
+    ):
+        SsdpServiceInfo = sys.modules[
+            "homeassistant.helpers.service_info.ssdp"
+        ].SsdpServiceInfo
+        upnp: dict[str, str] = {}
+        if mac:
+            upnp["serialNumber"] = mac
+        if friendly_name:
+            upnp["friendlyName"] = friendly_name
+        ssdp_location = None
+        if via_location:
+            ssdp_location = f"http://{host}/ssdp_server/description.xml"
+        else:
+            upnp["presentationURL"] = f"http://{host}"
+        return SsdpServiceInfo(upnp=upnp, ssdp_location=ssdp_location)
+
+    async def test_ssdp_new_device_advances_to_user_step(self) -> None:
+        flow = self._make_flow()
+        result = await flow.async_step_ssdp(self._make_ssdp_info())
+        self.assertEqual(result["type"], "form")
+        self.assertEqual(result["step_id"], "user")
+        self.assertEqual(flow._discovered_host, "192.0.2.60")
+
+    async def test_ssdp_extracts_host_from_location_when_no_presentation_url(
+        self,
+    ) -> None:
+        flow = self._make_flow()
+        result = await flow.async_step_ssdp(
+            self._make_ssdp_info(via_location=True)
+        )
+        self.assertEqual(result["type"], "form")
+        self.assertEqual(flow._discovered_host, "192.0.2.60")
+
+    async def test_ssdp_aborts_without_mac(self) -> None:
+        flow = self._make_flow()
+        result = await flow.async_step_ssdp(self._make_ssdp_info(mac=""))
+        self.assertEqual(result["type"], "abort")
+        self.assertEqual(result["reason"], "no_mac")
+
+    async def test_ssdp_updates_host_for_already_configured_device(self) -> None:
+        """Different MAC formatting (colons vs bare) must still match."""
+        entry = FakeConfigEntry(
+            "entry-1",
+            {
+                "host": "192.0.2.50",
+                "mac_address": "7C1EB3000000",
+                "username": "root",
+                "password": "secret",
+            },
+        )
+        hass = FakeHass([entry])
+        flow = self._make_flow(hass)
+        result = await flow.async_step_ssdp(
+            self._make_ssdp_info(mac="7c-1e-b3-00-00-00", host="192.0.2.60")
+        )
+        await asyncio.sleep(0)  # let the scheduled reload task run
+        self.assertEqual(result["type"], "abort")
+        self.assertEqual(result["reason"], "already_configured")
+        self.assertEqual(entry.data["host"], "192.0.2.60")
+        self.assertIn(entry.entry_id, hass.config_entries.reload_calls)
+
+    async def test_ssdp_no_op_when_host_unchanged(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1",
+            {
+                "host": "192.0.2.60",
+                "mac_address": "7C1EB3000000",
+                "username": "root",
+                "password": "secret",
+            },
+        )
+        hass = FakeHass([entry])
+        flow = self._make_flow(hass)
+        result = await flow.async_step_ssdp(
+            self._make_ssdp_info(mac="7C1EB3000000", host="192.0.2.60")
+        )
+        self.assertEqual(result["type"], "abort")
+        self.assertEqual(result["reason"], "already_configured")
+        self.assertEqual(hass.config_entries.update_calls, [])
+        self.assertEqual(hass.config_entries.reload_calls, [])
 
 
 class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
