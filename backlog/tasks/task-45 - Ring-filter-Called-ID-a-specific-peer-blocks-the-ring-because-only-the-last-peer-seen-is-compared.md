@@ -3,10 +3,11 @@ id: TASK-45
 title: >-
   Ring filter (Called ID): a specific peer blocks the ring because only the last
   peer seen is compared
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-15 19:16'
+updated_date: '2026-10-16 09:50'
 labels:
   - bug
   - coordinator
@@ -61,3 +62,30 @@ Approach (for the implementer to confirm): keep a set of canonical peers per act
 - [ ] #7 Full unit suite, validate.py and py_compile green on Python 3.12+; PR check e2e-pi green (no new E2E test: a ring needs a physical press)
 - [ ] #8 Manual (Jan, label manual-close): with Called ID set to the specific peer, a button press turns the Doorbell on, and the debug log shows the call events with the peer and the decision
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Canonicalize Called ID and event/status peers in coordinator.py (case, SIP/SIPS scheme, host, parameters, port), preserving raw directory choices and entry.options storage.
+2. Track canonical peers per call session from both call event types and every call/status session/call; merge polling baselines without losing event peers, and clear ended/replaced sessions without changing active_session_id semantics. Keep event-only ringing, TASK-31 direction/originator rules, snapshot deduplication, and pulse behavior.
+3. Log each call event at DEBUG with safe parsed fields, canonical session peers, and ring decision, never raw credential-bearing data.
+4. Extend coordinator unit tests for captured TASK-29 replays, parallel peers, session cleanup/isolation, polling merges, canonical forms, incoming-call rejection, and safe debug logging. Update the related README and architecture explanation.
+5. Run targeted tests followed by all required local Python 3.12 gates; record results and pending e2e-pi/manual verification, leave criteria unchecked and status In Progress, and commit locally on the current branch without pushing.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented canonical SIP user comparison in coordinator.py for Called ID, event peers and call/status peers: lower-case, SIP/SIPS scheme removal, host/parameters/port stripping, and exclusion of SIP passwords. Raw directory choices and called_id option storage remain unchanged.
+The filter now uses a peer set per session rather than the last peer attribute. Both call event types accumulate peers; sessionless events retain their session context, including across polls. Polling merges every call from every current session and prunes ended/absent sessions without triggering rings. Full session termination clears its peers, while termination of one parallel call preserves the session peers. The existing called_peer attribute, active_session_id semantics, direction/originator rule, snapshot deduplication and doorbell pulse remain unchanged.
+Added DEBUG diagnostics for every call event, including malformed/missing-state events, with safe parsed state/direction/originator/session fields, sorted canonical peers and rang / filtered by peer / not a ring decisions. Raw payloads and credential-bearing peer URLs are not logged.
+Expanded captured TASK-29 replays for matching Called ID and All calls, with incoming replays under matching/nonmatching filters; added parallel-peer, canonical-form cross-product, polling merge, multi-session isolation, sessionless context, termination cleanup and safe-log regressions. Updated README.md and docs/ARCHITECTURE.md.
+Local validation on Python 3.12.15: targeted coordinator/snapshot/options/setup/entity tests passed (355 tests); final full unittest discovery passed (610 tests), validate.py passed, py_compile passed, and git diff --check passed. The full suite emitted the existing test_api.py coroutine-mock RuntimeWarnings; no failures.
+No E2E or device access attempted, no new E2E test added as explicitly specified, and no protected paths changed. PR e2e-pi and Jan's physical-button verification remain pending. Leave status In Progress, manual-close label intact, and every acceptance criterion unchecked.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented per-session Called ID filtering across parallel peers and polling, shared SIP canonicalization, safe call-event diagnostics, regression coverage and related documentation. Local Python 3.12 gates pass (610 unit tests). Awaiting e2e-pi and manual staging verification; status and acceptance criteria remain open.
+<!-- SECTION:FINAL_SUMMARY:END -->

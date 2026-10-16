@@ -182,6 +182,10 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
     """Coordinator to manage data updates from 2N Intercom."""
 
     _RING_STATES = {"ringing", "alerting", "ring"}
+    _TERMINAL_CALL_STATES = {
+        "idle", "terminated", "ended", "finished", "closed",
+        "hangup", "hungup", "disconnected",
+    }
 
     def __init__(
         self,
@@ -229,6 +233,8 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         self._io_status: dict[str, Any] | None = None
         self._ring_filter_peer = self._normalize_peer(called_id)
         self._last_called_peer: str | None = None
+        self._called_peers: dict[str | None, set[str]] = {}
+        self._peer_session_id: str | None = None
         self._last_call_state_value: str = "idle"
         self._ring_pulse_until: datetime | None = None
         self._log_subscription_id: int | None = None
@@ -256,12 +262,57 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
 
     @staticmethod
     def _normalize_peer(peer: str | None) -> str | None:
-        if not peer or peer == CALLED_ID_ALL:
+        """Return the canonical SIP user, excluding host, parameters and password."""
+        if not peer:
             return None
-        normalized = peer.replace("sip:", "")
-        if "@" in normalized:
-            normalized = normalized.split("@", 1)[0]
+        normalized = peer.strip().lower()
+        if normalized == CALLED_ID_ALL:
+            return None
+        normalized = normalized.removeprefix("sip:").removeprefix("sips:")
+        normalized = normalized.split("@", 1)[0].split(";", 1)[0].split(":", 1)[0]
         return normalized.strip() or None
+
+    def _session_called_peers(self, session_id: str | None) -> set[str]:
+        """Resolve sessionless events to the most recently observed session."""
+        if session_id is None:
+            session_id = self._peer_session_id
+        elif self._peer_session_id is None and None in self._called_peers:
+            self._called_peers.setdefault(session_id, set()).update(
+                self._called_peers.pop(None)
+            )
+        self._peer_session_id = session_id
+        return self._called_peers.setdefault(session_id, set())
+
+    def _update_called_peers_from_status(self, call_status: dict[str, Any]) -> None:
+        """Merge all current session peers without replacing event evidence."""
+        previous_session_id = self._peer_session_id
+        current_sessions: set[str | None] = set()
+        for session in call_status.get("sessions") or []:
+            state = str(
+                session.get("state") or call_status.get("state") or ""
+            ).strip().lower()
+            if state in self._TERMINAL_CALL_STATES:
+                continue
+            session_id = self._extract_first_nonempty_string(
+                session, "session", "sessionNumber"
+            )
+            peers = self._session_called_peers(session_id)
+            current_sessions.add(self._peer_session_id)
+            for call in session.get("calls") or []:
+                raw_peer = self._extract_first_nonempty_string(call, "peer", "address")
+                peer = self._normalize_peer(raw_peer)
+                if peer is not None:
+                    peers.add(peer)
+        self._called_peers = {
+            session: peers for session, peers in self._called_peers.items()
+            if session in current_sessions
+        }
+        if previous_session_id in current_sessions:
+            self._peer_session_id = previous_session_id
+        elif self._active_session_id in current_sessions:
+            self._peer_session_id = self._active_session_id
+        elif self._peer_session_id not in current_sessions:
+            self._peer_session_id = None
 
     @staticmethod
     def _extract_called_peer(call_status: dict[str, Any]) -> str | None:
@@ -813,15 +864,15 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
 
         params = event.get("params") or {}
         if not isinstance(params, dict):
+            _LOGGER.debug(
+                "Call event %s state=None direction=None originator=None "
+                "session=None peers=[] decision=not a ring (invalid parameters)",
+                event_name,
+            )
             return False
 
         raw_state = params.get("state") or params.get("status")
-        if raw_state is None:
-            return False
-
-        state = str(raw_state).strip().lower()
-        if not state:
-            return False
+        state = str(raw_state or "").strip().lower()
 
         if event_name == "CallSessionStateChanged":
             session_id = self._extract_first_nonempty_string(
@@ -838,33 +889,42 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
                 params, "peer", "address"
             )
 
-        if raw_peer is not None:
-            self._last_called_peer = self._normalize_peer(raw_peer)
-
         direction = str(params.get("direction") or "").strip().lower()
         originator = (self._optional_str(params, "originator") or "").lower()
+        peer_session_id = session_id if session_id is not None else self._peer_session_id
+        if not state:
+            _LOGGER.debug(
+                "Call event %s state=%r direction=%r originator=%r "
+                "session=%r peers=%s decision=not a ring (missing state)",
+                event_name, state, direction, originator, peer_session_id,
+                sorted(self._called_peers.get(peer_session_id, set())),
+            )
+            return False
+
+        if (
+            state in self._TERMINAL_CALL_STATES
+            and not (self._peer_session_id is None and None in self._called_peers)
+        ):
+            peers = self._called_peers.get(peer_session_id, set())
+        else:
+            peers = self._session_called_peers(session_id)
+        if raw_peer is not None:
+            self._last_called_peer = self._normalize_peer(raw_peer)
+            if self._last_called_peer is not None:
+                peers.add(self._last_called_peer)
+
         active_states = self._RING_STATES | {"active", "connected"}
-        terminal_states = {
-            "idle",
-            "terminated",
-            "ended",
-            "finished",
-            "closed",
-            "hangup",
-            "hungup",
-            "disconnected",
-        }
 
         if session_id is not None and state in active_states:
             self._active_session_id = session_id
-        elif state in terminal_states and (
+        elif state in self._TERMINAL_CALL_STATES and (
             session_id is None or self._active_session_id == session_id
         ):
             self._active_session_id = None
 
         ring_allowed = (
             self._ring_filter_peer is None
-            or self._last_called_peer == self._ring_filter_peer
+            or self._ring_filter_peer in peers
         )
         if event_name == "CallStateChanged":
             is_ringing = state in self._RING_STATES and direction == "outgoing"
@@ -890,6 +950,24 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             self._ring_pulse_until = None
 
         self._last_call_state_value = state
+
+        decision = "not a ring"
+        if is_ringing:
+            decision = "rang" if ring_allowed else "filtered by peer"
+        _LOGGER.debug(
+            "Call event %s state=%r direction=%r originator=%r "
+            "session=%r peers=%s decision=%s",
+            event_name, state, direction, originator, peer_session_id,
+            sorted(peers), decision,
+        )
+        # A single parallel call can end before the session's other calls ring.
+        if (
+            event_name == "CallSessionStateChanged"
+            and state in self._TERMINAL_CALL_STATES
+        ):
+            self._called_peers.pop(peer_session_id, None)
+            if self._peer_session_id == peer_session_id:
+                self._peer_session_id = None
 
         return True
 
@@ -1249,6 +1327,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             # the poll only refreshes session and peer baselines.
             current_state = self._extract_call_state(call_status) or "idle"
             self._active_session_id = self._extract_active_session_id(call_status)
+            self._update_called_peers_from_status(call_status)
             self._last_called_peer = self._normalize_peer(
                 self._extract_called_peer(call_status)
             )

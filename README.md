@@ -55,7 +55,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 - **Reauth flow** — when credentials are rejected the integration raises `ConfigEntryAuthFailed`, so HA opens a notification asking the user to re-enter credentials instead of looping on `ConfigEntryNotReady`
 - **Reconfigure flow** — change host/port/protocol/credentials/SSL without removing the entry (HA 2024.10+)
 - **Options flow** — device features, polling interval, camera transport, and per-relay overrides (name, type, pulse duration). Relays are auto-detected from the device
-- Optional "Ringing account (peer)" filter for multi-button setups (`All calls` matches every button)
+- Optional "Ringing account (peer)" filter for multi-button setups: matches any peer called in the current session, including parallel/group calls (`All calls` matches every button). Peer comparison ignores case, SIP/SIPS scheme, host, port and SIP parameters
 
 ## Capability Matrix
 
@@ -424,6 +424,7 @@ The integration uses two data channels:
 - Ring detection is exclusively event-driven via the log subscription — there is no polling fallback for ring events
 - Open the integration's diagnostics; the log subscription id should be set
 - Press the button and watch HA logs — the event path should flip the binary sensor within ~1 s
+- If a specific Called ID does not ring, enable debug logging for `custom_components.2n_intercom`. Every call event records its state, direction/originator, session, canonical peers and decision (`rang`, `filtered by peer` or `not a ring`). Only intercom-started calls ring, even with `All calls`
 - If the subscription is down, the listener retries with exponential backoff (up to ~60 s). Ring events during a subscription gap are lost
 
 ### Reauth notification keeps appearing
