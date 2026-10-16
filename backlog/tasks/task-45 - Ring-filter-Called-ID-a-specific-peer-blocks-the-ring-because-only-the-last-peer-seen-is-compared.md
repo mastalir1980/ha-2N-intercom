@@ -3,11 +3,11 @@ id: TASK-45
 title: >-
   Ring filter (Called ID): a specific peer blocks the ring because only the last
   peer seen is compared
-status: In Progress
+status: To Test
 assignee:
   - '@copilot'
 created_date: '2026-10-15 19:16'
-updated_date: '2026-10-16 09:50'
+updated_date: '2026-10-16 15:37'
 labels:
   - bug
   - coordinator
@@ -82,6 +82,8 @@ Added DEBUG diagnostics for every call event, including malformed/missing-state 
 Expanded captured TASK-29 replays for matching Called ID and All calls, with incoming replays under matching/nonmatching filters; added parallel-peer, canonical-form cross-product, polling merge, multi-session isolation, sessionless context, termination cleanup and safe-log regressions. Updated README.md and docs/ARCHITECTURE.md.
 Local validation on Python 3.12.15: targeted coordinator/snapshot/options/setup/entity tests passed (355 tests); final full unittest discovery passed (610 tests), validate.py passed, py_compile passed, and git diff --check passed. The full suite emitted the existing test_api.py coroutine-mock RuntimeWarnings; no failures.
 No E2E or device access attempted, no new E2E test added as explicitly specified, and no protected paths changed. PR e2e-pi and Jan's physical-button verification remain pending. Leave status In Progress, manual-close label intact, and every acceptance criterion unchecked.
+
+Merged in PR #61 (2026-10-16). Label manual-close: moved to To Test by Claude after the merge; waits for Jan's check on the real device.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

@@ -3,11 +3,11 @@ id: TASK-47
 title: >-
   Ring filter (Called ID): a suffix after "/" in the selected peer (e.g.
   "1234567890/2") never matches the peer in call events
-status: In Progress
+status: To Test
 assignee:
   - '@copilot'
 created_date: '2026-10-16 14:40'
-updated_date: '2026-10-16 15:20'
+updated_date: '2026-10-16 15:37'
 labels:
   - bug
   - coordinator
@@ -78,4 +78,6 @@ README.md and docs/ARCHITECTURE.md document that the Called ID suffix after / is
 Local gates passed on Python 3.12.15: python3 -m unittest discover -s tests -t tests (612 tests); python3 validate.py; python3 -m py_compile custom_components/2n_intercom/*.py. The full suite also emitted RuntimeWarnings from existing API failure-test mocks outside the changed code; no unrelated fixes were made.
 
 No E2E command was run on the VM and no new E2E test was added, as specified by the task: a ring requires a physical press. The PR e2e-pi gate and Jan manual-close verification remain pending. Acceptance criteria are left unchecked and status remains In Progress.
+
+Merged in PR #63 (2026-10-16). Label manual-close: moved to To Test by Claude after the merge; waits for Jan's check on the real device.
 <!-- SECTION:NOTES:END -->
