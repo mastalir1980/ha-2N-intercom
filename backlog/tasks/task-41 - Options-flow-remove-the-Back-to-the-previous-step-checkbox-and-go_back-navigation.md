@@ -3,11 +3,11 @@ id: TASK-41
 title: >-
   Options flow: remove the "Back to the previous step" checkbox and go_back
   navigation
-status: To Do
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-15 16:20'
-updated_date: '2026-10-16 15:27'
+updated_date: '2026-10-16 15:31'
 labels:
   - config-flow
   - ux
@@ -34,25 +34,34 @@ Why: after the TASK-14 release, the options flow shows a 'Back to the previous s
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 No form in the options flow or the initial setup flow contains a go_back field
-- [ ] #2 Camera and relay steps no longer branch on go_back; the flow is forward-only and saves options only from the final step
-- [ ] #3 last_step values from TASK-14 are unchanged (Next on intermediate steps, Submit on the saving step)
-- [ ] #4 go_back keys are removed from strings.json and all translations (en/de/cs); validate.py green
-- [ ] #5 Unit tests for back navigation in tests/test_config_flow.py are removed or rewritten to assert forward-only flow; full unit suite green on Python 3.12+
-- [ ] #6 E2E options-flow test (e2e/tests/test_40_options_flow.py) no longer drives a back navigation and still asserts last_step; bash e2e/e2e.sh wip green
+- [x] #1 No form in the options flow or the initial setup flow contains a go_back field
+- [x] #2 Camera and relay steps no longer branch on go_back; the flow is forward-only and saves options only from the final step
+- [x] #3 last_step values from TASK-14 are unchanged (Next on intermediate steps, Submit on the saving step)
+- [x] #4 go_back keys are removed from strings.json and all translations (en/de/cs); validate.py green
+- [x] #5 Unit tests for back navigation in tests/test_config_flow.py are removed or rewritten to assert forward-only flow; full unit suite green on Python 3.12+
+- [x] #6 E2E options-flow test (e2e/tests/test_40_options_flow.py) no longer drives a back navigation and still asserts last_step; bash e2e/e2e.sh wip green
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. const.py: remove `CONF_GO_BACK` (line ~23) and its import in config_flow.py (line ~31). Grep the whole repo (`custom_components/`, `tests/`, `e2e/`) for `go_back` / `CONF_GO_BACK` so nothing references it afterwards.
-2. config_flow.py, setup flow `async_step_device` (~line 330): drop the `go_back` pop and the branch back to `async_step_user` (~lines 343-348) and the `vol.Optional(CONF_GO_BACK, ...)` field (~line 391). Submit always goes to `_async_create_entry()`.
-3. config_flow.py, options flow `async_step_camera` (~line 870): drop the `go_back` pop (~line 879), the `if go_back: return await self.async_step_device()` branch (~line 906) and the schema field (~line 1006). Submit always goes to `_async_after_camera_step()`.
-4. config_flow.py, options flow `async_step_relay` (~line 1052): drop the `go_back` pop (~line 1060), the whole back-navigation block (~lines 1065-1072) and the schema field (~line 1122). Keep storing the submitted values in `self._relay_inputs[cap["switch"]]` and the forward logic (next relay, then save) unchanged.
-5. Must not change: every `last_step=` value from TASK-14 (lines ~327, 399, 861, 1015, 1131); options are saved only by the final step; `self._data` / `_relay_inputs` draft handling; the user-step prefill and the device-identity handling in `async_step_user` (no refactor in this task). The per-relay step itself stays — removing it is TASK-42.
-6. strings.json and translations/en.json, de.json, cs.json: remove every `go_back` key from `data` and `data_description` of the user/device, camera and relay steps (strings.json ~lines 26, 33, 122, 132, 143, 150 and the matching lines in each translation). Keep JSON valid and the four files in sync; run `python3 validate.py`.
-7. tests/test_config_flow.py: delete the back-navigation tests (`test_device_step_go_back_returns_to_user_prefilled` ~902, `test_go_back_to_other_host_drops_previous_device_identity` ~937, `test_camera_go_back_returns_to_device_with_prefill` ~1506, `test_relay_go_back_to_camera_and_device` ~1546, `test_relay_go_back_between_relays_not_counted_twice` ~1609). Add one test that walks setup and options flows and asserts no shown form schema contains a `go_back` field, and keep/extend the TASK-14 last_step tests (class at ~1422) so they still pass unchanged.
-8. e2e/tests/test_40_options_flow.py: rename the test to `test_options_flow_last_step_forward_only`, remove the back-navigation driving and the `go_back` skip in `_defaults_payload`, assert `"go_back" not in _field_names(step)` on every step, keep the existing last_step assertions and the check that options are unchanged when submitted with defaults. Update the module docstring. Read-only on the intercom; no relay marker needed.
-9. Docs: remove the back-navigation sentences in README.md (~line 179 setup, ~line 205 options flow) and INSTALLATION.md (~line 87); replace with: the wizard is forward-only, to change an earlier value close the dialog and start Configure again; nothing is saved until the last step.
-10. Validation: unit suite + `validate.py` on Python 3.12+, `py_compile`, green `bash e2e/e2e.sh wip` (headless: PR check `e2e-pi`).
+1. Remove CONF_GO_BACK, its form fields and backward-navigation branches from initial setup and options flows while preserving last_step and final-step-only saving.
+2. Remove go_back translations, rewrite navigation unit and E2E coverage for forward-only progression and draft saving, and update README/INSTALLATION guidance.
+3. Run the required Python 3.12+ local gates, record implementation and validation notes, and commit TASK-41 locally without ticking acceptance criteria or marking Done; leave device E2E to the e2e-pi PR check.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented forward-only initial setup and options flows: removed CONF_GO_BACK, all three form fields, all navigation branches, and the setup/camera/relay labels and descriptions in strings.json plus en/de/cs translations. Existing last_step expressions and final-step saving paths are unchanged.
+Rewrote unit navigation coverage for setup completion/restart and six camera/relay combinations (camera on/off; zero, one, or two relays), asserting no go_back fields, ordered forward progression, Next/Submit flags, no create_entry before the final submission, and preservation of all draft values. Added restart coverage proving unsaved device/camera changes do not enter a new options session.
+Updated the E2E options-flow test to traverse every intermediate form forward, check last_step and absent go_back on every form, retain RTSP password masking checks, and abort before the saving step even in a device-only flow. It checks saved options throughout and after aborting. Updated README and INSTALLATION restart/discard guidance.
+Local gates passed on Python 3.12.15: python3 -m unittest discover -s tests -t tests (611 tests), python3 validate.py, and python3 -m py_compile custom_components/2n_intercom/*.py. The changed E2E test also compiles. No device E2E was run on the VM; e2e-pi remains pending for the orchestrator. Acceptance criteria remain unchecked and status remains In Progress.
+Follow-up: isolated discovery of test_config_flow.py fails during module loading because its coordinator stub is not initialized independently; the required full-suite discovery initializes the shared stubs and passes. No unrelated test-harness changes were made.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented by the headless coder. Checks green on 685d8ba80 after 0 fix round(s): e2e-pi=pass, validate=pass, validate=pass. PR: https://github.com/mastalir1980/ha-2N-intercom/pull/64. Done takes effect when the PR is merged.
+<!-- SECTION:FINAL_SUMMARY:END -->

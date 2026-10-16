@@ -22,15 +22,13 @@
           "name": "Name",
           "enable_camera": "Enable Camera",
           "enable_doorbell": "Enable Doorbell",
-          "called_id": "Ringing account (peer)",
-          "go_back": "Back to the previous step"
+          "called_id": "Ringing account (peer)"
         },
         "data_description": {
           "name": "Displayed name in Home Assistant",
           "enable_camera": "Create the camera entity for snapshots and streaming",
           "enable_doorbell": "Create the doorbell entity for ring detection",
-          "called_id": "Select which account should ring. Choose All calls to ring on every button.",
-          "go_back": "Check and submit to return to the connection settings without saving. Values entered here are kept."
+          "called_id": "Select which account should ring. Choose All calls to ring on every button."
         }
       },
       "reconfigure": {
@@ -114,8 +112,7 @@
           "mjpeg_height": "MJPEG height (pixels)",
           "mjpeg_fps": "MJPEG frame rate (fps)",
           "rtsp_username": "RTSP username",
-          "rtsp_password": "RTSP password",
-          "go_back": "Back to the previous step"
+          "rtsp_password": "RTSP password"
         },
         "data_description": {
           "live_view_mode": "auto picks RTSP when RTSP credentials are configured and valid, then MJPEG, then JPEG snapshots only",
@@ -124,8 +121,7 @@
           "mjpeg_height": "Height of the MJPEG stream requested from the device (e.g. 480)",
           "mjpeg_fps": "Frames per second for the MJPEG stream (1-15)",
           "rtsp_username": "Optional — only used for the RTSP (H.264) video stream. Create the account on the intercom under Services > Streaming > RTSP Server > User Database; your API account does not work here. Leave empty to use MJPEG instead of RTSP.",
-          "rtsp_password": "Optional — password of the RTSP account. It is never shown here: leave empty to keep the stored password. To remove the RTSP credentials completely, clear the username too; without them the integration uses MJPEG.",
-          "go_back": "Check and submit to return to the device settings without saving. Values entered here are kept."
+          "rtsp_password": "Optional — password of the RTSP account. It is never shown here: leave empty to keep the stored password. To remove the RTSP credentials completely, clear the username too; without them the integration uses MJPEG."
         }
       },
       "relay": {
@@ -135,15 +131,13 @@
           "relay_number": "Relay Number",
           "relay_name": "Relay Name",
           "relay_device_type": "Device Type",
-          "relay_pulse_duration": "Pulse Duration (milliseconds)",
-          "go_back": "Back to the previous step"
+          "relay_pulse_duration": "Pulse Duration (milliseconds)"
         },
         "data_description": {
           "relay_number": "Physical relay number on the device (auto-detected)",
           "relay_name": "Displayed name for this relay in Home Assistant",
           "relay_device_type": "Door creates a switch entity, gate creates a cover entity",
-          "relay_pulse_duration": "Trigger pulse length sent to the relay (ms). Default is the device-configured switchOnDuration.",
-          "go_back": "Check and submit to return to the previous step without saving. Values entered here are kept."
+          "relay_pulse_duration": "Trigger pulse length sent to the relay (ms). Default is the device-configured switchOnDuration."
         }
       }
     }

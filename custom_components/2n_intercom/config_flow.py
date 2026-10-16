@@ -28,7 +28,6 @@ from .const import (
     CONF_CAMERA_SOURCE,
     CONF_ENABLE_CAMERA,
     CONF_ENABLE_DOORBELL,
-    CONF_GO_BACK,
     CONF_GRANT_ACCESS_USER,
     CONF_LIVE_VIEW_MODE,
     CONF_MJPEG_FPS,
@@ -270,8 +269,6 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
                     if serial:
                         user_input[CONF_SERIAL_NUMBER] = str(serial).strip()
                     else:
-                        # Going back and pointing at another host must not
-                        # keep the previous device's identity in the draft.
                         self._data.pop(CONF_SERIAL_NUMBER, None)
                     # Build a descriptive default name from device identity
                     variant = sys_info.get("variant", "").strip()
@@ -284,8 +281,6 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
                         self._default_device_name = f"2N Intercom {sn}"
                     else:
                         self._default_device_name = None
-                    # Merge (not replace) so values from a later step survive
-                    # a back-and-forth through this step.
                     self._data.update(user_input)
 
             except Exception:  # pylint: disable=broad-except
@@ -300,9 +295,7 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
             if not errors:
                 return await self.async_step_device()
 
-        # Pre-fill from an earlier visit of this step (e.g. the user went
-        # back from the device step) so connection details survive the
-        # round trip. Connection is re-validated on every submit.
+        # Keep submitted connection details when validation fails.
         prefill = user_input or self._data
         data_schema = vol.Schema(
             {
@@ -340,12 +333,7 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            go_back = bool(user_input.pop(CONF_GO_BACK, False))
             self._data.update(user_input)
-            if go_back:
-                # Back to the connection step; _data keeps host/credentials
-                # pre-filled and the next submit re-validates the connection.
-                return await self.async_step_user()
             return await self._async_create_entry()
 
         await self._ensure_integration_info()
@@ -388,7 +376,6 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
                 vol.Optional(
                     CONF_CALLED_ID, default=default_called
                 ): called_field,
-                vol.Optional(CONF_GO_BACK, default=False): cv.boolean,
             }
         )
 
@@ -659,8 +646,7 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
         del config_entry  # provided by the framework as self.config_entry
         self._data: dict[str, Any] = {}
         # Relay overrides collected in this flow session, keyed by physical
-        # relay number so a revisited relay step replaces its entry instead
-        # of appending a duplicate.
+        # relay number.
         self._relay_inputs: dict[int, dict[str, Any]] = {}
         self._relay_index = 0
         self._detected_relays: list[dict[str, Any]] = []
@@ -678,9 +664,8 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
     def _session_option(self, key: str, default: Any = None) -> Any:
         """Return the value for *key* preferring this flow session's input.
 
-        Resolution order: values entered in this flow session (so going
-        back and forward keeps them) -> saved options -> entry data ->
-        *default*.
+        Resolution order: values entered in this flow session -> saved
+        options -> entry data -> *default*.
         """
         if key in self._data:
             return self._data[key]
@@ -784,9 +769,8 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
 
             # If the camera is enabled, surface the camera transport options
             # step so the user can tune live-view mode and MJPEG resolution.
-            # Disabling the camera skips it entirely — drop any camera values
-            # entered earlier in this session so they are not saved (same as
-            # before back-navigation existed).
+            # Disabling the camera skips it entirely and omits camera values
+            # from the saved options.
             if user_input.get(CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA):
                 return await self.async_step_camera()
 
@@ -876,7 +860,6 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            go_back = bool(user_input.pop(CONF_GO_BACK, False))
             # RTSP credentials: the password field is a password-type
             # selector that is never pre-filled, so an empty password means
             # "keep the stored one". Clearing the username removes the whole
@@ -903,8 +886,6 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
                 if int_key in user_input and user_input[int_key] is not None:
                     user_input[int_key] = int(user_input[int_key])
             self._data.update(user_input)
-            if go_back:
-                return await self.async_step_device()
             return await self._async_after_camera_step()
 
         live_view_field = selector.SelectSelector(
@@ -1003,7 +984,6 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
                         CONF_MJPEG_FPS, DEFAULT_CAMERA_MJPEG_FPS
                     ),
                 ): fps_field,
-                vol.Optional(CONF_GO_BACK, default=False): cv.boolean,
             }
         )
 
@@ -1047,9 +1027,8 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
 
         HA re-invokes this step by ``step_id`` without the ``relay_index``
         argument, so the currently displayed index is tracked on the flow
-        instance. Values are stored keyed by physical relay number, which
-        makes back-navigation idempotent: revisiting a relay replaces its
-        entry instead of appending a duplicate.
+        instance. Values are stored keyed by physical relay number until
+        the final step saves all overrides.
         """
         errors: dict[str, str] = {}
 
@@ -1057,19 +1036,9 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
             self._relay_index = relay_index
 
         if user_input is not None:
-            go_back = bool(user_input.pop(CONF_GO_BACK, False))
             index = self._relay_index
             cap = self._detected_relays[index]
             self._relay_inputs[cap["switch"]] = user_input
-
-            if go_back:
-                if index > 0:
-                    return await self.async_step_relay(relay_index=index - 1)
-                # First relay goes back to the camera step when it was
-                # shown this session, otherwise to the device step.
-                if self._data.get(CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA):
-                    return await self.async_step_camera()
-                return await self.async_step_device()
 
             if index + 1 < len(self._detected_relays):
                 return await self.async_step_relay(relay_index=index + 1)
@@ -1119,7 +1088,6 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
                         CONF_RELAY_PULSE_DURATION, default_pulse
                     ),
                 ): cv.positive_int,
-                vol.Optional(CONF_GO_BACK, default=False): cv.boolean,
             }
         )
 

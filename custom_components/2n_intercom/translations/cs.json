@@ -22,15 +22,13 @@
           "name": "Název",
           "enable_camera": "Povolit kameru",
           "enable_doorbell": "Povolit zvonek",
-          "called_id": "Volaný účet (peer)",
-          "go_back": "Zpět na předchozí krok"
+          "called_id": "Volaný účet (peer)"
         },
         "data_description": {
           "name": "Zobrazený název v Home Assistant",
           "enable_camera": "Vytvoří entitu kamery pro snímky i stream",
           "enable_doorbell": "Vytvoří entitu zvonku pro detekci zvonění",
-          "called_id": "Vyberte účet, na který se zvoní. Všechny hovory = zvonění pro všechna tlačítka.",
-          "go_back": "Zaškrtněte a odešlete pro návrat do nastavení připojení bez uložení. Zadané hodnoty zůstanou zachovány."
+          "called_id": "Vyberte účet, na který se zvoní. Všechny hovory = zvonění pro všechna tlačítka."
         }
       },
       "reconfigure": {
@@ -114,8 +112,7 @@
           "mjpeg_height": "Výška MJPEG (pixely)",
           "mjpeg_fps": "Snímky za sekundu (MJPEG)",
           "rtsp_username": "RTSP uživatelské jméno",
-          "rtsp_password": "RTSP heslo",
-          "go_back": "Zpět na předchozí krok"
+          "rtsp_password": "RTSP heslo"
         },
         "data_description": {
           "live_view_mode": "auto upřednostní RTSP, pak MJPEG, případně jen JPEG snímky",
@@ -124,8 +121,7 @@
           "mjpeg_height": "Výška MJPEG streamu vyžádaného od zařízení (např. 480)",
           "mjpeg_fps": "Snímky za sekundu pro MJPEG stream (1-15)",
           "rtsp_username": "Volitelné — používá se jen pro video stream RTSP (H.264). Účet vytvořte na interkomu pod Services > Streaming > RTSP Server > User Database; API účet zde nefunguje. Ponechte prázdné pro použití MJPEG místo RTSP.",
-          "rtsp_password": "Volitelné — heslo k RTSP účtu. Nikdy se zde nezobrazuje: ponechte prázdné pro zachování uloženého hesla. Pro úplné odstranění RTSP údajů vymažte i uživatelské jméno; bez nich integrace používá MJPEG.",
-          "go_back": "Zaškrtněte a odešlete pro návrat do nastavení zařízení bez uložení. Zadané hodnoty zůstanou zachovány."
+          "rtsp_password": "Volitelné — heslo k RTSP účtu. Nikdy se zde nezobrazuje: ponechte prázdné pro zachování uloženého hesla. Pro úplné odstranění RTSP údajů vymažte i uživatelské jméno; bez nich integrace používá MJPEG."
         }
       },
       "relay": {
@@ -135,15 +131,13 @@
           "relay_number": "Číslo relé",
           "relay_name": "Název relé",
           "relay_device_type": "Typ zařízení",
-          "relay_pulse_duration": "Doba pulsu (milisekundy)",
-          "go_back": "Zpět na předchozí krok"
+          "relay_pulse_duration": "Doba pulsu (milisekundy)"
         },
         "data_description": {
           "relay_number": "Fyzické číslo relé na zařízení (automaticky detekováno)",
           "relay_name": "Zobrazený název relé v Home Assistant",
           "relay_device_type": "Dveře vytvoří spínač, vrata vytvoří kryt",
-          "relay_pulse_duration": "Délka spínacího pulsu odeslaného relé (ms). Výchozí hodnota je switchOnDuration nakonfigurovaná na zařízení.",
-          "go_back": "Zaškrtněte a odešlete pro návrat na předchozí krok bez uložení. Zadané hodnoty zůstanou zachovány."
+          "relay_pulse_duration": "Délka spínacího pulsu odeslaného relé (ms). Výchozí hodnota je switchOnDuration nakonfigurovaná na zařízení."
         }
       }
     }
