@@ -140,6 +140,9 @@
           "relay_pulse_duration": "Länge des Schaltpulses an das Relais (ms). Standard ist die am Gerät konfigurierte switchOnDuration."
         }
       }
+    },
+    "error": {
+      "directory_unavailable": "Die Benutzerliste konnte nicht von der Gegensprechanlage geladen werden; der gespeicherte Benutzer bleibt erhalten."
     }
   },
   "selector": {

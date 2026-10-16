@@ -79,6 +79,15 @@ def _all_calls_label(language: str) -> str:
     return "All calls"
 
 
+def _directory_user_label(language: str, uuid: str, *, unknown: bool = False) -> str:
+    """Label directory users whose name cannot be resolved."""
+    if language.startswith("cs"):
+        return f"Neznámý uživatel ({uuid})" if unknown else f"{uuid} (bez jména)"
+    if language.startswith("de"):
+        return f"Unbekannter Benutzer ({uuid})" if unknown else f"{uuid} (ohne Namen)"
+    return f"Unknown user ({uuid})" if unknown else f"{uuid} (no name)"
+
+
 def _read_integration_info(manifest_path: Path) -> tuple[str, str]:
     """Read integration name and version from the manifest."""
     with open(manifest_path, encoding="utf-8") as manifest_file:
@@ -89,14 +98,14 @@ def _read_integration_info(manifest_path: Path) -> tuple[str, str]:
 
 async def _async_get_called_peers(data: dict[str, Any]) -> list[str]:
     """Return list of called peers from directory."""
-    peers, _users = await _async_get_directory_choices(data)
+    peers, _users, _directory_ok = await _async_get_directory_choices(data)
     return peers
 
 
 async def _async_get_directory_choices(
     data: dict[str, Any],
-) -> tuple[list[str], list[dict[str, str]]]:
-    """Return ``(called peers, directory users)`` from a single dir/query."""
+) -> tuple[list[str], list[dict[str, str]], bool]:
+    """Return ``(called peers, directory users, directory ok)`` from dir/query."""
     api: TwoNIntercomAPI | None = None
     try:
         api = TwoNIntercomAPI(
@@ -108,7 +117,7 @@ async def _async_get_directory_choices(
             verify_ssl=data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
             allow_insecure=data.get(CONF_ALLOW_INSECURE, DEFAULT_ALLOW_INSECURE),
         )
-        directory = await api.async_get_directory()
+        directory = await api.async_get_directory(raise_on_device_error=True)
 
         users: list[dict[str, Any]] = []
         if isinstance(directory, list):
@@ -134,13 +143,14 @@ async def _async_get_directory_choices(
                 if peer and peer not in peers:
                     peers.append(peer)
 
-        return peers, extract_directory_users(users)
+        return peers, extract_directory_users(users), True
     except Exception:  # pylint: disable=broad-except
-        _LOGGER.exception(
-            "Failed to load called peers from dir/query host=%s",
+        _LOGGER.warning(
+            "Failed to load directory from dir/query host=%s",
             data.get(CONF_HOST),
         )
-        return [], []
+        _LOGGER.debug("Directory lookup failure details", exc_info=True)
+        return [], [], False
     finally:
         if api is not None:
             await api.async_close()
@@ -715,7 +725,9 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
         conn_data[CONF_ALLOW_INSECURE] = self._current_option(
             CONF_ALLOW_INSECURE, DEFAULT_ALLOW_INSECURE
         )
-        peers, directory_users = await _async_get_directory_choices(conn_data)
+        peers, directory_users, directory_ok = await _async_get_directory_choices(conn_data)
+        if not directory_ok and user_input is None:
+            errors["base"] = "directory_unavailable"
         called_options: list[SelectOptionDict] = [
             SelectOptionDict(
                 label=_all_calls_label(self.hass.config.language),
@@ -734,17 +746,32 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
 
         current_grant_user = self._current_option(CONF_GRANT_ACCESS_USER) or None
         grant_user_options: list[SelectOptionDict] = [
-            SelectOptionDict(label=user["name"] or user["uuid"], value=user["uuid"])
+            SelectOptionDict(
+                label=user["name"] or _directory_user_label(
+                    self.hass.config.language, user["uuid"]
+                ),
+                value=(
+                    current_grant_user
+                    if current_grant_user
+                    and user["uuid"].lower() == current_grant_user.lower()
+                    else user["uuid"]
+                ),
+            )
             for user in directory_users
         ]
         if current_grant_user and not any(
-            option["value"].lower() == str(current_grant_user).lower()
+            option["value"] == current_grant_user
             for option in grant_user_options
         ):
             # Keep a stored uuid selectable even if the directory is
             # unreachable or the user has since been removed.
             grant_user_options.append(
-                SelectOptionDict(label=current_grant_user, value=current_grant_user)
+                SelectOptionDict(
+                    label=_directory_user_label(
+                        self.hass.config.language, current_grant_user, unknown=True
+                    ),
+                    value=current_grant_user,
+                )
             )
         grant_user_field = selector.SelectSelector(
             selector.SelectSelectorConfig(

@@ -67,6 +67,28 @@ class TwoN:
     def phone_status(self) -> list[dict[str, Any]]:
         return self._get("/api/phone/status").get("accounts", [])
 
+    def dir_users(self) -> list[dict[str, Any]]:
+        """Read directory UUIDs and names independently of the integration."""
+        path = "/api/dir/query"
+        kw = dict(
+            # UUID accompanies each entry independently of the selected fields.
+            json={"iterator": {"timestamp": 0}, "fields": ["name"]},
+            verify=self.verify,
+            timeout=10,
+        )
+        r = requests.post(self.base + path, auth=self._auth, **kw)
+        if r.status_code == 401:
+            challenge = r.headers.get("WWW-Authenticate", "")
+            r = requests.post(self.base + path, auth=self._auth_for(challenge), **kw)
+        r.raise_for_status()
+        body = r.json()
+        if not body.get("success"):
+            error = body.get("error")
+            code = error.get("code") if isinstance(error, dict) else None
+            detail = f" (code {code})" if type(code) is int else ""
+            raise RuntimeError(f"2N /api/dir/query failed{detail}")
+        return body["result"]["users"]
+
     def relay_active(self, number: int) -> bool:
         for sw in self.switch_status():
             if sw.get("switch") == number:

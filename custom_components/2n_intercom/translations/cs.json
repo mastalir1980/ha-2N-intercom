@@ -140,6 +140,9 @@
           "relay_pulse_duration": "Délka spínacího pulsu odeslaného relé (ms). Výchozí hodnota je switchOnDuration nakonfigurovaná na zařízení."
         }
       }
+    },
+    "error": {
+      "directory_unavailable": "Seznam uživatelů se nepodařilo načíst z interkomu; uložený uživatel zůstává zachován."
     }
   },
   "selector": {
