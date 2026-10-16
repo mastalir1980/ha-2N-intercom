@@ -3,11 +3,11 @@ id: TASK-44
 title: >-
   Docs: note that relays appear only after they are enabled in the intercom
   settings
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-15 16:37'
-updated_date: '2026-10-16 15:27'
+updated_date: '2026-10-16 16:09'
 labels:
   - docs
 milestone: m-0
@@ -35,10 +35,18 @@ Why: a user who activated the relay/switch function on the intercom did not unde
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. README.md, section "### Door / Gate / Relay control" (~line 46): after the bullet "Relays auto-discovered from `/api/switch/caps`" add a note: only relays that are enabled in the intercom settings are reported by the device and get entities; if no relay entity appears, enable the relay (switch) in the intercom settings first and reload the integration; the integration cannot enable relays itself.
-2. README.md, "### Initial setup" paragraph (~line 181, "Relays are not configured during initial setup …"): add the same point in one sentence, linking to the section from step 1.
-3. INSTALLATION.md, "## Troubleshooting" (~line 109): add a subsection "### No relay entities appear" with the note from step 1 (enable the relay in the intercom settings, then reload the integration from Settings → Devices & Services). Also add one sentence to "### 5. Verify in Home Assistant" next to the switch/cover entity lines (~line 64).
-4. Wording: neutral terms only ("intercom settings", "the intercom's web interface"); no admin account names, menu paths specific to one firmware, host names or device models (public repo rule in CLAUDE.md).
-5. Do not change code, strings or translations; the options flow stays as it is. Do not describe the per-relay options step in new text (TASK-42 may remove it).
-6. Validation: `python3 validate.py` green. Docs-only change, so the E2E path filter skips `e2e-pi` only if the PR touches nothing but `docs/**/*.md`; README.md/INSTALLATION.md are outside that filter, so `e2e-pi` runs and must be green.
+1. Add a note immediately after relay auto-discovery in README.md explaining that only relays enabled in the intercom settings get entities, how to enable them and reload the integration, and that the integration cannot enable them. Add one linked sentence to Initial setup.
+2. Add the same prerequisite beside the switch/cover list in INSTALLATION.md and a No relay entities appear troubleshooting subsection with the Home Assistant reload location. Use neutral wording without device-specific settings paths or account names.
+3. Keep this docs-only: do not change code, strings, translations, tests, or the options flow, and do not add descriptions of per-relay options.
+4. Run the requested Python 3.12 local gates (full unittest suite, validate.py, py_compile), review the diff, and record implementation notes. Leave device E2E to e2e-pi, keep all criteria unchecked and the task In Progress, and commit locally on the current branch without pushing.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Updated README.md in Door / Gate / Relay control immediately after the /api/switch/caps auto-discovery bullet, and added a linked prerequisite sentence under Initial setup. Both explain that only relays enabled in the intercom settings appear, that missing relays must be enabled there before reloading the integration, and that the integration cannot enable relays.
+
+Updated INSTALLATION.md beside the switch/cover entity list and added No relay entities appear under Troubleshooting, including the Home Assistant integration reload location. New wording uses neutral intercom settings/web-interface terminology without account names or device-specific administration paths. No code, strings, translations, options-flow behavior, or tests were changed; no new per-relay options description was added. This is documentation-only, with no runtime behavior requiring new unit or E2E tests.
+
+Local gates passed on Python 3.12.15: full unittest discovery (624 tests), python3 validate.py, python3 -m py_compile custom_components/2n_intercom/*.py, and git diff --check. Device E2E was not run on the VM; the e2e-pi PR check remains the orchestrator gate after push. Acceptance criteria remain unchecked and status remains In Progress as required for headless execution.
+<!-- SECTION:NOTES:END -->

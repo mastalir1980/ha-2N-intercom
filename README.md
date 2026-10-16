@@ -47,6 +47,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 - **Switch** entities for door relays (momentary)
 - **Cover** entities for gate relays (garage-door style)
 - Relays auto-discovered from `/api/switch/caps` — configurable pulse duration and per-relay name via options flow
+- Only relays enabled in the **intercom settings** are reported by the device and get entities. If no relay entity appears, enable the relay (switch) in the intercom settings first, then reload the integration. The integration cannot enable relays itself.
 - Relay/input states are read from the device (`switch/status`, `io/status`), not optimistic
 - HomeKit accessory mapping per relay type
 
@@ -179,6 +180,8 @@ The setup wizard has two steps:
 The wizard only moves forward. To change values from an earlier step, close the dialog and start again. Nothing is saved until you submit the Device step.
 
 Relays are **not** configured during initial setup. The integration auto-discovers enabled relays from the device's `/api/switch/caps` endpoint and creates switch entities automatically. To override relay names, types (door/gate), or pulse durations, open the **Options** flow after setup.
+
+Relays must first be enabled in the **intercom settings**; the integration cannot enable them, so if none appear, enable them there and reload the integration (see [Door / Gate / Relay control](#door--gate--relay-control)).
 
 ### Initial setup parameters
 
