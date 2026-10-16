@@ -64,6 +64,8 @@ After setup you should see:
 - `switch.<name>_<relay_name>` for door-type relays (auto-discovered)
 - `cover.<name>_<relay_name>` for gate-type relays (after options flow override)
 
+Relay entities appear only for relays enabled in the **intercom settings**; the integration cannot enable them, so if none appear, enable them there and reload the integration (see [No relay entities appear](#no-relay-entities-appear)).
+
 ### 6. HomeKit (optional)
 
 If you run the HA HomeKit Bridge, the camera entity exposes a HomeKit-compatible MJPEG stream and the doorbell binary sensor can be linked to it for video-doorbell behaviour. See [HOMEKIT_INTEGRATION.md](HOMEKIT_INTEGRATION.md) for the YAML link snippet.
@@ -128,6 +130,10 @@ Recommended pattern: pair `hangup_call` with the call-state sensor's `active_ses
 ### Doorbell binary sensor not flipping
 - Ring detection is exclusively event-driven via `/api/log/subscribe` — there is no polling fallback for ring events. Subscription failures are retried with exponential backoff; ring events during a gap are lost
 - Check the integration log; a `Log subscription … established` debug line confirms the event channel is up
+
+### No relay entities appear
+
+Only relays enabled in the **intercom settings** are reported by `/api/switch/caps` and get entities in Home Assistant. Enable the relay (switch) in the intercom settings using the intercom's web interface, then reload the integration from **Settings → Devices & Services → 2N Intercom → ⋮ → Reload**. The integration cannot enable relays itself.
 
 ### Relay not actuating
 - Verify the relay number matches the physical hardware (1-4)
