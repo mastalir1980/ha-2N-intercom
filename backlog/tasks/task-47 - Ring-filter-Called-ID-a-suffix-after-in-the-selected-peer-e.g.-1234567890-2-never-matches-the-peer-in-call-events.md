@@ -3,11 +3,11 @@ id: TASK-47
 title: >-
   Ring filter (Called ID): a suffix after "/" in the selected peer (e.g.
   "1234567890/2") never matches the peer in call events
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-16 14:40'
-updated_date: '2026-10-16 15:07'
+updated_date: '2026-10-16 15:20'
 labels:
   - bug
   - coordinator
@@ -59,10 +59,23 @@ Must not change: event-driven-only ring detection, TASK-31 direction/originator 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. coordinator.py `_normalize_peer`: also cut at the first "/" (after the scheme removal, together with the "@", ";" and ":" cuts). Keep all other rules. The stored option stays raw; only the canonical form changes.
-2. coordinator.py call-event DEBUG line (the one that logs canonical session peers and the ring decision): add the canonical configured filter (`self._ring_filter_peer`, or "all" when None). No raw URL, no credentials.
-3. tests/test_coordinator.py: extend the `_normalize_peer` cases (AC #3, #4) and add ring replays with Called ID "1234567890/2" for the button-press sequence (TASK-29 pattern, peer only on CallStateChanged connecting) and for the incoming-call sequence (AC #1, #2); assert the DEBUG line (AC #5).
-4. docs/ARCHITECTURE.md (ring filter section) and README.md (Called ID option): one sentence that the part after "/" is ignored when matching.
-
-Must not change: see Description. Architecture rules in CLAUDE.md that apply: event-driven first; config split (entry.options); no secrets in logs.
+1. Extend coordinator._normalize_peer to discard everything after the first slash alongside the existing delimiters, without rewriting the stored Called ID option.
+2. Include the canonical configured filter (or all) in call-event DEBUG messages while retaining the existing ring decisions, direction/originator checks and per-session peer sets.
+3. Extend coordinator unit tests with slash normalization, captured button-press and incoming-call replays, non-matching peers, and canonical-only DEBUG logging assertions.
+4. Document slash-suffix matching in README.md and docs/ARCHITECTURE.md.
+5. Run the Python 3.12 local gates, record implementation notes and commit locally. Leave acceptance criteria unchecked and status In Progress; e2e-pi and the manual-close device check remain external gates.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented slash-suffix removal in _normalize_peer after SIP scheme removal; the stored Called ID option is unchanged. All call-event DEBUG paths now include the canonical configured filter (filter=all for All calls), without raw SIP URLs, host names or passwords.
+
+Extended the TASK-29 button-press replay with 1234567890/1 and /2, exact non-matches 1234567891 and 1234567891/2, and decision assertions. Extended the incoming-call replay with 1234567890/2, preserving the TASK-31 direction/originator rule. Added normalization coverage, slash-form interchangeability and canonical-only logging assertions for both event types and malformed events. Existing per-session peer-set and polling behavior is unchanged.
+
+README.md and docs/ARCHITECTURE.md document that the Called ID suffix after / is ignored, and describe the canonical filter in DEBUG logs.
+
+Local gates passed on Python 3.12.15: python3 -m unittest discover -s tests -t tests (612 tests); python3 validate.py; python3 -m py_compile custom_components/2n_intercom/*.py. The full suite also emitted RuntimeWarnings from existing API failure-test mocks outside the changed code; no unrelated fixes were made.
+
+No E2E command was run on the VM and no new E2E test was added, as specified by the task: a ring requires a physical press. The PR e2e-pi gate and Jan manual-close verification remain pending. Acceptance criteria are left unchecked and status remains In Progress.
+<!-- SECTION:NOTES:END -->

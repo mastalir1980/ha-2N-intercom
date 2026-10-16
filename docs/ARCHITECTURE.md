@@ -130,8 +130,11 @@ Detaily endpointů: [`API_REFERENCE.md`](API_REFERENCE.md).
   lower-case, remove `sip:`/`sips:`, keep the user before `@`, and remove
   `;params` and `:port` (also excluding any SIP password). Directory choices and
   `called_id` in `entry.options` are not rewritten.
+  The part after `/` in Called ID is ignored when matching peers, so
+  `1234567890/2` matches `1234567890`.
 - Every call event is logged at DEBUG with the event name, state,
-  direction/originator, session, sorted canonical session peers and the decision
+  direction/originator, session, sorted canonical session peers, configured
+  canonical filter (`all` for All calls) and the decision
   (`rang`, `filtered by peer`, `not a ring`). Raw payloads and credential-bearing
   peer URLs are not logged.
 - `ring_active` je krátký pulz (`DOORBELL_PULSE_DURATION = 1 s`) – binary

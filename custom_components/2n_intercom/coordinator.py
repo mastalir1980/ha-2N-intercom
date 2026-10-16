@@ -262,13 +262,14 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
 
     @staticmethod
     def _normalize_peer(peer: str | None) -> str | None:
-        """Return the canonical SIP user, excluding host, parameters and password."""
+        """Return the SIP user without host, parameters, password or account suffix."""
         if not peer:
             return None
         normalized = peer.strip().lower()
         if normalized == CALLED_ID_ALL:
             return None
         normalized = normalized.removeprefix("sip:").removeprefix("sips:")
+        normalized = normalized.split("/", 1)[0]
         normalized = normalized.split("@", 1)[0].split(";", 1)[0].split(":", 1)[0]
         return normalized.strip() or None
 
@@ -866,8 +867,8 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         if not isinstance(params, dict):
             _LOGGER.debug(
                 "Call event %s state=None direction=None originator=None "
-                "session=None peers=[] decision=not a ring (invalid parameters)",
-                event_name,
+                "session=None peers=[] filter=%s decision=not a ring (invalid parameters)",
+                event_name, self._ring_filter_peer or "all",
             )
             return False
 
@@ -895,9 +896,10 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         if not state:
             _LOGGER.debug(
                 "Call event %s state=%r direction=%r originator=%r "
-                "session=%r peers=%s decision=not a ring (missing state)",
+                "session=%r peers=%s filter=%s decision=not a ring (missing state)",
                 event_name, state, direction, originator, peer_session_id,
                 sorted(self._called_peers.get(peer_session_id, set())),
+                self._ring_filter_peer or "all",
             )
             return False
 
@@ -956,9 +958,9 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             decision = "rang" if ring_allowed else "filtered by peer"
         _LOGGER.debug(
             "Call event %s state=%r direction=%r originator=%r "
-            "session=%r peers=%s decision=%s",
+            "session=%r peers=%s filter=%s decision=%s",
             event_name, state, direction, originator, peer_session_id,
-            sorted(peers), decision,
+            sorted(peers), self._ring_filter_peer or "all", decision,
         )
         # A single parallel call can end before the session's other calls ring.
         if (
