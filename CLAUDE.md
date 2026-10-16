@@ -192,6 +192,8 @@ Never run `e2e/e2e.sh relays`, `--relays` or `reset-entry` unless Jan asks in th
   created (`-m vX.Y.Z`); pipeline/tooling tasks (`manual-path`, `ci`, `infra`) get none. `backlog milestone list` shows progress.
 - **Order of work for the headless coder:** ready tasks of the earliest open milestone first (by version number),
   then later milestones, tasks without a milestone last; inside a group by priority, then task id.
+  The systemd timer on the VM (`ha2n-coder-next.timer`, see `tools/coder/README.md`) picks them up on its own once
+  `/etc/ha2n-coder/autostart` exists; the label `on-hold` keeps a task off the timer.
 - **PRs merge to `main` continuously.** HACS users install GitHub releases, not `main`, so `main` is the next version
   in preparation. Do not hold PRs back for a release.
 - **Closing a version:** all tasks of the milestone are Done (Jan tests the To Test items and runs `e2e.sh relays` once)
@@ -209,8 +211,8 @@ adds one last commit that sets the task *Done* and ticks its criteria; that reac
 Without approval the run ends in state `review` and the task stays *In Progress*. A task with the label `manual-close` is left alone (for work verified
 only after the merge); parent tasks are closed by hand. Claude reviews the diff against the criteria on request (the second-model review does not replace Jan's merge decision). For PRs not
 made by the coder the author does the same in the PR's last commit once the checks are green.
-A task is ready for the headless coder when it is *To Do*, assigned `@copilot`, its dependencies are Done and it meets
-the definition of ready above. Its PRs carry the label `agent`; the coder never merges. Changes to `tools/coder/` need
+A task is ready for the headless coder when it is *To Do*, assigned `@copilot`, its dependencies are Done, it has neither
+the label `on-hold` nor `manual-path`, and it meets the definition of ready above. Its PRs carry the label `agent`; the coder never merges. Changes to `tools/coder/` need
 Jan's review like `.github/` and `e2e/ci/`.
 
 1. Backlog workflow above (`backlog instructions task-execution` / `task-finalization`).

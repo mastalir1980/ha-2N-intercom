@@ -90,6 +90,13 @@ Review nemá token k repu, `git push`, `gh` ani `url` mají zakázané jako u ko
 
 Aktualizace po změně v `tools/coder/`: `git pull` v instalačním klonu a znovu `install-vm.sh`.
 
+**Verze `backlog.md`:** orchestrátor je ověřený s `backlog.md` **1.48.0** a **1.53.0**. Výstup CLI se mezi
+verzemi liší: 1.48 vypisuje řádek `Dependencies: TASK-x` a nezná `--json`; 1.53 má `task view --json` a v `--plain`
+místo toho strom `Depends on (…):`. Orchestrátor čte závislosti přednostně z `--json` (pole `dependencies`
+a `status` každé závislosti) a jinak z obou textových podob; regresní testy pokrývají všechny tři.
+Self-check v `install-vm.sh` vypíše nainstalovanou verzi. Před upgradem na jinou verzi spusť testy orchestrátoru
+a na VM zkontroluj `ha2n-run-task --next` se zapnutým `autostart` na úkolu se závislostí.
+
 **Ruleset na `main`** (GitHub → Settings → Rules → Rulesets → New branch ruleset):
 - Target: `main`, Enforcement: **Active**, Bypass list: **prázdný**,
 - zapnout *Restrict deletions*, *Block force pushes*, *Require a pull request before merging*
@@ -97,8 +104,8 @@ Aktualizace po změně v `tools/coder/`: `git pull` v instalačním klonu a znov
 
 ## Jak to používat
 
-- **Připravený úkol** = stav *To Do*, přiřazený `@copilot`, hotové závislosti, splněná Definition of
-  Ready z `CLAUDE.md`. Připravuje ho Claude.
+- **Připravený úkol** = stav *To Do*, přiřazený `@copilot`, hotové závislosti, bez štítků `on-hold` a `manual-path`,
+  splněná Definition of Ready z `CLAUDE.md`. Připravuje ho Claude. Kodér ho vybere sám (viz *Automatický start*).
 - Spuštění (Hermes nebo ty v terminálu):
   `sudo -n -u ha2n-coder /usr/local/bin/ha2n-run-task TASK-12`
 - Stav: `sudo -n -u ha2n-coder /usr/local/bin/ha2n-task-status` (nebo `--list`).
@@ -121,6 +128,34 @@ Aktualizace po změně v `tools/coder/`: `git pull` v instalačním klonu a znov
 - Omezení: poslední commit nemá žádné checky. Pokud někdy zapneš na `main` povinný check `e2e-pi`, GitHub tento
   commit zablokuje a zavírání se musí přesunout do workflow po mergi.
 
+## Automatický start (časovač)
+
+Na VM běží systemd časovač `ha2n-coder-next.timer` (5 min po startu, pak každých 10 min). Spouští
+`ha2n-run-task --next`: vezme připravený úkol (viz výše) a spustí ho stejně jako ruční běh. Zapnutý je
+ale jen po vytvoření souboru `/etc/ha2n-coder/autostart`; bez něj nedělá nic (ani nic nezapisuje).
+
+- Zapnout: `sudo touch /etc/ha2n-coder/autostart`
+- Vypnout: `sudo rm /etc/ha2n-coder/autostart` (běžící úkol se tím nezastaví; dokončí se)
+- Denní limit: `/etc/ha2n-coder/max-runs-per-day` (jedno číslo, výchozí 3). Počítají se automatické starty za posledních 24 h.
+  Při dosažení limitu časovač jen zapíše zprávu a skončí.
+- Pořadí: nejdřív úkol z nejstaršího otevřeného milníku (podle verze), pak z dalších milníků, nakonec úkoly bez milníku.
+  Uvnitř skupiny podle priority (High, Medium, Low), pak podle čísla úkolu.
+- Běh spuštěný časovačem má v `ha2n-task-status --list` značku `auto`.
+
+Pojistky proti smyčkám:
+
+- Běží nejvýš jeden úkol. Když běží jiný běh (zámek `run.lock`), časovač nic nespustí.
+- Úkol, jehož nejnovější běh už existuje (ať skončil jakkoli: `green`, `review`, `stopped`, `failed`, nebo
+  spadl uprostřed), se znovu nespustí. Počká, dokud se soubor úkolu v Backlogu na `origin/main`
+  nezmění po začátku toho běhu (rozhoduje čas, kdy změna dorazila na `main`; u starších běhů bez řádku
+  `started=` ve `status` se začátek bere z run id). Nový pokus tedy znamená úpravu úkolu (Claude nebo ty).
+  Výjimka: běh, který skončil `stopped` ještě před volbou větve (např. ready check odmítl nehotové závislosti),
+  nic neudělal a úkol neblokuje. Takový úkol se stane připraveným změnou jiného úkolu (závislost je Done),
+  ne svého souboru.
+- Ruční `ha2n-run-task TASK-N` tyto pojistky obchází (limit a pravidlo opakování hlídá jen `--next`).
+  Připravenost úkolu (stav, přiřazení, hotové závislosti) kontroluje stejně.
+- Chyba konfigurace (nečíselný `max-runs-per-day`) skončí chybou a nic nespustí.
+
 ## Regresní testy orchestrátoru
 
 ```bash
@@ -130,7 +165,10 @@ python3 -m unittest discover -s tools/coder/tests
 Testy běží celé v dočasných adresářích s lokálním bare repozitářem a stuby `sudo`, `gh`,
 `backlog`, `copilot` a `sleep` na `PATH`. Nepřistupují na VM ani k síti či skutečným tokenům.
 Bez Bash 4+ nebo `flock` se korektně přeskočí (systémový Bash na macOS je 3.x).
-Ověřují úklid zamítnutého patche i další běh po změně stejného souboru na `main`. Stejná sada pokrývá celý
+Ověřují úklid zamítnutého patche i další běh po změně stejného souboru na `main`. Testy `--next` ověřují
+vypínač, denní limit, zámek běhu, přeskočení `on-hold`/`manual-path`/cizího přiřazení/nesplněných závislostí,
+pořadí podle milníku a priority a zákaz opakování po ukončeném běhu (kromě zastavení v ready checku). Závislosti
+se testují ve všech třech podobách výstupu `backlog` (řádek, strom, `--json`) pro `--next` i ruční start. Stejná sada pokrývá celý
 průběh review (TASK-33) od PR po zavření úkolu: approve, changes → oprava → approve, changes bez opravy,
 chybějící `review-model`, nečitelný výstup, selhání reviewera, oddělený rozpočet oprav CI, štítky v `cost.csv`
 a `bash -n` všech skriptů. `sandbox.sh` samotný běží jen na VM (`bash -n` v testech).
@@ -147,5 +185,9 @@ Před změnou `PATH` se účet ověří přes `/usr/bin/id -un` a produkčnímu 
 > `sudo -n -u ha2n-coder /usr/local/bin/ha2n-run-task TASK-N` a pošli mu vypsané run id.
 > Pak každých 5 minut spusť `sudo -n -u ha2n-coder /usr/local/bin/ha2n-task-status` a jakmile je
 > `state` `green`, `review`, `stopped` nebo `failed`, pošli Janovi `message`, `pr` a verdikt review (řádek `review=`:
-> `approve`/`changes`/`failed`/`skipped`) jednou zprávou. Jiné příkazy s
-> `ha2n-coder` ani `ha2n-copilot` nespouštěj, tokeny nečti, nic nemerguj.
+> `approve`/`changes`/`failed`/`skipped`) jednou zprávou. Běhy spuštěné časovačem (značka `auto`) hlásíš stejně:
+> každých 5 minut spusť `sudo -n -u ha2n-coder /usr/local/bin/ha2n-task-status --list`; u každého run id, které
+> dosáhlo konečného stavu a ještě jsi ho nehlásil, spusť `ha2n-task-status <run-id>` a pošli Janovi totéž.
+> Hlídej si, které run id jsi už nahlásil. Časovač sám nic
+> neohlašuje. Ty ho nespouštíš (`--next`), ale můžeš pustit `ha2n-run-task TASK-N`, když Jan výslovně požádá.
+> Jiné příkazy s `ha2n-coder` ani `ha2n-copilot` nespouštěj, tokeny nečti, nic nemerguj.
