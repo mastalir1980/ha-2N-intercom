@@ -17,6 +17,7 @@ from __future__ import annotations
 import sys
 import types
 import unittest
+from unittest.mock import patch
 
 from _stubs import (
     API_PATH,
@@ -892,16 +893,21 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
         result = await flow.async_step_user(None)
         self.assertEqual(result["step_id"], "user")
         self.assertIs(result["last_step"], False)
+        self.assertNotIn(
+            "go_back", {marker.key for marker in result["data_schema"].schema}
+        )
 
         result = await flow.async_step_user(
             {"host": "192.0.2.20", "username": "u", "password": "p"}
         )
         self.assertEqual(result["step_id"], "device")
         self.assertIs(result["last_step"], True)
+        self.assertNotIn(
+            "go_back", {marker.key for marker in result["data_schema"].schema}
+        )
 
-    async def test_device_step_go_back_returns_to_user_prefilled(self) -> None:
-        """Back from the device step keeps host/credentials pre-filled and
-        the next submit re-validates the connection."""
+    async def test_device_step_finishes_setup_without_rechecking_connection(self) -> None:
+        """The device step saves setup instead of returning to connection."""
         flow = self._make_flow()
         await flow.async_step_user(
             {"host": "192.0.2.20", "username": "homeassistant", "password": "secret"}
@@ -913,32 +919,20 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
                 "name": "Front door",
                 "enable_camera": True,
                 "enable_doorbell": True,
-                "go_back": True,
             }
         )
-        self.assertEqual(result["type"], "form")
-        self.assertEqual(result["step_id"], "user")
-        self.assertEqual(_form_default(result, "host"), "192.0.2.20")
-        self.assertEqual(_form_default(result, "username"), "homeassistant")
-        self.assertEqual(_form_default(result, "password"), "secret")
-        # Nothing was persisted — the flow is still mid-setup.
-        self.assertNotEqual(result["type"], "create_entry")
+        self.assertEqual(result["type"], "create_entry")
+        self.assertEqual(result["data"]["name"], "Front door")
+        self.assertEqual(result["data"]["host"], "192.0.2.20")
+        self.assertEqual(result["data"]["username"], "homeassistant")
+        self.assertEqual(result["data"]["password"], "secret")
+        self.assertNotIn("go_back", result["data"])
+        self.assertEqual(len(FakeAPI.instances), instances_after_connect)
 
-        # Re-submitting the user step re-validates the connection and
-        # lands on the device step again with session values pre-filled.
-        result = await flow.async_step_user(
-            {"host": "192.0.2.20", "username": "homeassistant", "password": "secret"}
-        )
-        self.assertGreater(len(FakeAPI.instances), instances_after_connect)
-        self.assertEqual(result["step_id"], "device")
-        self.assertEqual(_form_default(result, "name"), "Front door")
-        self.assertIs(_form_default(result, "enable_camera"), True)
-
-    async def test_go_back_to_other_host_drops_previous_device_identity(
+    async def test_restarting_setup_for_other_host_uses_new_device_identity(
         self,
     ) -> None:
-        """Going back and connecting to a host that reports no serial must
-        not keep the first device's serial (unique id) or default name."""
+        """A fresh flow does not inherit a discarded flow's device identity."""
         original_info = FakeAPI.system_info
         try:
             FakeAPI.system_info = {"serialNumber": "SN-FIRST", "variant": "IP Verso"}
@@ -949,15 +943,11 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(flow._data["serial_number"], "SN-FIRST")
             self.assertEqual(flow._default_device_name, "IP Verso SN-FIRST")
 
-            result = await flow.async_step_device(
-                {
-                    "name": "Front door",
-                    "enable_camera": False,
-                    "enable_doorbell": True,
-                    "go_back": True,
-                }
-            )
+            flow = self._make_flow()
+            result = await flow.async_step_user(None)
             self.assertEqual(result["step_id"], "user")
+            self.assertEqual(_form_default(result, "host"), "")
+            self.assertEqual(flow._data, {})
 
             FakeAPI.system_info = {}
             result = await flow.async_step_user(
@@ -1419,7 +1409,7 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
 
 
 class OptionsFlowNavigationTests(unittest.IsolatedAsyncioTestCase):
-    """TASK-14: Next/Submit labels (last_step) and back navigation."""
+    """Forward-only navigation with Next/Submit labels and final-step saving."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -1501,14 +1491,100 @@ class OptionsFlowNavigationTests(unittest.IsolatedAsyncioTestCase):
         only = await flow.async_step_relay(None, relay_index=0)
         self.assertIs(only["last_step"], True)
 
-    # -------------------------------------------------------- back support
+    async def test_forward_only_flow_saves_all_values_only_on_final_step(self) -> None:
+        for camera_enabled in (False, True):
+            for relay_count in (0, 1, 2):
+                with self.subTest(camera=camera_enabled, relays=relay_count):
+                    saved_options = {
+                        "name": "Saved name",
+                        "enable_camera": camera_enabled,
+                        "scan_interval": 60,
+                    }
+                    entry = self._make_entry(options=dict(saved_options))
+                    entry.runtime_data = _make_runtime(
+                        [
+                            {"switch": number, "enabled": True, "switchOnDuration": 5}
+                            for number in (1, 3)[:relay_count]
+                        ]
+                    )
+                    flow = self._make_options_flow(entry)
+                    device_input = {
+                        "name": "Gatehouse",
+                        "enable_camera": camera_enabled,
+                        "enable_doorbell": True,
+                        "scan_interval": 42,
+                    }
+                    camera_input = {
+                        "live_view_mode": "mjpeg",
+                        "camera_source": "internal",
+                        "mjpeg_width": 800,
+                        "mjpeg_height": 600,
+                        "mjpeg_fps": 5,
+                    }
+                    relay_inputs = [
+                        {
+                            "relay_number": number,
+                            "relay_name": f"Custom relay {number}",
+                            "relay_device_type": "door",
+                            "relay_pulse_duration": 2500,
+                        }
+                        for number in (1, 3)[:relay_count]
+                    ]
+                    steps = [("device", device_input)]
+                    if camera_enabled:
+                        steps.append(("camera", camera_input))
+                    steps.extend(("relay", relay) for relay in relay_inputs)
 
-    async def test_camera_go_back_returns_to_device_with_prefill(self) -> None:
-        entry = self._make_entry()
+                    with patch.object(
+                        flow, "async_create_entry", wraps=flow.async_create_entry
+                    ) as create_entry:
+                        result = await flow.async_step_init(None)
+                        for index, (step_id, payload) in enumerate(steps):
+                            self.assertEqual(result["type"], "form")
+                            self.assertEqual(result["step_id"], step_id)
+                            self.assertIs(
+                                result["last_step"], index == len(steps) - 1
+                            )
+                            self.assertNotIn(
+                                "go_back",
+                                {marker.key for marker in result["data_schema"].schema},
+                            )
+                            if step_id == "relay":
+                                self.assertEqual(
+                                    _form_default(result, "relay_number"),
+                                    payload["relay_number"],
+                                )
+                            create_entry.assert_not_called()
+                            self.assertEqual(entry.options, saved_options)
+                            result = await getattr(flow, f"async_step_{step_id}")(
+                                dict(payload)
+                            )
+
+                        self.assertEqual(result["type"], "create_entry")
+                        create_entry.assert_called_once()
+
+                    expected = {
+                        **device_input,
+                        "relays": relay_inputs,
+                        "allow_insecure": False,
+                    }
+                    if camera_enabled:
+                        expected.update(camera_input)
+                    self.assertEqual(result["data"], expected)
+
+    async def test_restarting_options_discards_unsaved_draft(self) -> None:
+        saved_options = {
+            "name": "Saved name",
+            "enable_camera": True,
+            "scan_interval": 60,
+            "mjpeg_width": 640,
+        }
+        entry = self._make_entry(options=dict(saved_options))
+        entry.runtime_data = _make_runtime([{"switch": 1, "enabled": True}])
         flow = self._make_options_flow(entry)
         await flow.async_step_device(
             {
-                "name": "Gatehouse",
+                "name": "Unsaved name",
                 "enable_camera": True,
                 "enable_doorbell": True,
                 "scan_interval": 42,
@@ -1521,160 +1597,27 @@ class OptionsFlowNavigationTests(unittest.IsolatedAsyncioTestCase):
                 "mjpeg_width": 800,
                 "mjpeg_height": 600,
                 "mjpeg_fps": 5,
-                "go_back": True,
             }
         )
-        # Back on the device step, nothing persisted yet.
-        self.assertEqual(result["type"], "form")
+        self.assertEqual(result["step_id"], "relay")
+        self.assertEqual(entry.options, saved_options)
+
+        restarted_flow = self._make_options_flow(entry)
+        result = await restarted_flow.async_step_init(None)
         self.assertEqual(result["step_id"], "device")
-        self.assertEqual(_form_default(result, "name"), "Gatehouse")
-        self.assertEqual(_form_default(result, "scan_interval"), 42)
-
-        # Forward again: the camera step pre-fills what was entered before.
-        result = await flow.async_step_device(
+        self.assertEqual(_form_default(result, "name"), "Saved name")
+        self.assertEqual(_form_default(result, "scan_interval"), 60)
+        result = await restarted_flow.async_step_device(
             {
-                "name": "Gatehouse",
-                "enable_camera": True,
-                "enable_doorbell": True,
-                "scan_interval": 42,
-            }
-        )
-        self.assertEqual(result["step_id"], "camera")
-        self.assertEqual(_form_default(result, "mjpeg_width"), 800)
-        self.assertEqual(_form_default(result, "live_view_mode"), "mjpeg")
-
-    async def test_relay_go_back_to_camera_and_device(self) -> None:
-        entry = self._make_entry()
-        entry.runtime_data = _make_runtime(
-            [{"switch": 1, "enabled": True, "switchOnDuration": 5}]
-        )
-        flow = self._make_options_flow(entry)
-        await flow.async_step_device(
-            {
-                "name": "I",
+                "name": "Saved name",
                 "enable_camera": True,
                 "enable_doorbell": True,
                 "scan_interval": 60,
             }
         )
-        await flow.async_step_camera(
-            {
-                "live_view_mode": "auto",
-                "camera_source": "internal",
-                "mjpeg_width": 640,
-                "mjpeg_height": 480,
-                "mjpeg_fps": 5,
-            }
-        )
-        # First relay goes back to the camera step (camera enabled).
-        result = await flow.async_step_relay(
-            {
-                "relay_number": 1,
-                "relay_name": "Door",
-                "relay_device_type": "door",
-                "relay_pulse_duration": 2000,
-                "go_back": True,
-            }
-        )
-        self.assertEqual(result["type"], "form")
         self.assertEqual(result["step_id"], "camera")
         self.assertEqual(_form_default(result, "mjpeg_width"), 640)
-
-        # Without the camera, the first relay goes back to the device step.
-        entry2 = self._make_entry(options={"enable_camera": False})
-        entry2.runtime_data = _make_runtime(
-            [{"switch": 1, "enabled": True, "switchOnDuration": 5}]
-        )
-        flow2 = self._make_options_flow(entry2)
-        await flow2.async_step_device(
-            {
-                "name": "I",
-                "enable_camera": False,
-                "enable_doorbell": True,
-                "scan_interval": 60,
-            }
-        )
-        result = await flow2.async_step_relay(
-            {
-                "relay_number": 1,
-                "relay_name": "Door",
-                "relay_device_type": "door",
-                "relay_pulse_duration": 2000,
-                "go_back": True,
-            }
-        )
-        self.assertEqual(result["type"], "form")
-        self.assertEqual(result["step_id"], "device")
-
-    async def test_relay_go_back_between_relays_not_counted_twice(self) -> None:
-        entry = self._make_entry()
-        entry.runtime_data = _make_runtime(
-            [
-                {"switch": 1, "enabled": True, "switchOnDuration": 5},
-                {"switch": 2, "enabled": True, "switchOnDuration": 15},
-            ]
-        )
-        flow = self._make_options_flow(entry)
-        await flow.async_step_device(
-            {
-                "name": "I",
-                "enable_camera": False,
-                "enable_doorbell": True,
-                "scan_interval": 60,
-            }
-        )
-        # Relay 1 -> relay 2 -> back to relay 1 -> forward again.
-        result = await flow.async_step_relay(
-            {
-                "relay_number": 1,
-                "relay_name": "Door",
-                "relay_device_type": "door",
-                "relay_pulse_duration": 2000,
-            }
-        )
-        self.assertEqual(result["step_id"], "relay")
-        result = await flow.async_step_relay(
-            {
-                "relay_number": 2,
-                "relay_name": "Gate",
-                "relay_device_type": "gate",
-                "relay_pulse_duration": 15000,
-                "go_back": True,
-            }
-        )
-        self.assertEqual(result["step_id"], "relay")
-        # Revisited relay 1 pre-fills the values entered before going back.
-        self.assertEqual(_form_default(result, "relay_name"), "Door")
-        self.assertEqual(
-            result["description_placeholders"]["relay_number"], "1"
-        )
-
-        # Forward through both relays again, then save.
-        await flow.async_step_relay(
-            {
-                "relay_number": 1,
-                "relay_name": "Door",
-                "relay_device_type": "door",
-                "relay_pulse_duration": 2500,
-            }
-        )
-        result = await flow.async_step_relay(
-            {
-                "relay_number": 2,
-                "relay_name": "Gate",
-                "relay_device_type": "gate",
-                "relay_pulse_duration": 15000,
-            }
-        )
-        self.assertEqual(result["type"], "create_entry")
-        relays = result["data"]["relays"]
-        # Relay 1 appears exactly once, with the latest values.
-        self.assertEqual(len(relays), 2)
-        self.assertEqual([r["relay_number"] for r in relays], [1, 2])
-        self.assertEqual(relays[0]["relay_pulse_duration"], 2500)
-        # The navigation flag never leaks into saved options.
-        for relay in relays:
-            self.assertNotIn("go_back", relay)
+        self.assertEqual(entry.options, saved_options)
 
 
 class OptionsFlowRtspCredentialsTests(unittest.IsolatedAsyncioTestCase):

@@ -84,7 +84,7 @@ The integration supports the modern HA flows:
 
 For per-relay or device-feature changes, use the regular **Configure** (Options) button on the integration card.
 
-Both the setup wizard and **Configure** are step-by-step. To go back, tick **Back to the previous step** and submit the form; entered values stay in the draft and nothing is saved until you finish the last step without that option. HTTP API credentials are changed only in **⋮ → Reconfigure**; the RTSP username/password in the camera options belong to a separate streaming account.
+Both the setup wizard and **Configure** only move forward. Intermediate steps show **Next**; the last step shows **Submit** and saves the draft. To change values from an earlier step, close the dialog and start again; closing discards unsaved changes. HTTP API credentials are changed only in **⋮ → Reconfigure**; the RTSP username/password in the camera options belong to a separate streaming account.
 
 ## Services
 

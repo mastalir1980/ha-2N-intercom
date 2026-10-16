@@ -22,15 +22,13 @@
           "name": "Name",
           "enable_camera": "Kamera aktivieren",
           "enable_doorbell": "Klingel aktivieren",
-          "called_id": "Rufkonto (Peer)",
-          "go_back": "Zurück zum vorherigen Schritt"
+          "called_id": "Rufkonto (Peer)"
         },
         "data_description": {
           "name": "Anzeigename in Home Assistant",
           "enable_camera": "Kamera-Entität für Schnappschüsse und Streaming anlegen",
           "enable_doorbell": "Klingel-Entität zur Klingelerkennung anlegen",
-          "called_id": "Wählen Sie das Konto, das klingeln soll. Alle Anrufe = Klingeln bei jeder Taste.",
-          "go_back": "Anhaken und absenden, um ohne Speichern zu den Verbindungseinstellungen zurückzukehren. Eingegebene Werte bleiben erhalten."
+          "called_id": "Wählen Sie das Konto, das klingeln soll. Alle Anrufe = Klingeln bei jeder Taste."
         }
       },
       "reconfigure": {
@@ -114,8 +112,7 @@
           "mjpeg_height": "MJPEG-Höhe (Pixel)",
           "mjpeg_fps": "MJPEG-Bildrate (fps)",
           "rtsp_username": "RTSP-Benutzername",
-          "rtsp_password": "RTSP-Passwort",
-          "go_back": "Zurück zum vorherigen Schritt"
+          "rtsp_password": "RTSP-Passwort"
         },
         "data_description": {
           "live_view_mode": "Auto wählt RTSP wenn RTSP-Zugangsdaten konfiguriert und gültig sind, dann MJPEG, dann nur JPEG-Schnappschüsse",
@@ -124,8 +121,7 @@
           "mjpeg_height": "Höhe des MJPEG-Streams vom Gerät (z. B. 480)",
           "mjpeg_fps": "Bilder pro Sekunde für den MJPEG-Stream (1-15)",
           "rtsp_username": "Optional — wird nur für den RTSP-(H.264)-Videostream verwendet. Das Konto legen Sie am Gerät unter Services > Streaming > RTSP Server > User Database an; das API-Konto funktioniert hier nicht. Leer lassen, um MJPEG statt RTSP zu verwenden.",
-          "rtsp_password": "Optional — Passwort des RTSP-Kontos. Es wird hier nie angezeigt: leer lassen, um das gespeicherte Passwort zu behalten. Zum vollständigen Entfernen der RTSP-Zugangsdaten auch den Benutzernamen leeren; ohne sie verwendet die Integration MJPEG.",
-          "go_back": "Anhaken und absenden, um ohne Speichern zu den Geräteeinstellungen zurückzukehren. Eingegebene Werte bleiben erhalten."
+          "rtsp_password": "Optional — Passwort des RTSP-Kontos. Es wird hier nie angezeigt: leer lassen, um das gespeicherte Passwort zu behalten. Zum vollständigen Entfernen der RTSP-Zugangsdaten auch den Benutzernamen leeren; ohne sie verwendet die Integration MJPEG."
         }
       },
       "relay": {
@@ -135,15 +131,13 @@
           "relay_number": "Relaisnummer",
           "relay_name": "Relaisname",
           "relay_device_type": "Gerätetyp",
-          "relay_pulse_duration": "Pulsdauer (Millisekunden)",
-          "go_back": "Zurück zum vorherigen Schritt"
+          "relay_pulse_duration": "Pulsdauer (Millisekunden)"
         },
         "data_description": {
           "relay_number": "Physische Relaisnummer am Gerät (automatisch erkannt)",
           "relay_name": "Anzeigename für dieses Relais in Home Assistant",
           "relay_device_type": "Tür erzeugt einen Schalter, Tor erzeugt eine Abdeckung",
-          "relay_pulse_duration": "Länge des Schaltpulses an das Relais (ms). Standard ist die am Gerät konfigurierte switchOnDuration.",
-          "go_back": "Anhaken und absenden, um ohne Speichern zum vorherigen Schritt zurückzukehren. Eingegebene Werte bleiben erhalten."
+          "relay_pulse_duration": "Länge des Schaltpulses an das Relais (ms). Standard ist die am Gerät konfigurierte switchOnDuration."
         }
       }
     }
