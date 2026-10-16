@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import json
 import logging
 from types import SimpleNamespace
 import unittest
@@ -1425,6 +1426,96 @@ class PureHelperTests(unittest.TestCase):
         )
         self.assertEqual(result, (1280, 960))
 
+    def test_select_snapshot_resolution_exact_match(self) -> None:
+        CameraResolution = self.api_module.CameraResolution
+        caps = self.api_module.CameraCapabilities(
+            jpeg_resolutions=(
+                CameraResolution(1280, 960),
+                CameraResolution(320, 240),
+                CameraResolution(640, 480),
+            )
+        )
+        result = self.api_module.TwoNIntercomAPI._select_snapshot_resolution(
+            caps, width=640, height=480
+        )
+        self.assertEqual(result, (640, 480))
+
+    def test_select_snapshot_resolution_nearest_larger(self) -> None:
+        CameraResolution = self.api_module.CameraResolution
+        caps = self.api_module.CameraCapabilities(
+            jpeg_resolutions=(
+                CameraResolution(1280, 960),
+                CameraResolution(320, 240),
+                CameraResolution(640, 480),
+            )
+        )
+        for wanted, expected in (
+            ((436, 246), (640, 480)),
+            ((436, 236), (640, 480)),
+            ((80, 80), (320, 240)),
+            ((872, 491), (1280, 960)),
+        ):
+            with self.subTest(wanted=wanted):
+                result = self.api_module.TwoNIntercomAPI._select_snapshot_resolution(
+                    caps, width=wanted[0], height=wanted[1]
+                )
+                self.assertEqual(result, expected)
+
+    def test_select_snapshot_resolution_requires_both_dimensions(self) -> None:
+        CameraResolution = self.api_module.CameraResolution
+        caps = self.api_module.CameraCapabilities(
+            jpeg_resolutions=(
+                CameraResolution(1280, 240),
+                CameraResolution(640, 960),
+                CameraResolution(800, 600),
+            )
+        )
+        result = self.api_module.TwoNIntercomAPI._select_snapshot_resolution(
+            caps, width=700, height=400
+        )
+        self.assertEqual(result, (800, 600))
+
+    def test_select_snapshot_resolution_orders_by_area_then_dimensions(self) -> None:
+        CameraResolution = self.api_module.CameraResolution
+        caps = self.api_module.CameraCapabilities(
+            jpeg_resolutions=(
+                CameraResolution(800, 600),
+                CameraResolution(960, 320),
+                CameraResolution(640, 480),
+            )
+        )
+        for wanted, expected in (
+            ((400, 300), (640, 480)),
+            ((2000, 2000), (800, 600)),
+        ):
+            with self.subTest(wanted=wanted):
+                result = self.api_module.TwoNIntercomAPI._select_snapshot_resolution(
+                    caps, width=wanted[0], height=wanted[1]
+                )
+                self.assertEqual(result, expected)
+
+    def test_select_snapshot_resolution_fallback_to_largest(self) -> None:
+        CameraResolution = self.api_module.CameraResolution
+        for sizes, wanted, expected in (
+            (((640, 480), (320, 240)), (872, 491), (640, 480)),
+            (((1280, 960), (320, 240), (640, 480)), (2000, 2000), (1280, 960)),
+            (((960, 320), (640, 480)), (2000, 2000), (960, 320)),
+        ):
+            with self.subTest(sizes=sizes, wanted=wanted):
+                caps = self.api_module.CameraCapabilities(
+                    jpeg_resolutions=tuple(CameraResolution(*size) for size in sizes)
+                )
+                result = self.api_module.TwoNIntercomAPI._select_snapshot_resolution(
+                    caps, width=wanted[0], height=wanted[1]
+                )
+                self.assertEqual(result, expected)
+
+    def test_select_snapshot_resolution_no_caps(self) -> None:
+        result = self.api_module.TwoNIntercomAPI._select_snapshot_resolution(
+            self.api_module.CameraCapabilities(), width=1280, height=960
+        )
+        self.assertIsNone(result)
+
     def test_requires_basic_auth(self) -> None:
         import types as t
 
@@ -1626,6 +1717,65 @@ class AdditionalApiMethodTests(unittest.IsolatedAsyncioTestCase):
 
         return TestApi(response_payload, status, content_type)
 
+    def _make_snapshot_api(self, *snapshot_responses, capabilities=None, caps_payload=None):
+        """Exercise snapshot HTTP requests through a fake injected session."""
+        api_module = self.api_module
+
+        class FakeResponse:
+            status = 200
+
+            def __init__(self, payload):
+                self._payload = payload
+                self.headers = {
+                    "Content-Type": (
+                        "image/jpeg" if isinstance(payload, bytes) else "application/json"
+                    )
+                }
+
+            async def json(self):
+                return self._payload
+
+            async def text(self):
+                return json.dumps(self._payload)
+
+            async def read(self):
+                return self._payload
+
+            def raise_for_status(self):
+                return None
+
+        class FakeSession(api_module.aiohttp.ClientSession):
+            def __init__(self):
+                super().__init__()
+                self.requests = []
+
+            @property
+            def snapshot_requests(self):
+                return [
+                    request for request in self.requests
+                    if request["url"].endswith("/api/camera/snapshot")
+                ]
+
+            @asynccontextmanager
+            async def request(self, method, url, **kwargs):
+                self.requests.append({"method": method, "url": url, **kwargs})
+                if url.endswith("/api/camera/caps"):
+                    yield FakeResponse(
+                        caps_payload if caps_payload is not None
+                        else {"success": True, "result": {}}
+                    )
+                else:
+                    index = min(len(self.snapshot_requests), len(snapshot_responses)) - 1
+                    yield FakeResponse(snapshot_responses[index])
+
+        session = FakeSession()
+        api = api_module.TwoNIntercomAPI(
+            host="intercom.local", username="user", password="secret", session=session
+        )
+        if capabilities is not None:
+            api._camera_capabilities = capabilities
+        return api, session
+
     async def test_get_system_info_success(self) -> None:
         api = self._make_api({
             "success": True,
@@ -1816,23 +1966,182 @@ class AdditionalApiMethodTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_snapshot_non_image_with_code12_retry(self) -> None:
         """Snapshot rejected with code 12 at non-standard size retries at 640x480."""
-        api = self._make_api(
+        api, session = self._make_snapshot_api(
             {"success": False, "error": {"code": 12, "description": "bad size"}},
-            content_type="application/json",
+            b"\xff\xd8\xff",
         )
-        call_count = 0
-        orig_get = api.async_get_snapshot
+        with self.assertLogs(self.api_module._LOGGER, level="DEBUG") as logs:
+            result = await api.async_get_snapshot(80, 80)
 
-        async def tracking_snapshot(width=None, height=None, source=None):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return await orig_get(width=width, height=height, source=source)
-            return b"\xff"  # second call succeeds
+        self.assertEqual(result, b"\xff\xd8\xff")
+        self.assertEqual(
+            [request["params"] for request in session.snapshot_requests],
+            [
+                {"source": "internal", "width": 80, "height": 80},
+                {"source": "internal", "width": 640, "height": 480},
+            ],
+        )
+        self.assertEqual(
+            sum("retrying at 640x480" in message for message in logs.output), 1
+        )
 
-        api.async_get_snapshot = tracking_snapshot
-        result = await api.async_get_snapshot(80, 80)
-        self.assertEqual(call_count, 2)
+    async def test_get_snapshot_maps_to_cached_caps_with_one_http_request(self) -> None:
+        CameraResolution = self.api_module.CameraResolution
+        caps = self.api_module.CameraCapabilities(
+            jpeg_resolutions=(
+                CameraResolution(640, 480),
+                CameraResolution(1280, 960),
+            )
+        )
+        api, session = self._make_snapshot_api(b"\xff\xd8\xff", capabilities=caps)
+
+        result = await api.async_get_snapshot(872, 491)
+
+        self.assertEqual(result, b"\xff\xd8\xff")
+        self.assertEqual(len(session.requests), 1)
+        request = session.requests[0]
+        self.assertEqual(request["method"], "GET")
+        self.assertTrue(request["url"].endswith("/api/camera/snapshot"))
+        self.assertEqual(
+            request["params"], {"source": "internal", "width": 1280, "height": 960}
+        )
+        self.assertEqual(request["headers"], {"Accept": "image/jpeg"})
+
+    async def test_get_snapshot_fetches_and_caches_caps_before_mapping(self) -> None:
+        api, session = self._make_snapshot_api(
+            b"\xff\xd8\xff",
+            caps_payload={
+                "success": True,
+                "result": {"jpeg": {"resolutions": ["320x240", "640x480", "1280x960"]}},
+            },
+        )
+
+        for _ in range(2):
+            self.assertEqual(await api.async_get_snapshot(436, 246), b"\xff\xd8\xff")
+
+        self.assertEqual(
+            [request["url"].rsplit("/", 1)[-1] for request in session.requests],
+            ["caps", "snapshot", "snapshot"],
+        )
+        self.assertEqual(
+            [request["params"] for request in session.snapshot_requests],
+            [{"source": "internal", "width": 640, "height": 480}] * 2,
+        )
+
+    async def test_get_snapshot_without_caps_logs_fallback_once(self) -> None:
+        api, session = self._make_snapshot_api(b"\xff\xd8\xff")
+
+        with self.assertLogs(self.api_module._LOGGER, level="DEBUG") as logs:
+            for _ in range(2):
+                self.assertEqual(await api.async_get_snapshot(436, 246), b"\xff\xd8\xff")
+
+        self.assertEqual(
+            [request["params"] for request in session.snapshot_requests],
+            [{"source": "internal", "width": 436, "height": 246}] * 2,
+        )
+        fallback_logs = [
+            record for record in logs.records
+            if record.getMessage() == (
+                "camera/caps has no JPEG resolutions; snapshot uses requested "
+                "size with 640x480 fallback"
+            )
+        ]
+        self.assertEqual(len(fallback_logs), 1)
+        self.assertEqual(fallback_logs[0].levelno, logging.DEBUG)
+
+    async def test_get_snapshot_code12_retry_bypasses_caps_and_stops(self) -> None:
+        CameraResolution = self.api_module.CameraResolution
+        caps = self.api_module.CameraCapabilities(
+            jpeg_resolutions=(
+                CameraResolution(1280, 720),
+                CameraResolution(1920, 1080),
+            )
+        )
+        api, session = self._make_snapshot_api(
+            {
+                "success": False,
+                "error": {
+                    "code": 12,
+                    "description": "invalid image resolution",
+                    "param": "width or height",
+                },
+            },
+            capabilities=caps,
+        )
+
+        with self.assertLogs(self.api_module._LOGGER, level="DEBUG") as logs:
+            result = await api.async_get_snapshot(872, 491, source=" external ")
+
+        self.assertIsNone(result)
+        self.assertEqual(len(session.requests), 2)
+        self.assertEqual(
+            [request["params"] for request in session.requests],
+            [
+                {"source": "external", "width": 1280, "height": 720},
+                {"source": "external", "width": 640, "height": 480},
+            ],
+        )
+        self.assertEqual(
+            [record.levelno for record in logs.records], [logging.DEBUG, logging.WARNING]
+        )
+        self.assertIn("retrying at 640x480", logs.records[0].getMessage())
+        self.assertIn("code=12", logs.records[1].getMessage())
+
+    async def test_get_snapshot_code12_retry_without_caps_stops(self) -> None:
+        api, session = self._make_snapshot_api(
+            {"success": False, "error": {"code": 12, "description": "bad size"}}
+        )
+
+        with self.assertLogs(self.api_module._LOGGER, level="WARNING") as logs:
+            result = await api.async_get_snapshot(80, 80)
+
+        self.assertIsNone(result)
+        self.assertEqual(
+            [request["params"] for request in session.snapshot_requests],
+            [
+                {"source": "internal", "width": 80, "height": 80},
+                {"source": "internal", "width": 640, "height": 480},
+            ],
+        )
+        self.assertEqual([record.levelno for record in logs.records], [logging.WARNING])
+        self.assertIn("code=12", logs.output[0])
+
+    async def test_get_snapshot_code12_at_640x480_does_not_retry(self) -> None:
+        caps = self.api_module.CameraCapabilities(
+            jpeg_resolutions=(self.api_module.CameraResolution(640, 480),)
+        )
+        api, session = self._make_snapshot_api(
+            {"success": False, "error": {"code": 12, "description": "bad size"}},
+            capabilities=caps,
+        )
+
+        with self.assertLogs(self.api_module._LOGGER, level="WARNING"):
+            result = await api.async_get_snapshot()
+
+        self.assertIsNone(result)
+        self.assertEqual(len(session.requests), 1)
+        self.assertEqual(
+            session.requests[0]["params"],
+            {"source": "internal", "width": 640, "height": 480},
+        )
+
+    async def test_get_snapshot_maps_default_dimensions_and_normalizes_source(self) -> None:
+        caps = self.api_module.CameraCapabilities(
+            jpeg_resolutions=(self.api_module.CameraResolution(1280, 720),)
+        )
+        for source, expected_source in (
+            (None, "internal"),
+            ("   ", "internal"),
+            (" external ", "external"),
+        ):
+            with self.subTest(source=source):
+                api, session = self._make_snapshot_api(b"\xff", capabilities=caps)
+                self.assertEqual(await api.async_get_snapshot(source=source), b"\xff")
+                self.assertEqual(len(session.requests), 1)
+                self.assertEqual(
+                    session.requests[0]["params"],
+                    {"source": expected_source, "width": 1280, "height": 720},
+                )
 
     async def test_get_snapshot_non_image_other_error(self) -> None:
         api = self._make_api(
