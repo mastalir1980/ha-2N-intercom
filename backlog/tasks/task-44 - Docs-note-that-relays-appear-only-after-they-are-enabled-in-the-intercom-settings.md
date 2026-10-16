@@ -3,11 +3,11 @@ id: TASK-44
 title: >-
   Docs: note that relays appear only after they are enabled in the intercom
   settings
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-15 16:37'
-updated_date: '2026-10-16 16:09'
+updated_date: '2026-10-16 16:12'
 labels:
   - docs
 milestone: m-0
@@ -26,10 +26,10 @@ Why: a user who activated the relay/switch function on the intercom did not unde
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 README.md (section on relays / the relay control entities) states that relays appear only when enabled in the intercom settings and that the integration does not enable them
-- [ ] #2 INSTALLATION.md gets the same note in its troubleshooting or relay section, if such a section exists
-- [ ] #3 The wording avoids mentioning admin account names or device-specific paths; uses the neutral term 'intercom settings'
-- [ ] #4 validate.py green
+- [x] #1 README.md (section on relays / the relay control entities) states that relays appear only when enabled in the intercom settings and that the integration does not enable them
+- [x] #2 INSTALLATION.md gets the same note in its troubleshooting or relay section, if such a section exists
+- [x] #3 The wording avoids mentioning admin account names or device-specific paths; uses the neutral term 'intercom settings'
+- [x] #4 validate.py green
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -50,3 +50,9 @@ Updated INSTALLATION.md beside the switch/cover entity list and added No relay e
 
 Local gates passed on Python 3.12.15: full unittest discovery (624 tests), python3 validate.py, python3 -m py_compile custom_components/2n_intercom/*.py, and git diff --check. Device E2E was not run on the VM; the e2e-pi PR check remains the orchestrator gate after push. Acceptance criteria remain unchecked and status remains In Progress as required for headless execution.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented by the headless coder. Checks green on a17cbe8bf after 0 fix round(s): e2e-pi=pass, validate=pass, validate=pass. PR: https://github.com/mastalir1980/ha-2N-intercom/pull/69. Done takes effect when the PR is merged.
+<!-- SECTION:FINAL_SUMMARY:END -->
