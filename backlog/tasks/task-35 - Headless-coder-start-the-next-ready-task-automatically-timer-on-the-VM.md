@@ -1,11 +1,11 @@
 ---
 id: TASK-35
 title: 'Headless coder: start the next ready task automatically (timer on the VM)'
-status: In Progress
+status: To Test
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-14 14:48'
-updated_date: '2026-10-16 08:49'
+updated_date: '2026-10-16 09:29'
 labels:
   - agent
   - infra
@@ -31,13 +31,13 @@ Jan decided on 14 Oct 2026 that the coder on the VM starts by itself instead of 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Kill switch: without the root-owned file /etc/ha2n-coder/autostart, --next does nothing; a daily limit (/etc/ha2n-coder/max-runs-per-day, default 3) counts runs started by --next in the last 24 h
-- [ ] #2 No retry loops: a task whose last run ended stopped or failed is not picked again until its task file on origin/main has changed after that run started
+- [x] #1 Kill switch: without the root-owned file /etc/ha2n-coder/autostart, --next does nothing; a daily limit (/etc/ha2n-coder/max-runs-per-day, default 3) counts runs started by --next in the last 24 h
+- [x] #2 No retry loops: a task whose last run ended stopped or failed is not picked again until its task file on origin/main has changed after that run started
 - [ ] #3 install-vm.sh installs a systemd service + timer (every 10 min, user ha2n-coder) that runs --next; the timer is enabled but does nothing until /etc/ha2n-coder/autostart exists
 - [ ] #4 Jan is told about every run without asking: the "Pro Hermese" instructions in tools/coder/README.md let Hermes report each new end state (green, review, stopped, failed) from ha2n-task-status --list exactly once
-- [ ] #5 Stub simulation: nothing ready; one ready task started; running run blocks a second start; on-hold and manual-path skipped; stopped task not retried until its file changes; kill switch and daily limit; bash -n clean
-- [ ] #6 Rules and docs in sync: CLAUDE.md, .github/copilot-instructions.md (ready = picked automatically; label on-hold), tools/coder/README.md (Czech), docs/OVERVIEW.md pipeline section
-- [ ] #7 ha2n-run-task --next fetches main, and when no run is in state running it starts the next ready task (To Do, assignee @copilot, all dependencies Done, no label on-hold or manual-path). Order (decided by Jan, 15 Oct 2026): tasks of the earliest open milestone first (open milestones sorted by version number, e.g. v1.5.0 before v1.6.0), then tasks of later milestones, tasks without a milestone last; inside each group priority high > medium > low, then lowest task id. With nothing ready it exits 0 without output noise
+- [x] #5 Stub simulation: nothing ready; one ready task started; running run blocks a second start; on-hold and manual-path skipped; stopped task not retried until its file changes; kill switch and daily limit; bash -n clean
+- [x] #6 Rules and docs in sync: CLAUDE.md, .github/copilot-instructions.md (ready = picked automatically; label on-hold), tools/coder/README.md (Czech), docs/OVERVIEW.md pipeline section
+- [x] #7 ha2n-run-task --next fetches main, and when no run is in state running it starts the next ready task (To Do, assignee @copilot, all dependencies Done, no label on-hold or manual-path). Order (decided by Jan, 15 Oct 2026): tasks of the earliest open milestone first (open milestones sorted by version number, e.g. v1.5.0 before v1.6.0), then tasks of later milestones, tasks without a milestone last; inside each group priority high > medium > low, then lowest task id. With nothing ready it exits 0 without output noise
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -68,4 +68,6 @@ Review fixes (2026-10-16, round 2):
 - Dependencies are read version-independently: backlog task view --json (field dependencies, then each dependency's status == Done), falling back to the plain 'Dependencies:' line (backlog.md 1.48) and the 'Depends on' tree (1.53 --plain; only top-level ├─/└─ lines are direct, bracket status is not trusted). deps_done now takes a task id; used by --next and the manual ready check. Verified against the real backlog with 1.48.0 and 1.53.0 (TASK-42 skipped, TASK-41/45 ready). Tests: test_unfinished_dependency_with_{dependencies_line,depends_on_tree,json}.
 - last_run_blocks: a run that ended stopped with an empty branch= (stopped in or before the ready check) no longer blocks the task; it becomes ready through a dependency's file, not its own. Test: test_ready_check_stop_does_not_block_the_task.
 - install-vm.sh self-check prints the installed backlog.md version; tools/coder/README.md documents the tested versions (1.48.0, 1.53.0).
+
+2026-10-16 (Claude review): merged via PR #58 (03ae2d9, d421faa). Verified: coder stub suite 57/57 OK and bash -n clean on Linux; deps_done checked against real backlog.md 1.53.0 output (TASK-42 blocked by TASK-41, TASK-37 blocked by 7 deps, TASK-41/TASK-45 ready); docs/rules in sync. Open until verified on the VM: AC #3 (systemd timer installed and active) and AC #4 (Hermes reports auto runs once). AC #2 extended (any finished run blocks a retry until the task file changes; ready-check stops do not block), agreed in review.
 <!-- SECTION:NOTES:END -->
