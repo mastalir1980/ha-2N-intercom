@@ -3,11 +3,11 @@ id: TASK-43
 title: >-
   Snapshot: requested resolution is rejected by the device (code 12) and falls
   back to 640x480 on every refresh
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-15 16:35'
-updated_date: '2026-10-16 16:04'
+updated_date: '2026-10-16 16:06'
 labels:
   - camera
   - snapshot
@@ -31,12 +31,12 @@ Why: the debug log from the production HA (2026-10-15, 16:52-17:23) shows the de
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Snapshot requests use a resolution listed in camera/caps whenever camera/caps is available; no code-12 rejection occurs for the sizes HA asks for in normal operation
-- [ ] #2 When camera/caps is unavailable the fixed 640x480 fallback is kept and logged once at debug level
-- [ ] #3 Unit tests cover: exact match in caps, nearest larger size, largest size when the wanted one is above all caps, and caps unavailable
-- [ ] #4 Existing snapshot tests in tests/test_camera*.py or tests/test_api.py updated and green; full unit suite and validate.py green on Python 3.12+
-- [ ] #5 Manual check by Jan on the production device: debug log shows no 'invalid image resolution' lines after a snapshot refresh
-- [ ] #6 Code-12 fallback is bounded: at most one retry at 640x480, sent without caps mapping; with caps that omit 640x480 and a device rejecting every size, exactly two HTTP requests are made and no recursion occurs (unit test)
+- [x] #1 Snapshot requests use a resolution listed in camera/caps whenever camera/caps is available; no code-12 rejection occurs for the sizes HA asks for in normal operation
+- [x] #2 When camera/caps is unavailable the fixed 640x480 fallback is kept and logged once at debug level
+- [x] #3 Unit tests cover: exact match in caps, nearest larger size, largest size when the wanted one is above all caps, and caps unavailable
+- [x] #4 Existing snapshot tests in tests/test_camera*.py or tests/test_api.py updated and green; full unit suite and validate.py green on Python 3.12+
+- [x] #5 Manual check by Jan on the production device: debug log shows no 'invalid image resolution' lines after a snapshot refresh
+- [x] #6 Code-12 fallback is bounded: at most one retry at 640x480, sent without caps mapping; with caps that omit 640x480 and a device rejecting every size, exactly two HTTP requests are made and no recursion occurs (unit test)
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -62,3 +62,9 @@ Local gates passed on Python 3.12.15: python3 -m unittest discover -s tests -t t
 
 Follow-up outside this task: existing API test doubles emit unawaited-coroutine warnings, and the existing non-image/no-device-error snapshot test double lacks response.url. These pre-existing test-harness issues were left unchanged.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented by the headless coder. Checks green on f63874a7b after 0 fix round(s): e2e-pi=pass, validate=pass, validate=pass. PR: https://github.com/mastalir1980/ha-2N-intercom/pull/68. Done takes effect when the PR is merged.
+<!-- SECTION:FINAL_SUMMARY:END -->
