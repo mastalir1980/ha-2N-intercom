@@ -118,7 +118,22 @@ Detaily endpointů: [`API_REFERENCE.md`](API_REFERENCE.md).
   `CallSessionStateChanged` rings only with a non-empty `originator` other
   than `incoming` (for example, `button`). A missing originator is not a
   ring signal. Calls into the intercom never trigger the doorbell.
-  The optional `called_id` filter still restricts rings to a matching peer.
+- The optional `called_id` filter matches **any peer called in the same
+  session**, not just the last peer reported. Both call event types accumulate
+  canonical peers from `peer`/`address`, including the `connecting` event
+  (later `ringing` events may carry no peer). Sessionless events use the most
+  recently observed session. Polling merges all calls in each current session
+  without discarding peers already seen in events, and never triggers a ring.
+  Session termination or removal from `call/status` clears that session's peers;
+  an individual parallel call ending does not clear the session.
+  Canonicalization is shared by the stored option and event/status values:
+  lower-case, remove `sip:`/`sips:`, keep the user before `@`, and remove
+  `;params` and `:port` (also excluding any SIP password). Directory choices and
+  `called_id` in `entry.options` are not rewritten.
+- Every call event is logged at DEBUG with the event name, state,
+  direction/originator, session, sorted canonical session peers and the decision
+  (`rang`, `filtered by peer`, `not a ring`). Raw payloads and credential-bearing
+  peer URLs are not logged.
 - `ring_active` je krátký pulz (`DOORBELL_PULSE_DURATION = 1 s`) – binary
   sensor zvonku se rozsvítí na pulz, ne na celou délku vyzvánění.
 - `active_session_id` se drží jako zdroj pro `answer_call` / `hangup_call`,
