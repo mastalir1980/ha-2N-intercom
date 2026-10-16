@@ -48,6 +48,7 @@ flowchart LR
   J1([Jan: vlastní téma]) --> C[Claude: analýza + úkol v Backlogu<br/>@copilot, Definition of Ready]
   C --> BPR[PR backlog-téma] --> M1([Jan: merge]) --> MAIN[(main)]
   MAIN --> J2([Jan: vezmi TASK-N]) --> H[Hermes na VM]
+  MAIN -. každých 10 min .-> T([systemd časovač: ha2n-run-task režim next<br/>jen po vytvoření /etc/ha2n-coder/autostart]) --> K
   H --> K[ha2n-run-task<br/>ready check]
   K --> S[pískoviště: Copilot CLI<br/>unit testy + validate.py]
   S --> G{patch OK?<br/>chráněné cesty, velikost}
@@ -140,6 +141,7 @@ Chyby z E2E zakládá triage jako úkoly typu `bug` se štítkem `e2e` ([`e2e/ag
 |---|---|
 | Nový úkol z nápadu nebo issue | řeknu Claudovi; připraví úkol a backlog PR |
 | Pustit kodéra | Hermesovi „vezmi TASK-N“, nebo na VM `sudo -n -u ha2n-coder /usr/local/bin/ha2n-run-task TASK-N` |
+| Zapnout / vypnout automatický start kodéra | na VM `sudo touch /etc/ha2n-coder/autostart` / `sudo rm /etc/ha2n-coder/autostart` (podrobnosti a denní limit v `tools/coder/README.md`) |
 | Stav kodéra | `sudo -n -u ha2n-coder /usr/local/bin/ha2n-task-status` (`--list` = přehled s kredity) |
 | Otestovat rozpracovanou změnu | `bash e2e/e2e.sh wip` |
 | Poslední výsledek E2E | `bash e2e/e2e.sh report` |

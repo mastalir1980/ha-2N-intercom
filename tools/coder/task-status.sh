@@ -12,8 +12,9 @@ credits() {  # total AI credits of one run, "-" when nothing is logged
 }
 if [ "${1:-}" = "--list" ]; then
   for d in $(ls -1d "$RUNS"/2* 2>/dev/null | sort | tail -10); do
-    printf '%-32s %-8s %9s cr  %s\n' "$(basename "$d")" "$(sed -n 's/^state=//p' "$d/status" 2>/dev/null)" \
-      "$(credits "$(basename "$d")")" "$(sed -n 's/^message=//p' "$d/status" 2>/dev/null | cut -c1-80)"
+    mark=""; [ -e "$d/next.marker" ] && mark="auto"   # started by the timer (--next)
+    printf '%-32s %-8s %-5s %9s cr  %s\n' "$(basename "$d")" "$(sed -n 's/^state=//p' "$d/status" 2>/dev/null)" \
+      "$mark" "$(credits "$(basename "$d")")" "$(sed -n 's/^message=//p' "$d/status" 2>/dev/null | cut -c1-80)"
   done; exit 0
 fi
 RUN="${1:-latest}"

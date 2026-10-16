@@ -16,7 +16,7 @@ Backlog tasks with acceptance criteria and an implementation plan. **You** (Copi
 on Jan's Mac) implement those tasks.
 
 - **Work from a task.** Start with `backlog task <id> --plain`. Tasks assigned to `@copilot` with an
-  implementation plan are ready for you. If Jan asks for a code change with no task, ask whether to create one first.
+  implementation plan are ready for you. Tasks labelled `on-hold` are skipped by the VM timer. If Jan asks for a code change with no task, ask whether to create one first.
   Tasks assigned to `@copilot-mac` (label `manual-path`) change the pipeline's protected paths and are done only in
   VS Code on Jan's Mac, never by the headless coder on the VM.
 - **Follow the plan.** Implement what the description, acceptance criteria and implementation plan say.
@@ -106,6 +106,8 @@ the orchestrator feeds its `blocking` findings back to you as one extra fix roun
   created (`-m vX.Y.Z`); pipeline/tooling tasks (`manual-path`, `ci`, `infra`) get none. `backlog milestone list` shows progress.
 - **Order of work for the headless coder:** ready tasks of the earliest open milestone first (by version number),
   then later milestones, tasks without a milestone last; inside a group by priority, then task id.
+  The systemd timer on the VM (`ha2n-coder-next.timer`, see `tools/coder/README.md`) picks them up on its own once
+  `/etc/ha2n-coder/autostart` exists; the label `on-hold` keeps a task off the timer.
 - **PRs merge to `main` continuously.** HACS users install GitHub releases, not `main`, so `main` is the next version
   in preparation. Do not hold PRs back for a release.
 - **Closing a version:** all tasks of the milestone are Done (Jan tests the To Test items and runs `e2e.sh relays` once)

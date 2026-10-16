@@ -57,6 +57,35 @@ install -o root -g root -m 0755 "$SRC/run-task.sh"    /usr/local/bin/ha2n-run-ta
 install -o root -g root -m 0755 "$SRC/task-status.sh" /usr/local/bin/ha2n-task-status
 install -o root -g root -m 0755 "$SRC/set-token.sh"   /usr/local/sbin/ha2n-coder-set-token
 
+echo "==> autostart timer (inert until /etc/ha2n-coder/autostart exists; see tools/coder/README.md)"
+cat > /etc/systemd/system/ha2n-coder-next.service <<'UNIT'
+[Unit]
+Description=Headless coder: start the next ready Backlog task (--next)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ha2n-coder
+ExecStart=/usr/local/bin/ha2n-run-task --next
+# the run is started detached (setsid); keep it alive after this oneshot exits
+KillMode=process
+TimeoutStartSec=15min
+UNIT
+cat > /etc/systemd/system/ha2n-coder-next.timer <<'UNIT'
+[Unit]
+Description=Headless coder: check for the next ready task every 10 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now ha2n-coder-next.timer >/dev/null
+
 echo "==> sudoers: $CALLER may only start/inspect tasks; ha2n-coder may only call the sandbox"
 TMP="$(mktemp)"
 cat > "$TMP" <<SUDO
@@ -80,4 +109,6 @@ CALLER_HOME="$(getent passwd "$CALLER" | cut -d: -f6)"
 sudo -u ha2n-copilot test -r "$CALLER_HOME" && { echo "!! ha2n-copilot can read $CALLER_HOME (Hermes' secrets) — run: sudo chmod 700 $CALLER_HOME"; ok=0; }
 sudo -u ha2n-copilot test -w /opt/ha2n-coder/py312/bin && { echo "!! ha2n-copilot can modify its Python toolchain"; ok=0; }
 sudo -u "$CALLER" sudo -n -u ha2n-coder /usr/local/bin/ha2n-task-status --list >/dev/null && echo "    $CALLER -> ha2n-task-status OK"
+systemctl is-active --quiet ha2n-coder-next.timer || { echo "!! ha2n-coder-next.timer is not active"; ok=0; }
+[ -e /etc/ha2n-coder/autostart ] && echo "    autostart: ON (/etc/ha2n-coder/autostart)" || echo "    autostart: off (sudo touch /etc/ha2n-coder/autostart to enable)"
 [ "$ok" = 1 ] && echo "OK." || { echo "self-check FAILED" >&2; exit 1; }

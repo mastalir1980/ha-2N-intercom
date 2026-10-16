@@ -1,11 +1,11 @@
 ---
 id: TASK-35
 title: 'Headless coder: start the next ready task automatically (timer on the VM)'
-status: To Do
+status: In Progress
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-14 14:48'
-updated_date: '2026-10-15 12:47'
+updated_date: '2026-10-16 07:16'
 labels:
   - agent
   - infra
@@ -51,3 +51,16 @@ Must not change: the ready check of a normal run, protected paths, token handlin
 
 Ordering: read open milestones from `backlog milestone list --plain` (active only), sort by semantic version of the name; a task's milestone comes from `backlog task view` (Milestone line). Unit-test the sort in the stub simulation (two milestones + one task without milestone).
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Plan confirmed; implementation in progress. Decisions: (1) 'a run is active' = flock on run.lock is held (the same lock the foreground run takes), not a leftover state=running in a status file; a status file that still says running while the lock is free is treated as a crashed run. (2) status files get a started=<epoch> key, used by the retry guard to compare with the task file's last commit on origin/main. (3) The retry guard covers every finished state (stopped, failed, review, green) plus crashed running runs, not only stopped/failed: review/green runs already own a PR branch, so re-running would only end in 'branch already exists'. This extends AC #2; to be confirmed by Jan. (4) Milestone and priority are parsed from task view, sorted with zero-padded keys.
+
+Self-review fixes (2026-10-16):
+- last_run_blocks: runs without started= in status (all runs made before this change) blocked their task forever, because the 'file changed after the run started' test could never pass. The start time now falls back to the run id (local time, parsed with python3). Test: test_run_without_started_field_uses_the_run_id_time.
+- last_run_blocks: git log now uses --first-parent, so the time counted is when the task change landed on main (the merge commit), not when the commit was written on a branch.
+- Foreground ready check (manual starts too): the dependency check matched 'Depends on', but backlog prints 'Dependencies:', so it never fired. Both paths now share deps_done(). Test: test_manual_start_refuses_unmet_dependencies.
+- README 'Pro Hermese': Hermes now polls ha2n-task-status --list every 5 min to find auto runs, because it has no other trigger for them.
+- Dry run of candidate_row against the real backlog: TASK-45 (High, m-0) then TASK-41; every other To Do task is skipped for the right reason (assignee, manual-path, on-hold, unmet deps).
+<!-- SECTION:NOTES:END -->

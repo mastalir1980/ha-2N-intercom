@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import csv
+import fcntl
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 
 
@@ -21,6 +24,7 @@ STUB = """\
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -50,6 +54,19 @@ elif name == "backlog" and args == ["task", "view", "TASK-34", "--plain"]:
 elif name == "backlog" and args[:3] == ["task", "edit", "TASK-34"]:
     Path("backlog").mkdir(exist_ok=True)
     Path("backlog/task-34.md").write_text("Status: Done\\n")
+elif name == "backlog" and args[:2] == ["task", "view"] and len(args) == 4 and (root / "tasks" / f"{args[2]}.txt").exists():
+    sys.stdout.write((root / "tasks" / f"{args[2]}.txt").read_text(encoding="utf-8"))
+elif name == "backlog" and args[:2] == ["task", "list"]:
+    print("To Do:")
+    for path in sorted((root / "tasks").glob("TASK-*.txt")):
+        head = path.read_text(encoding="utf-8").split("Description:")[0]
+        if re.search("^Status: .*To Do", head, re.M) is None:
+            continue
+        priority = re.search("^Priority: ([A-Za-z]+)", head, re.M).group(1)
+        task_id, title = re.search("^Task (TASK-[^ ]+) - (.*)$", head, re.M).groups()
+        print(f"  [{priority.upper()}] {task_id} - {title}")
+elif name == "backlog" and args[:2] == ["milestone", "list"]:
+    sys.stdout.write((root / "milestones.txt").read_text(encoding="utf-8"))
 elif name == "sleep":
     pass
 elif name == "gh" and (root / "gh-ok").exists():
@@ -86,7 +103,7 @@ elif name == "copilot" and args in ([], ["--review"]):
     prompts = root / "prompts"
     prompts.mkdir(exist_ok=True)
     prompt = sys.stdin.read()
-    if "TASK-34" not in prompt:
+    if "TASK-" not in prompt:
         sys.exit("missing task prompt")
     kind = "review" if args else "coder"
     index = len(list(prompts.glob(f"{kind}-*.md"))) + 1
@@ -211,16 +228,20 @@ class RunTaskCloneTests(unittest.TestCase):
         (self.seed / ".gitignore").write_text("ignored.tmp\n", encoding="utf-8")
         self._commit_main("Initial fixture")
 
-    def _git(self, cwd: Path, *args: str) -> str:
+    def _git(self, cwd: Path, *args: str, env: dict[str, str] | None = None) -> str:
         result = subprocess.run(
-            [self.git, *args], cwd=cwd, env=self.env,
+            [self.git, *args], cwd=cwd, env=self.env if env is None else env,
             check=True, capture_output=True, text=True, timeout=15,
         )
         return result.stdout
 
-    def _commit_main(self, message: str) -> None:
+    def _commit_main(self, message: str, *, committed_at: int | None = None) -> None:
         self._git(self.seed, "add", "-A")
-        self._git(self.seed, "commit", "-q", "-m", message)
+        env = None
+        if committed_at is not None:
+            env = {**self.env, "GIT_AUTHOR_DATE": f"{committed_at} +0000",
+                   "GIT_COMMITTER_DATE": f"{committed_at} +0000"}
+        self._git(self.seed, "commit", "-q", "-m", message, env=env)
         self._git(self.seed, "push", "-q", "origin", "main")
 
     def _write_patch(self) -> None:
@@ -659,6 +680,233 @@ class RunTaskCloneTests(unittest.TestCase):
                     [self.bash, "-n", str(script)], capture_output=True, text=True, timeout=15,
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
+
+    # ---- autostart (TASK-35): ha2n-run-task --next, the entry point of the systemd timer ----
+
+    MILESTONES = textwrap.dedent("""\
+        Active milestones (2):
+          m-0: v1.5.0 (10/18 done)
+          m-1: v1.6.0 (0/4 done)
+        Completed milestones (0):
+          (none)
+        """)
+
+    def _autostart(self, max_runs: int = 10) -> None:
+        # Copilot stops every run right after the ready check, so background runs end quickly.
+        (self.root / "etc/ha2n-coder/autostart").touch()
+        (self.root / "etc/ha2n-coder/max-runs-per-day").write_text(f"{max_runs}\n", encoding="utf-8")
+        (self.root / "copilot-stop").touch()
+        (self.root / "milestones.txt").write_text(self.MILESTONES, encoding="utf-8")
+
+    def _task(self, number: int, *, status: str = "To Do", priority: str = "High",
+              assignee: str = "@copilot", labels: tuple[str, ...] = (),
+              milestone: str | None = None, deps: tuple[int, ...] = ()) -> None:
+        # The text as `backlog task view` prints it; the same file goes to the seed repo for last_run_blocks.
+        title = f"Fixture task {number}"
+        head = f"Task TASK-{number} - {title}"
+        lines = [
+            f"File: backlog/tasks/task-{number} - {title}.md", "", head, "=" * len(head), "",
+            f"Status: {status}", f"Priority: {priority}", "Type: task", f"Assignee: {assignee}",
+        ]
+        if labels:
+            lines.append("Labels: " + ", ".join(labels))
+        if deps:
+            lines.append("Dependencies: " + ", ".join(f"TASK-{dep}" for dep in deps))
+        if milestone:
+            lines.append(f"Milestone: {milestone}")
+        lines += ["", "Description:", "Fixture.", "", "Acceptance Criteria:", "- [ ] #1 Fixture criterion"]
+        text = "\n".join(lines) + "\n"
+        (self.root / "tasks").mkdir(exist_ok=True)
+        (self.root / "tasks" / f"TASK-{number}.txt").write_text(text, encoding="utf-8")
+        (self.seed / "backlog/tasks").mkdir(parents=True, exist_ok=True)
+        (self.seed / "backlog/tasks" / f"task-{number} - {title}.md").write_text(text, encoding="utf-8")
+
+    def _next(self) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [self.bash, str(CODER_DIR / "run-task.sh"), "--next"],
+            cwd=self.root, env=self.env, capture_output=True, text=True, timeout=60,
+        )
+
+    def _started(self, result: subprocess.CompletedProcess[str]) -> str:
+        match = re.search(r"^started (\S+) ", result.stdout, re.M)
+        self.assertIsNotNone(match, result.stdout + result.stderr)
+        return match.group(1)
+
+    def _runs(self) -> list[str]:
+        return sorted(
+            path.name for path in (self.base / "runs").iterdir()
+            if path.is_dir() and not path.is_symlink()
+        )
+
+    def _parse_status(self, path: Path) -> dict[str, str]:
+        return dict(line.split("=", 1) for line in path.read_text(encoding="utf-8").splitlines())
+
+    def _wait_idle(self, timeout: float = 60) -> None:
+        # A background run holds the run lock until its process exits.
+        deadline = time.monotonic() + timeout
+        with (self.base / "run.lock").open("a") as handle:
+            while True:
+                try:
+                    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    return
+                except BlockingIOError:
+                    if time.monotonic() > deadline:
+                        self.fail("a background run still holds the run lock")
+                    time.sleep(0.2)
+
+    def _wait_run(self, run: str, timeout: float = 60) -> dict[str, str]:
+        path = self.base / "runs" / run / "status"
+        deadline = time.monotonic() + timeout
+        while True:
+            status = self._parse_status(path) if path.exists() else {}
+            if status.get("state", "running") != "running":
+                break
+            if time.monotonic() > deadline:
+                self.fail(f"run {run} did not finish")
+            time.sleep(0.2)
+        self._wait_idle(timeout)
+        return status
+
+    def _drain(self) -> list[str]:
+        # Call --next until it starts nothing; return the tasks it started, in order.
+        started: list[str] = []
+        for _ in range(10):
+            result = self._next()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            if re.search(r"^started ", result.stdout, re.M) is None:
+                self.assertEqual(result.stdout, "")
+                return started
+            status = self._wait_run(self._started(result))
+            self.assertEqual(status["state"], "stopped", status)
+            started.append(status["task"])
+        self.fail("--next kept starting tasks")
+
+    def test_next_starts_one_ready_task_and_records_it(self) -> None:
+        self._autostart()
+        self._task(2)
+        self._commit_main("Add a ready task")
+        result = self._next()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        run = self._started(result)
+        status = self._wait_run(run)
+        self.assertEqual(status["task"], "TASK-2")
+        self.assertRegex(status["started"], r"^\d+$")
+        self.assertIn("Copilot stopped", status["message"])
+        self.assertTrue((self.base / "runs" / run / "next.marker").exists())
+
+    def test_next_without_autostart_file_does_nothing(self) -> None:
+        self._task(2)
+        self._commit_main("Add a ready task")
+        result = self._next()
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+        self.assertEqual(self._runs(), [])
+        calls = (self.root / "calls.log").read_text(encoding="utf-8").splitlines() if (self.root / "calls.log").exists() else []
+        self.assertTrue(set(calls) <= {"id -un", "getent passwd ha2n-coder"}, calls)
+
+    def test_next_rejects_extra_arguments(self) -> None:
+        result = subprocess.run(
+            [self.bash, str(CODER_DIR / "run-task.sh"), "--next", "TASK-2"],
+            cwd=self.root, env=self.env, capture_output=True, text=True, timeout=20,
+        )
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("usage: ha2n-run-task --next", result.stderr)
+
+    def test_next_without_ready_tasks_does_nothing(self) -> None:
+        self._autostart()
+        self._task(2, status="In Progress")
+        self._commit_main("Add a task that is not ready")
+        result = self._next()
+        self.assertEqual((result.returncode, result.stdout), (0, ""), result.stderr)
+        self.assertEqual(self._runs(), [])
+
+    def test_next_daily_limit_counts_only_autostarted_runs(self) -> None:
+        self._autostart(max_runs=1)
+        manual = self.base / "runs/20250101-000000-TASK-98"
+        manual.mkdir()
+        (manual / "status").write_text("task=TASK-98\nstarted=1\nstate=stopped\n", encoding="utf-8")
+        self._task(2)
+        self._commit_main("Add a ready task")
+        self._wait_run(self._started(self._next()))
+        blocked = self._next()
+        self.assertEqual(blocked.returncode, 0, blocked.stdout + blocked.stderr)
+        self.assertIn("daily limit reached: 1 autostarted runs in the last 24 h (max 1)", blocked.stdout)
+        self.assertEqual(len(self._runs()), 2)
+
+    def test_next_does_not_start_while_a_task_runs(self) -> None:
+        self._autostart()
+        self._task(2)
+        self._commit_main("Add a ready task")
+        with (self.base / "run.lock").open("a") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            busy = self._next()
+        self.assertEqual(busy.returncode, 0, busy.stdout + busy.stderr)
+        self.assertIn("a task is running; not starting another", busy.stdout)
+        self.assertEqual(self._runs(), [])
+        self.assertEqual(self._drain(), ["TASK-2"])
+
+    def test_next_skips_on_hold_manual_path_and_other_assignees(self) -> None:
+        self._autostart()
+        self._task(20, labels=("agent", "on-hold"))
+        self._task(21, labels=("agent", "manual-path"))
+        self._task(22, assignee="@copilot-mac")
+        self._task(23, status="In Progress")
+        self._task(24, deps=(31,))
+        self._task(31, status="In Progress")
+        self._task(40, status="Done")
+        self._task(25)
+        self._task(26, deps=(40,))
+        self._task(27, labels=("not-on-hold",))
+        self._commit_main("Add fixture tasks")
+        self.assertEqual(self._drain(), ["TASK-25", "TASK-26", "TASK-27"])
+
+    def test_next_orders_by_milestone_then_priority_then_id(self) -> None:
+        self._autostart()
+        self._task(10, milestone="m-1")
+        self._task(11, priority="Low", milestone="m-0")
+        self._task(12)
+        self._task(17, milestone="m-0")
+        self._commit_main("Add fixture tasks")
+        self.assertEqual(self._drain(), ["TASK-17", "TASK-11", "TASK-10", "TASK-12"])
+
+    def test_stopped_task_waits_for_its_file_to_change_on_main(self) -> None:
+        self._autostart()
+        self._task(2)
+        self._commit_main("Add a ready task")
+        status = self._wait_run(self._started(self._next()))
+        self.assertEqual(status["state"], "stopped")
+        started = int(status["started"])
+
+        self.assertEqual(self._drain(), [])
+        (self.seed / "backlog/tasks/task-2 - Fixture task 2.md").write_text("Edited on main\n", encoding="utf-8")
+        self._commit_main("Update the task on main", committed_at=started + 1)
+        time.sleep(1.1)   # run directories are named by second
+        self.assertEqual(self._drain(), ["TASK-2"])
+
+    def test_run_without_started_field_uses_the_run_id_time(self) -> None:
+        # Runs made before status had started= must not keep their task off forever.
+        self._autostart()
+        added = int(time.time()) - 3600
+        self._task(2)
+        self._commit_main("Add a ready task", committed_at=added)
+        legacy = self.base / "runs" / (time.strftime("%Y%m%d-%H%M%S", time.localtime(added + 600)) + "-TASK-2")
+        legacy.mkdir()
+        (legacy / "status").write_text("task=TASK-2\nstate=failed\nmessage=old run\n", encoding="utf-8")
+
+        self.assertEqual(self._drain(), [])
+        (self.seed / "backlog/tasks/task-2 - Fixture task 2.md").write_text("Edited on main\n", encoding="utf-8")
+        self._commit_main("Update the task on main", committed_at=added + 1200)
+        self.assertEqual(self._drain(), ["TASK-2"])
+
+    def test_manual_start_refuses_unmet_dependencies(self) -> None:
+        self._task(5, deps=(31,))
+        self._task(31, status="In Progress")
+        self._commit_main("Add fixture tasks")
+        result = subprocess.run(
+            [self.bash, str(CODER_DIR / "run-task.sh"), "--foreground", "TASK-5", "--run", "20260101-000001-TASK-5"],
+            cwd=self.root, env=self.env, capture_output=True, text=True, timeout=20,
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("task has dependencies that are not done", result.stdout)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@
 #
 #   ha2n-run-task <TASK-ID>               start in the background, print the run id and exit
 #   ha2n-run-task --foreground <TASK-ID>  run attached (for debugging)
+#   ha2n-run-task --next                  start the next ready task if autostart allows it (systemd timer, see install-vm.sh)
 #
 # Flow: ready check → sandbox clone → Copilot implements → local gates (≤2 local fix rounds) →
 # patch checked for protected paths/size → applied in our own clone → push + PR (Jan's token) →
@@ -34,23 +35,127 @@ PROTECTED='(^|/)\.git|^(\.github/|e2e/ci/|e2e/scripts/|e2e/run\.sh$|e2e/nightly\
 MAX_FILES=40; MAX_LINES=2500; LOCAL_ROUNDS=2; CI_ROUNDS=3; REVIEW_ROUNDS=1; CHECKS_TIMEOUT=$((45*60))
 COST_CSV="$BASE/cost.csv"   # one line per Copilot call; stays on the VM (the repo is public)
 
-FG=0; [ "${1:-}" = "--foreground" ] && { FG=1; shift; }
-TASK="${1:-}"
-[[ "$TASK" =~ ^TASK-[0-9]+(\.[0-9]+)?$ ]] || { echo "usage: ha2n-run-task [--foreground] TASK-<n>" >&2; exit 2; }
+setup_auth() {  # sets TOKEN and AUTH, defines the two wrappers every git/gh call goes through
+  TOKEN="$(cat "$REPO_TOKEN_FILE")"
+  AUTH="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+  export GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1
+  # The token goes only to these two wrappers (env, not argv: invisible in `ps` to other users).
+  gitauth() { GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" GIT_CONFIG_VALUE_0="$AUTH" git "$@"; }
+  ghx() { GH_TOKEN="$TOKEN" gh "$@"; }
+}
 
-if [ "$FG" = 0 ]; then
-  RUN="$(date +%Y%m%d-%H%M%S)-$TASK"
-  mkdir "$RUNS/$RUN" 2>/dev/null || { echo "a run of $TASK was started this second already" >&2; exit 2; }
-  setsid nohup "$0" --foreground "$TASK" --run "$RUN" > "$RUNS/$RUN/run.log" 2>&1 < /dev/null &
-  echo "started $RUN — status: ha2n-task-status $RUN"; exit 0
+launch_bg() {  # launch_bg <TASK> [next]: start a run in the background; "next" leaves a marker for the daily limit
+  local run="$(date +%Y%m%d-%H%M%S)-$1"
+  mkdir "$RUNS/$run" 2>/dev/null || { echo "a run of $1 was started this second already" >&2; exit 2; }
+  [ "${2:-}" = next ] && : > "$RUNS/$run/next.marker"
+  local -a detach=(nohup)
+  command -v setsid >/dev/null 2>&1 && detach=(setsid nohup)   # setsid is Linux-only; macOS dev runs just use nohup
+  "${detach[@]}" "$0" --foreground "$1" --run "$run" > "$RUNS/$run/run.log" 2>&1 < /dev/null 8>&- 9>&- &
+  echo "started $run — status: ha2n-task-status $run"
+}
+
+last_run_blocks() {  # last_run_blocks <TASK>: 0 = keep it off; 1 = a new attempt is fair
+  # The newest run of a task keeps it off until its task file on origin/main changed after that run started.
+  local run started changed
+  run="$(ls -1d "$RUNS"/*-"$1" 2>/dev/null | sort | tail -1)"
+  [ -n "$run" ] || return 1
+  started="$(sed -n 's/^started=//p' "$run/status" 2>/dev/null | head -1)"
+  if ! [[ "$started" =~ ^[0-9]+$ ]]; then   # runs from before started= existed: the run id holds the local start time
+    started="$(python3 -c 'import sys, time; print(int(time.mktime(time.strptime(sys.argv[1], "%Y%m%d-%H%M%S"))))' \
+      "$(basename "$run" | cut -c1-15)" 2>/dev/null)"
+    [[ "$started" =~ ^[0-9]+$ ]] || return 0
+  fi
+  # --first-parent: the time the change landed on main (merge commit), not when it was written on a branch
+  changed="$(git log -1 --first-parent --format=%ct origin/main -- "backlog/tasks/task-${1#TASK-} - *" 2>/dev/null)"
+  [[ "$changed" =~ ^[0-9]+$ ]] && [ "$changed" -gt "$started" ] && return 1
+  return 0
+}
+
+deps_done() {  # deps_done <task header>: fails when a task listed under "Dependencies:" is not Done
+  local dep
+  for dep in $(sed -n 's/^Dependencies: //p' <<<"$1" | grep -oE 'TASK-[0-9]+(\.[0-9]+)?'); do
+    backlog task view "$dep" --plain 2>/dev/null | grep -q '^Status: .*Done' || return 1
+  done
+}
+
+candidate_row() {  # candidate_row <TASK>: prints a sort-key line when the coder may start it, fails otherwise
+  local id="$1" view header mid mtitle ver a b c prio prank mrank num
+  view="$(backlog task view "$id" --plain 2>/dev/null)" || return 1
+  header="$(sed '/^Description:/q' <<<"$view")"
+  grep -q '^Status: .*To Do' <<<"$header" || return 1
+  grep -Eq '^Assignee:.*@copilot([^-[:alnum:]_]|$)' <<<"$header" || return 1
+  sed -n 's/^Labels: //p' <<<"$header" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -qxE 'on-hold|manual-path' && return 1
+  deps_done "$header" || return 1
+  # Sort key: milestone (semver of its title; unversioned after, none last), priority, lowest id.
+  mid="$(sed -n 's/^Milestone: //p' <<<"$header" | head -1 | tr -d '[:space:]')"
+  if [ -z "$mid" ]; then mrank=2
+  else
+    mtitle="$(backlog milestone list --plain 2>/dev/null | awk -v id="$mid" '{ sub(/^ +/, "") } index($0, id ": ") == 1 { s = substr($0, length(id) + 3); sub(/ \([0-9]+\/[0-9]+ done\)$/, "", s); print s; exit }')"
+    [ -n "$mtitle" ] || mtitle="$mid"
+    ver="$(grep -oE '[0-9]+(\.[0-9]+)+' <<<"$mtitle" | head -1)"
+    if [ -n "$ver" ]; then
+      IFS=. read -r a b c <<<"$ver"
+      mrank="$(printf '0%05d%05d%05d' "$((10#$a))" "$((10#${b:-0}))" "$((10#${c:-0}))")"
+    else mrank="1$mtitle"; fi
+  fi
+  prio="$(sed -n 's/^Priority: //p' <<<"$header" | head -1)"
+  case "$prio" in High*) prank=1 ;; Medium*) prank=2 ;; Low*) prank=3 ;; *) prank=4 ;; esac
+  num="${id#TASK-}"
+  printf '%s\t%s\t%010d\t%s\n' "$mrank" "$prank" "$((10#${num%%.*}))" "$id"
+}
+
+pick_next() {  # prints the task to start (nothing when none is ready); exits 1 when origin/main cannot be read
+  [ -r "$REPO_TOKEN_FILE" ] || { echo "missing repo token (sudo ha2n-coder-set-token repo)" >&2; exit 1; }
+  setup_auth
+  [ -d "$CLONE/.git" ] || git clone -q "https://github.com/$REPO.git" "$CLONE" || { echo "clone failed" >&2; exit 1; }
+  cd "$CLONE" || exit 1
+  gitauth fetch -q --prune origin || { echo "git fetch failed" >&2; exit 1; }
+  { git checkout -q --detach -f origin/main && git reset -q --hard origin/main && git clean -qfdx; } \
+    || { echo "cannot reset own clone" >&2; exit 1; }
+  local rows="" id row
+  for id in $(backlog task list --status "To Do" --plain 2>/dev/null | sed -nE 's/^ +(\[[^]]*\] )*(TASK-[0-9]+(\.[0-9]+)?) - .*/\2/p'); do
+    row="$(candidate_row "$id")" && rows+="$row"$'\n'
+  done
+  while IFS=$'\t' read -r _ _ _ id; do
+    [ -n "$id" ] || continue
+    if ! last_run_blocks "$id"; then echo "$id"; return 0; fi
+  done <<<"$(LC_ALL=C sort <<<"$rows")"
+  return 0
+}
+
+start_next() {  # the timer's entry point: start the next ready task if autostart allows it
+  local cfg="${HA2N_CODER_TEST_ROOT:-}/etc/ha2n-coder" max=3 recent=0 task
+  [ -e "$cfg/autostart" ] || return 0   # kill switch: no root-owned file, nothing starts (silent)
+  if [ -e "$cfg/max-runs-per-day" ]; then
+    max="$(tr -d '[:space:]' < "$cfg/max-runs-per-day")"
+    [[ "$max" =~ ^[0-9]+$ ]] || { echo "invalid /etc/ha2n-coder/max-runs-per-day" >&2; return 1; }
+  fi
+  exec 8>"$BASE/next.lock"; flock -n 8 || { echo "another autostart check is running"; return 0; }   # held until exit, so the count below cannot race
+  [ -d "$RUNS" ] && recent="$(find "$RUNS" -mindepth 2 -maxdepth 2 -name next.marker -mmin -1440 | wc -l | tr -d ' ')"
+  [ "$recent" -lt "$max" ] || { echo "daily limit reached: $recent autostarted runs in the last 24 h (max $max)"; return 0; }
+  exec 9>"$BASE/run.lock"; flock -n 9 || { echo "a task is running; not starting another"; return 0; }
+  task="$(pick_next)" || return 1
+  exec 9>&-   # the run takes this lock itself; release it first
+  [ -n "$task" ] || return 0
+  launch_bg "$task" next
+}
+
+FG=0; [ "${1:-}" = "--foreground" ] && { FG=1; shift; }
+if [ "${1:-}" = "--next" ]; then
+  [ "$FG" = 0 ] && [ "$#" = 1 ] || { echo "usage: ha2n-run-task --next" >&2; exit 2; }
+  start_next; exit $?
 fi
+TASK="${1:-}"
+[[ "$TASK" =~ ^TASK-[0-9]+(\.[0-9]+)?$ ]] || { echo "usage: ha2n-run-task [--foreground] TASK-<n> | --next" >&2; exit 2; }
+if [ "$FG" = 0 ]; then launch_bg "$TASK"; exit 0; fi
 shift
 RUN="${2:-}"; [ "${1:-}" = "--run" ] && [ -n "$RUN" ] || RUN="$(date +%Y%m%d-%H%M%S)-$TASK"
 [[ "$RUN" =~ ^[0-9]{8}-[0-9]{6}-TASK-[0-9]+(\.[0-9]+)?$ ]] || { echo "invalid run id" >&2; exit 2; }
 DIR="$RUNS/$RUN"; mkdir -p "$DIR"
+STARTED="$(date +%s)"   # epoch of this run; last_run_blocks compares task-file commits with it
 
 status() {  # status <state> <message>  — states: running, stopped, green, review, failed
-  { echo "task=$TASK"; echo "state=$1"; echo "message=$2"; echo "branch=${BRANCH:-}"; echo "pr=${PR_URL:-}"
+  { echo "task=$TASK"; echo "started=$STARTED"; echo "state=$1"; echo "message=$2"; echo "branch=${BRANCH:-}"; echo "pr=${PR_URL:-}"
     echo "round=${ROUND:-0}"; echo "review=${REVIEW_VERDICT:-}"; echo "updated=$(date -Is)"; } > "$DIR/status.tmp" && mv "$DIR/status.tmp" "$DIR/status"
   echo "[$(date +%H:%M:%S)] $1: $2"
 }
@@ -90,9 +195,7 @@ backlog task view "$TASK" --plain > "$DIR/task.txt" 2>&1 || stop "task $TASK not
 HEADER="$(sed '/^Description:/q' "$DIR/task.txt")"   # only the metadata part, not the free text
 grep -q '^Status: .*To Do' <<<"$HEADER"   || stop "task is not 'To Do' — not ready for the coder"
 grep -q '^Assignee: .*@copilot' <<<"$HEADER" || stop "task is not assigned to @copilot — not ready"
-if awk '/^Depends on/{f=1;next} /^Dependents|^Description/{f=0} f && /TASK-/ && !/completed/' "$DIR/task.txt" | grep -q .; then
-  stop "task has dependencies that are not done"
-fi
+deps_done "$HEADER" || stop "task has dependencies that are not done"
 TITLE="$(sed -n "s/^Task $TASK - //p" "$DIR/task.txt" | head -1)"
 NUM="${TASK#TASK-}"
 SLUG="$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//' | cut -c1-40 | sed -E 's/-+$//')"
