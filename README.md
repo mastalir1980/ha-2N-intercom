@@ -223,6 +223,8 @@ Intermediate steps show **Next**; the last step shows **Submit**. To revisit a s
 | Relay | `relay_device_type` | `door` \| `gate` | `door` | Door → switch entity, Gate → cover entity |
 | Relay | `relay_pulse_duration` | int (ms) | *(from device)* | How long the relay stays triggered. Default is the device's switchOnDuration |
 
+For Called ID (`called_id`), the part after `/` is ignored when matching peers, so `1234567890/2` matches `1234567890`.
+
 ### Example: single-family house (door + gate)
 
 ```
@@ -424,7 +426,7 @@ The integration uses two data channels:
 - Ring detection is exclusively event-driven via the log subscription — there is no polling fallback for ring events
 - Open the integration's diagnostics; the log subscription id should be set
 - Press the button and watch HA logs — the event path should flip the binary sensor within ~1 s
-- If a specific Called ID does not ring, enable debug logging for `custom_components.2n_intercom`. Every call event records its state, direction/originator, session, canonical peers and decision (`rang`, `filtered by peer` or `not a ring`). Only intercom-started calls ring, even with `All calls`
+- If a specific Called ID does not ring, enable debug logging for `custom_components.2n_intercom`. Every call event records its state, direction/originator, session, canonical peers, configured canonical filter (`all` for All calls) and decision (`rang`, `filtered by peer` or `not a ring`). Only intercom-started calls ring, even with `All calls`
 - If the subscription is down, the listener retries with exponential backoff (up to ~60 s). Ring events during a subscription gap are lost
 
 ### Reauth notification keeps appearing
