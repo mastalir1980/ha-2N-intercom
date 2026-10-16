@@ -4,13 +4,12 @@ title: >-
   Options flow: stop offering the per-relay step; relays come only from
   auto-detection
 status: To Do
-assignee:
-  - '@copilot'
+assignee: []
 created_date: '2026-10-15 16:28'
+updated_date: '2026-10-16 15:06'
 labels:
   - config-flow
   - ux
-milestone: m-0
 dependencies:
   - TASK-41
 references:
@@ -20,7 +19,7 @@ references:
   - custom_components/2n_intercom/strings.json
   - tests/test_config_flow.py
   - e2e/tests/test_40_options_flow.py
-priority: medium
+priority: low
 type: enhancement
 ordinal: 49000
 ---
@@ -40,3 +39,9 @@ Why: Jan activated the relay/switch function on the intercom and the relays appe
 - [ ] #5 The last_step logic in async_step_device no longer depends on detected relays for a relay step; the device step is last when the camera step is not shown
 - [ ] #6 Unit suite green on Python 3.12+; e2e/tests/test_40_options_flow.py updated to the new step list and bash e2e/e2e.sh wip green
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Not planned (Jan, 2026-10-16): the current relay handling in the options flow stays as it is. Removed from v1.5.0 and from the dependencies of TASK-37 and TASK-43 (TASK-43 now depends on TASK-41 to keep the order).
+<!-- SECTION:NOTES:END -->

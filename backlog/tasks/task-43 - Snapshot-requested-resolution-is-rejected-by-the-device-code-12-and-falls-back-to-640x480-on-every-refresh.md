@@ -7,13 +7,13 @@ status: To Do
 assignee:
   - '@copilot'
 created_date: '2026-10-15 16:35'
-updated_date: '2026-10-15 16:39'
+updated_date: '2026-10-16 15:06'
 labels:
   - camera
   - snapshot
 milestone: m-0
 dependencies:
-  - TASK-42
+  - TASK-41
 references:
   - custom_components/2n_intercom/api.py
   - custom_components/2n_intercom/camera.py
