@@ -3,11 +3,11 @@ id: TASK-41
 title: >-
   Options flow: remove the "Back to the previous step" checkbox and go_back
   navigation
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-15 16:20'
-updated_date: '2026-10-16 15:28'
+updated_date: '2026-10-16 15:31'
 labels:
   - config-flow
   - ux
@@ -34,12 +34,12 @@ Why: after the TASK-14 release, the options flow shows a 'Back to the previous s
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 No form in the options flow or the initial setup flow contains a go_back field
-- [ ] #2 Camera and relay steps no longer branch on go_back; the flow is forward-only and saves options only from the final step
-- [ ] #3 last_step values from TASK-14 are unchanged (Next on intermediate steps, Submit on the saving step)
-- [ ] #4 go_back keys are removed from strings.json and all translations (en/de/cs); validate.py green
-- [ ] #5 Unit tests for back navigation in tests/test_config_flow.py are removed or rewritten to assert forward-only flow; full unit suite green on Python 3.12+
-- [ ] #6 E2E options-flow test (e2e/tests/test_40_options_flow.py) no longer drives a back navigation and still asserts last_step; bash e2e/e2e.sh wip green
+- [x] #1 No form in the options flow or the initial setup flow contains a go_back field
+- [x] #2 Camera and relay steps no longer branch on go_back; the flow is forward-only and saves options only from the final step
+- [x] #3 last_step values from TASK-14 are unchanged (Next on intermediate steps, Submit on the saving step)
+- [x] #4 go_back keys are removed from strings.json and all translations (en/de/cs); validate.py green
+- [x] #5 Unit tests for back navigation in tests/test_config_flow.py are removed or rewritten to assert forward-only flow; full unit suite green on Python 3.12+
+- [x] #6 E2E options-flow test (e2e/tests/test_40_options_flow.py) no longer drives a back navigation and still asserts last_step; bash e2e/e2e.sh wip green
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -63,5 +63,5 @@ Follow-up: isolated discovery of test_config_flow.py fails during module loading
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Removed the Back checkbox and backward navigation from setup and options while retaining Next/Submit labels and final-step-only saving. Updated translations, documentation, and forward-only unit/E2E coverage. Local evidence: all 611 unit tests and required validation/compilation gates pass on Python 3.12.15. Device E2E awaits the e2e-pi PR check; task remains In Progress with acceptance criteria unchecked.
+Implemented by the headless coder. Checks green on 685d8ba80 after 0 fix round(s): e2e-pi=pass, validate=pass, validate=pass. PR: https://github.com/mastalir1980/ha-2N-intercom/pull/64. Done takes effect when the PR is merged.
 <!-- SECTION:FINAL_SUMMARY:END -->
