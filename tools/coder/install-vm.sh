@@ -98,7 +98,9 @@ install -o root -g root -m 0440 "$TMP" /etc/sudoers.d/ha2n-coder; rm -f "$TMP"
 echo "==> self-check"
 ok=1
 sudo -u ha2n-copilot -H copilot --version >/dev/null 2>&1 || { echo "!! ha2n-copilot cannot run copilot (is it installed under another user's home, e.g. nvm? install it globally: sudo npm i -g @github/copilot)"; ok=0; }
-sudo -u ha2n-coder -H backlog --version >/dev/null 2>&1 || { echo "!! ha2n-coder cannot run backlog (install globally: sudo npm i -g backlog.md)"; ok=0; }
+BACKLOG_VERSION="$(sudo -u ha2n-coder -H backlog --version 2>/dev/null | head -1)"
+[ -n "$BACKLOG_VERSION" ] && echo "    backlog.md $BACKLOG_VERSION (tested: 1.48.0, 1.53.0; see tools/coder/README.md)" \
+  || { echo "!! ha2n-coder cannot run backlog (install globally: sudo npm i -g backlog.md)"; ok=0; }
 for f in /etc/ha2n-coder/repo.token /etc/ha2n-coder/copilot.token; do
   [ -f "$f" ] || { echo "    $f not set yet — run: sudo ha2n-coder-set-token $(basename "$f" .token)"; continue; }
   sudo -u "$CALLER" test -r "$f" && { echo "!! $CALLER can read $f"; ok=0; }

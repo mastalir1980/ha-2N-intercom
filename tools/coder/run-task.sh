@@ -59,6 +59,9 @@ last_run_blocks() {  # last_run_blocks <TASK>: 0 = keep it off; 1 = a new attemp
   local run started changed
   run="$(ls -1d "$RUNS"/*-"$1" 2>/dev/null | sort | tail -1)"
   [ -n "$run" ] || return 1
+  # A run that stopped before it chose a branch (e.g. the ready check refused it) implemented nothing. Such a task
+  # becomes ready through another task's file (a dependency gets Done), so waiting for its own file would be forever.
+  grep -qx 'state=stopped' "$run/status" 2>/dev/null && grep -qx 'branch=' "$run/status" && return 1
   started="$(sed -n 's/^started=//p' "$run/status" 2>/dev/null | head -1)"
   if ! [[ "$started" =~ ^[0-9]+$ ]]; then   # runs from before started= existed: the run id holds the local start time
     started="$(python3 -c 'import sys, time; print(int(time.mktime(time.strptime(sys.argv[1], "%Y%m%d-%H%M%S"))))' \
@@ -71,11 +74,40 @@ last_run_blocks() {  # last_run_blocks <TASK>: 0 = keep it off; 1 = a new attemp
   return 0
 }
 
-deps_done() {  # deps_done <task header>: fails when a task listed under "Dependencies:" is not Done
-  local dep
-  for dep in $(sed -n 's/^Dependencies: //p' <<<"$1" | grep -oE 'TASK-[0-9]+(\.[0-9]+)?'); do
-    backlog task view "$dep" --plain 2>/dev/null | grep -q '^Status: .*Done' || return 1
-  done
+# Backlog output differs between backlog.md versions (1.48: "Dependencies: TASK-x" line, no --json;
+# 1.53: --json, and --plain prints a "Depends on (…):" tree instead). Prefer --json, fall back to both plain forms.
+task_json() {  # task_json <TASK> <field>: one value per line from `backlog task view --json`; fails if unsupported
+  local out
+  out="$(backlog task view "$1" --json 2>/dev/null)" || return 1
+  python3 -c '
+import json, sys
+task = json.loads(sys.stdin.read())["task"]
+if sys.argv[1] not in task:
+    sys.exit(1)
+value = task[sys.argv[1]]
+print("\n".join(value) if isinstance(value, list) else (value or ""))' "$2" <<<"$out" 2>/dev/null
+}
+
+dep_ids() {  # dep_ids <TASK>: direct dependencies, one per line
+  local out
+  if out="$(task_json "$1" dependencies)"; then printf '%s\n' "$out"; return 0; fi
+  out="$(backlog task view "$1" --plain 2>/dev/null | sed '/^Description:/q')" || return 1
+  { sed -n 's/^Dependencies: //p' <<<"$out" | grep -oE 'TASK-[0-9]+(\.[0-9]+)?'
+    # tree: top-level "├─ TASK-x - title [Status]" lines under "Depends on"; indented lines are indirect
+    awk '/^Depends on/ { f = 1; next } f && !NF { f = 0 } f' <<<"$out" | sed -nE 's/^(├─|└─) (TASK-[0-9]+(\.[0-9]+)?) - .*/\2/p'
+  } | sort -u
+}
+
+task_done() {  # task_done <TASK>
+  local status
+  status="$(task_json "$1" status)" && [ -n "$status" ] && { [ "$status" = Done ]; return; }
+  backlog task view "$1" --plain 2>/dev/null | sed '/^Description:/q' | grep -q '^Status: .*Done'
+}
+
+deps_done() {  # deps_done <TASK>: fails when a direct dependency is not Done (or the task cannot be read)
+  local ids dep
+  ids="$(dep_ids "$1")" || return 1
+  for dep in $ids; do task_done "$dep" || return 1; done
 }
 
 candidate_row() {  # candidate_row <TASK>: prints a sort-key line when the coder may start it, fails otherwise
@@ -85,7 +117,7 @@ candidate_row() {  # candidate_row <TASK>: prints a sort-key line when the coder
   grep -q '^Status: .*To Do' <<<"$header" || return 1
   grep -Eq '^Assignee:.*@copilot([^-[:alnum:]_]|$)' <<<"$header" || return 1
   sed -n 's/^Labels: //p' <<<"$header" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -qxE 'on-hold|manual-path' && return 1
-  deps_done "$header" || return 1
+  deps_done "$id" || return 1
   # Sort key: milestone (semver of its title; unversioned after, none last), priority, lowest id.
   mid="$(sed -n 's/^Milestone: //p' <<<"$header" | head -1 | tr -d '[:space:]')"
   if [ -z "$mid" ]; then mrank=2
@@ -195,7 +227,7 @@ backlog task view "$TASK" --plain > "$DIR/task.txt" 2>&1 || stop "task $TASK not
 HEADER="$(sed '/^Description:/q' "$DIR/task.txt")"   # only the metadata part, not the free text
 grep -q '^Status: .*To Do' <<<"$HEADER"   || stop "task is not 'To Do' — not ready for the coder"
 grep -q '^Assignee: .*@copilot' <<<"$HEADER" || stop "task is not assigned to @copilot — not ready"
-deps_done "$HEADER" || stop "task has dependencies that are not done"
+deps_done "$TASK" || stop "task has dependencies that are not done"
 TITLE="$(sed -n "s/^Task $TASK - //p" "$DIR/task.txt" | head -1)"
 NUM="${TASK#TASK-}"
 SLUG="$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//' | cut -c1-40 | sed -E 's/-+$//')"

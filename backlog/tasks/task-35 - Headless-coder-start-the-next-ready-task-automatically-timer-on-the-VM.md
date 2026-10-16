@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-14 14:48'
-updated_date: '2026-10-16 07:16'
+updated_date: '2026-10-16 08:49'
 labels:
   - agent
   - infra
@@ -63,4 +63,9 @@ Self-review fixes (2026-10-16):
 - Foreground ready check (manual starts too): the dependency check matched 'Depends on', but backlog prints 'Dependencies:', so it never fired. Both paths now share deps_done(). Test: test_manual_start_refuses_unmet_dependencies.
 - README 'Pro Hermese': Hermes now polls ha2n-task-status --list every 5 min to find auto runs, because it has no other trigger for them.
 - Dry run of candidate_row against the real backlog: TASK-45 (High, m-0) then TASK-41; every other To Do task is skipped for the right reason (assignee, manual-path, on-hold, unmet deps).
+
+Review fixes (2026-10-16, round 2):
+- Dependencies are read version-independently: backlog task view --json (field dependencies, then each dependency's status == Done), falling back to the plain 'Dependencies:' line (backlog.md 1.48) and the 'Depends on' tree (1.53 --plain; only top-level ├─/└─ lines are direct, bracket status is not trusted). deps_done now takes a task id; used by --next and the manual ready check. Verified against the real backlog with 1.48.0 and 1.53.0 (TASK-42 skipped, TASK-41/45 ready). Tests: test_unfinished_dependency_with_{dependencies_line,depends_on_tree,json}.
+- last_run_blocks: a run that ended stopped with an empty branch= (stopped in or before the ready check) no longer blocks the task; it becomes ready through a dependency's file, not its own. Test: test_ready_check_stop_does_not_block_the_task.
+- install-vm.sh self-check prints the installed backlog.md version; tools/coder/README.md documents the tested versions (1.48.0, 1.53.0).
 <!-- SECTION:NOTES:END -->

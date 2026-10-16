@@ -43,6 +43,13 @@ elif name == "sudo" and args[:3] == ["-n", "-u", "ha2n-copilot"]:
     if len(args) < 5 or args[3] != str(expected):
         sys.exit("unexpected sandbox invocation")
     os.execv(args[3], args[3:])
+elif name == "backlog" and args[:2] == ["task", "view"] and "--json" in args:
+    # backlog.md 1.53+ only; without the switch the stub behaves like 1.48 ("unknown option")
+    fixture = root / "tasks" / f"{args[2]}.json"
+    if not (root / "backlog-json").exists() or not fixture.exists():
+        print("error: unknown option '--json'", file=sys.stderr)
+        sys.exit(1)
+    sys.stdout.write(fixture.read_text(encoding="utf-8"))
 elif name == "backlog" and args == ["task", "view", "TASK-34", "--plain"]:
     print("Task TASK-34 - Test clone recovery")
     print("Status: To Do")
@@ -698,6 +705,10 @@ class RunTaskCloneTests(unittest.TestCase):
         (self.root / "copilot-stop").touch()
         (self.root / "milestones.txt").write_text(self.MILESTONES, encoding="utf-8")
 
+    # Output format of the stubbed backlog CLI: "line" = 1.48 ("Dependencies:" line, no --json),
+    # "tree" = 1.53 --plain ("Depends on" tree, no --json), "json" = 1.53 with --json.
+    backlog_format = "line"
+
     def _task(self, number: int, *, status: str = "To Do", priority: str = "High",
               assignee: str = "@copilot", labels: tuple[str, ...] = (),
               milestone: str | None = None, deps: tuple[int, ...] = ()) -> None:
@@ -710,14 +721,28 @@ class RunTaskCloneTests(unittest.TestCase):
         ]
         if labels:
             lines.append("Labels: " + ", ".join(labels))
-        if deps:
+        if deps and self.backlog_format == "line":
             lines.append("Dependencies: " + ", ".join(f"TASK-{dep}" for dep in deps))
         if milestone:
             lines.append(f"Milestone: {milestone}")
+        if deps and self.backlog_format != "line":
+            # Indirect and dependent tasks have no fixture: reading them as direct dependencies would fail the task.
+            lines += ["", "Dependency Graph:", "-" * 50, f"Depends on ({len(deps)} direct, {len(deps) + 1} total):"]
+            for index, dep in enumerate(deps):
+                lines.append(f"{'└─' if index == len(deps) - 1 else '├─'} TASK-{dep} - Fixture task {dep} [To Do]")
+            lines += ["   └─ TASK-997 - Indirect dependency [To Do]", "",
+                      "Dependents (1 direct, 1 total):", "└─ TASK-998 - Dependent task [To Do]"]
         lines += ["", "Description:", "Fixture.", "", "Acceptance Criteria:", "- [ ] #1 Fixture criterion"]
         text = "\n".join(lines) + "\n"
         (self.root / "tasks").mkdir(exist_ok=True)
         (self.root / "tasks" / f"TASK-{number}.txt").write_text(text, encoding="utf-8")
+        if self.backlog_format == "json":
+            (self.root / "backlog-json").touch()
+            (self.root / "tasks" / f"TASK-{number}.json").write_text(json.dumps({
+                "schemaVersion": 1, "kind": "task-view",
+                "task": {"id": f"TASK-{number}", "title": title, "status": status,
+                         "dependencies": [f"TASK-{dep}" for dep in deps]},
+            }), encoding="utf-8")
         (self.seed / "backlog/tasks").mkdir(parents=True, exist_ok=True)
         (self.seed / "backlog/tasks" / f"task-{number} - {title}.md").write_text(text, encoding="utf-8")
 
@@ -897,16 +922,50 @@ class RunTaskCloneTests(unittest.TestCase):
         self._commit_main("Update the task on main", committed_at=added + 1200)
         self.assertEqual(self._drain(), ["TASK-2"])
 
-    def test_manual_start_refuses_unmet_dependencies(self) -> None:
-        self._task(5, deps=(31,))
-        self._task(31, status="In Progress")
-        self._commit_main("Add fixture tasks")
-        result = subprocess.run(
-            [self.bash, str(CODER_DIR / "run-task.sh"), "--foreground", "TASK-5", "--run", "20260101-000001-TASK-5"],
+    def _manual(self, number: int) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [self.bash, str(CODER_DIR / "run-task.sh"), "--foreground", f"TASK-{number}",
+             "--run", f"20260101-000001-TASK-{number}"],
             cwd=self.root, env=self.env, capture_output=True, text=True, timeout=20,
         )
+
+    def _unfinished_dependency_case(self, backlog_format: str) -> None:
+        # TASK-42-like: depends on a task that is not Done yet; skipped by --next, refused by a manual start.
+        self.backlog_format = backlog_format
+        self._autostart()
+        self._task(41, status="In Progress")
+        self._task(42, deps=(41,))
+        self._task(40, status="Done")
+        self._task(43, deps=(40,))
+        self._commit_main("Add fixture tasks")
+        self.assertEqual(self._drain(), ["TASK-43"])
+        result = self._manual(42)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("task has dependencies that are not done", result.stdout)
+
+    def test_unfinished_dependency_with_dependencies_line(self) -> None:
+        self._unfinished_dependency_case("line")
+
+    def test_unfinished_dependency_with_depends_on_tree(self) -> None:
+        self._unfinished_dependency_case("tree")
+
+    def test_unfinished_dependency_with_json(self) -> None:
+        self._unfinished_dependency_case("json")
+        self.assertIn("backlog task view TASK-42 --json", self._calls())
+
+    def test_ready_check_stop_does_not_block_the_task(self) -> None:
+        # The task becomes ready through its dependency's file, its own file does not change.
+        self._autostart()
+        self._task(31, status="In Progress")
+        self._task(5, deps=(31,))
+        self._commit_main("Add fixture tasks")
+        refused = self._manual(5)
+        self.assertIn("task has dependencies that are not done", refused.stdout)
+        self.assertIn("branch=\n", (self.base / "runs/20260101-000001-TASK-5/status").read_text(encoding="utf-8"))
+        self.assertEqual(self._drain(), [])
+        self._task(31, status="Done")
+        self._commit_main("Finish the dependency")
+        self.assertEqual(self._drain(), ["TASK-5"])
 
 
 if __name__ == "__main__":
