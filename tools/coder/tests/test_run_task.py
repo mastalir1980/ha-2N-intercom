@@ -54,6 +54,8 @@ elif name == "backlog" and args == ["task", "view", "TASK-34", "--plain"]:
     print("Task TASK-34 - Test clone recovery")
     print("Status: To Do")
     print("Assignee: @copilot")
+    if (root / "task-labels").exists():
+        print("Labels: " + (root / "task-labels").read_text().strip())
     print("Description:")
     print("Hermetic fixture")
     print("Acceptance Criteria:")
@@ -96,6 +98,28 @@ elif name == "gh" and (root / "gh-ok").exists():
             {"name": "e2e-pi", "bucket": "pass", "link": ""},
             {"name": "hassfest", "bucket": "pass", "link": ""},
         ]))
+    elif args[:2] == ["pr", "merge"]:
+        head = subprocess.run(
+            ["git", "--git-dir", str(root / "origin.git"), "rev-parse",
+             "refs/heads/task-34-test-clone-recovery"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        if (root / "head-moved").exists():
+            head = "f" * 40
+        if (root / "merge-refuse").exists():
+            sys.stderr.write((root / "merge-refuse").read_text())
+            sys.exit(1)
+        if args[args.index("--match-head-commit") + 1] != head:
+            sys.stderr.write("GraphQL: Head branch was modified. Review and try the merge again. (mergePullRequest)\\n")
+            sys.exit(1)
+        (root / "merged").write_text(" ".join(args))
+        if "--delete-branch" in args:
+            (root / "deleted-branch-head").write_text(head)
+            subprocess.run(
+                ["git", "--git-dir", str(root / "origin.git"), "update-ref", "-d",
+                 "refs/heads/task-34-test-clone-recovery"],
+                check=True, capture_output=True,
+            )
     elif args[:2] == ["pr", "comment"]:
         comments = root / "comments"
         comments.mkdir(exist_ok=True)
@@ -125,7 +149,9 @@ elif name == "copilot" and args in ([], ["--review"]):
         if (root / "review-rc").exists():
             sys.exit(int((root / "review-rc").read_text()))
         sys.exit(0)
-    if (root / "copilot-stop").exists():
+    stop_for = [p.name[len("copilot-stop-"):] for p in root.glob("copilot-stop-TASK-*")]
+    if (root / "copilot-stop").exists() or any(
+            re.search(r"\\b" + re.escape(task) + r"\\b", prompt) for task in stop_for):
         print("=== Copilot asked to stop ===")
         print("Fixture stops after the ready check")
         sys.exit(3)
@@ -506,7 +532,9 @@ class RunTaskCloneTests(unittest.TestCase):
 
     def _assert_closed(self, closed: bool) -> None:
         self.assertEqual("task edit TASK-34 -s Done --check-ac 1" in self._calls(), closed)
-        tree = self._git(self.origin, "ls-tree", "-r", "--name-only", self.BRANCH)
+        deleted = self.root / "deleted-branch-head"  # gh pr merge --delete-branch removed the remote branch
+        ref = deleted.read_text() if deleted.exists() else self.BRANCH
+        tree = self._git(self.origin, "ls-tree", "-r", "--name-only", ref)
         self.assertEqual("backlog/task-34.md" in tree.splitlines(), closed)
 
     @staticmethod
@@ -967,6 +995,191 @@ class RunTaskCloneTests(unittest.TestCase):
         self._commit_main("Finish the dependency")
         self.assertEqual(self._drain(), ["TASK-5"])
 
+
+    # ---- auto-merge (TASK-46): an approved green PR merges itself and triggers --next once ----
+
+    def _automerge(self, *, autostart: bool = False, labels: str | None = None, **pipeline) -> None:
+        pipeline.setdefault("reviews", [{"verdict": "approve", "findings": []}])
+        self._pipeline(**pipeline)
+        (self.root / "etc/ha2n-coder/automerge").touch()
+        if labels is not None:
+            (self.root / "task-labels").write_text(labels + "\n", encoding="utf-8")
+        if autostart:
+            (self.root / "etc/ha2n-coder/autostart").touch()
+            (self.root / "etc/ha2n-coder/max-runs-per-day").write_text("10\n", encoding="utf-8")
+            (self.root / "milestones.txt").write_text(self.MILESTONES, encoding="utf-8")
+
+    def _branch_head(self) -> str:
+        deleted = self.root / "deleted-branch-head"
+        if deleted.exists():  # gh pr merge --delete-branch removed the remote branch
+            return deleted.read_text()
+        return self._git(self.origin, "rev-parse", self.BRANCH).strip()
+
+    def _remote_branch_exists(self) -> bool:
+        refs = self._git(self.origin, "for-each-ref", "--format=%(refname)", "refs/heads/")
+        return self.BRANCH in refs.split()
+
+    def _merge_calls(self) -> list[str]:
+        return [line for line in self._calls().splitlines() if line.startswith("gh pr merge ")]
+
+    def _assert_not_merged(self, reason: str) -> dict[str, str]:
+        status = self._status()
+        self.assertEqual(status["state"], "green", status)
+        self.assertIn(f"not merged automatically: {reason}", status["message"])
+        self.assertEqual(status["next"], "")
+        self.assertFalse((self.root / "merged").exists())
+        self.assertTrue(self._remote_branch_exists(), "an unmerged PR keeps its branch")
+        self.assertIn(f"not merged automatically: {reason}", self._comments()[-1])
+        self.assertFalse((self.base / "runs" / self.run_id / "next.log").exists())
+        return status
+
+    def test_automerge_off_keeps_the_pr_for_jan(self) -> None:
+        self._pipeline(reviews=[{"verdict": "approve", "findings": []}])
+        (self.root / "etc/ha2n-coder/autostart").touch()
+        self._run_pipeline(0)
+        status = self._status()
+        self.assertEqual(status["state"], "green")
+        self.assertNotIn("PR merged", status["message"])
+        self.assertNotIn("not merged automatically", status["message"])
+        self.assertEqual(status["next"], "")
+        self.assertEqual(self._merge_calls(), [])
+        self.assertIn("the coder never merges", self._comments()[-1])
+        self.assertEqual(self._runs(), [self.run_id])
+
+    def test_automerge_merges_the_checked_head_and_starts_next(self) -> None:
+        self._automerge(autostart=True)
+        self._task(2)
+        self._commit_main("Add the next ready task")
+        (self.root / "copilot-stop-TASK-2").touch()
+        self._run_pipeline(0)
+        status = self._status()
+        self.assertEqual(status["state"], "merged", status)
+        self.assertIn("PR merged: https://github.com/mastalir1980/ha-2N-intercom/pull/99", status["message"])
+        self.assertIn("next: started ", status["message"])
+        self._assert_closed(True)
+        # The close commit is a new head: checks ran again on it, and exactly that head was merged.
+        self.assertEqual((self.root / "checks-count").read_text(), "2")
+        self.assertEqual(self._merge_calls(), [
+            "gh pr merge https://github.com/mastalir1980/ha-2N-intercom/pull/99 -R mastalir1980/ha-2N-intercom "
+            f"--merge --match-head-commit {self._branch_head()} --delete-branch",
+        ])
+        self.assertFalse(self._remote_branch_exists(), "merged branch must be deleted on the remote")
+        self.assertIn("Merged by the coder (auto-merge)", self._comments()[-1])
+        next_run = status["next"]
+        self.assertRegex(next_run, r"^\d{8}-\d{6}-TASK-2$")
+        self.assertTrue((self.base / "runs" / next_run / "next.marker").exists())
+        self.assertEqual(self._wait_run(next_run)["state"], "stopped")
+        self.assertEqual(len(self._runs()), 2)
+
+    def test_automerge_with_autostart_off_does_not_start_next(self) -> None:
+        self._automerge()
+        self._task(2)
+        self._commit_main("Add a ready task")
+        self._run_pipeline(0)
+        status = self._status()
+        self.assertEqual(status["state"], "merged")
+        self.assertIn("next task not started (autostart is off)", status["message"])
+        self.assertEqual(status["next"], "")
+        self.assertEqual(self._runs(), [self.run_id])
+
+    def test_automerge_next_keeps_the_daily_limit(self) -> None:
+        self._automerge(autostart=True)
+        (self.root / "etc/ha2n-coder/max-runs-per-day").write_text("0\n", encoding="utf-8")
+        self._task(2)
+        self._commit_main("Add a ready task")
+        self._run_pipeline(0)
+        status = self._status()
+        self.assertEqual(status["state"], "merged")
+        self.assertIn("next task not started: daily limit reached", status["message"])
+        self.assertEqual(self._runs(), [self.run_id])
+
+    def test_automerge_without_review_model_never_merges(self) -> None:
+        self._automerge(review_model=None)
+        self._run_pipeline(0)
+        self._assert_not_merged("no approved second-model review")
+        self._assert_closed(True)
+
+    def test_automerge_never_merges_requested_changes(self) -> None:
+        blocking = {"verdict": "changes", "findings": [self._finding()]}
+        self._automerge(reviews=[blocking, blocking])
+        self._run_pipeline(1)
+        self.assertEqual(self._status()["state"], "review")
+        self.assertEqual(self._merge_calls(), [])
+
+    def test_automerge_never_merges_release_or_manual_path_tasks(self) -> None:
+        for label in ("release", "manual-path"):
+            with self.subTest(label=label):
+                self.setUp()
+                self._automerge(labels=f"agent, {label}")
+                self._run_pipeline(0)
+                self._assert_not_merged(f"task has the label {label}")
+                self.assertEqual(self._merge_calls(), [])
+
+    def test_automerge_merges_manual_close_without_closing_the_task(self) -> None:
+        self._automerge(labels="agent, manual-close")
+        self._run_pipeline(0)
+        status = self._status()
+        self.assertEqual(status["state"], "merged", status)
+        self.assertIn("label manual-close: task not closed", status["message"])
+        self._assert_closed(False)
+        self.assertEqual((self.root / "checks-count").read_text(), "1")   # head unchanged: no second wait
+        self.assertEqual(len(self._merge_calls()), 1)
+        self.assertIn(f"--match-head-commit {self._branch_head()}", self._merge_calls()[0])
+
+    def test_automerge_refuses_a_changed_head(self) -> None:
+        self._automerge()
+        (self.root / "head-moved").touch()
+        self._run_pipeline(0)
+        self._assert_not_merged("GitHub refused the merge: GraphQL: Head branch was modified")
+        self.assertEqual(len(self._merge_calls()), 1)   # no retry
+
+    def test_automerge_refusal_keeps_green_without_retry(self) -> None:
+        self._automerge(autostart=True)
+        (self.root / "merge-refuse").write_text("X Pull request is not mergeable: the merge commit cannot be cleanly created.\n")
+        self._run_pipeline(0)
+        self._assert_not_merged("GitHub refused the merge: X Pull request is not mergeable")
+        self.assertEqual(len(self._merge_calls()), 1)
+        self.assertEqual(self._runs(), [self.run_id])
+
+    def test_automerge_waits_for_red_checks_on_the_close_commit(self) -> None:
+        self._automerge(checks=("pass", "fail"))
+        self._run_pipeline(0)
+        status = self._assert_not_merged("checks on ")
+        self.assertIn("are not green: e2e-pi fail", status["message"])
+        self.assertEqual(self._merge_calls(), [])
+
+    def test_automerge_never_merges_protected_paths(self) -> None:
+        # publish() already stops such a patch; this checks auto_merge's own guard in isolation.
+        script = (CODER_DIR / "run-task.sh").read_text(encoding="utf-8")
+        protected = re.search(r"^PROTECTED=.*$", script, re.M).group(0)
+        function = re.search(r"^auto_merge\(\) \{.*?^\}$", script, re.M | re.S).group(0)
+        repo = self.root / "work"
+        self._git(self.root, "clone", "-q", str(self.origin), str(repo))
+        self._git(repo, "checkout", "-q", "-b", "task-1")
+        for path in ("tools/coder/run-task.sh", ".github/copilot-instructions.md", "backlog/config.yml",
+                     "CLAUDE.md", "e2e/ci/x.sh"):
+            with self.subTest(path=path):
+                self._git(repo, "reset", "-q", "--hard", "origin/main")
+                (repo / path).parent.mkdir(parents=True, exist_ok=True)
+                (repo / path).write_text("change\n", encoding="utf-8")
+                self._git(repo, "add", "-A")
+                self._git(repo, "commit", "-qm", "change")
+                harness = "\n".join([
+                    protected, function,
+                    'status() { :; }; ghx() { echo "ghx $*"; }; wait_checks() { echo wait; }',
+                    'DIR="$1"; HEADER="Labels: agent"; REVIEW_ON=1; REVIEW_VERDICT=approve',
+                    'CHECKED_HEAD="$(git rev-parse HEAD)"; PR_URL=x; REPO=y',
+                    'auto_merge; echo "merged=$MERGED"; echo "note=$MERGE_NOTE"',
+                ])
+                result = subprocess.run(
+                    [self.bash, "-c", harness, "harness", str(self.root)],
+                    cwd=repo, env=self.env, capture_output=True, text=True, timeout=15,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("merged=0", result.stdout)
+                self.assertIn(f"note=the PR touches protected paths: {path}", result.stdout)
+                self.assertNotIn("ghx", result.stdout)
+                self.assertNotIn("wait", result.stdout)
 
 if __name__ == "__main__":
     unittest.main()

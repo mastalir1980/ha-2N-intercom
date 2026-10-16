@@ -207,13 +207,21 @@ For headless runs on the VM (`tools/coder/`, TASK-23) the E2E gate is the PR che
 once the PR checks (incl. `e2e-pi`) are green the coder runs one independent review by a second model (Copilot CLI with
 `/etc/ha2n-coder/review-model`, a different model than the coder; TASK-33): blocking findings go back to the coder for one
 fix round, then checks and one more review. Only after verdict `approve` (or when no review-model is configured) the coder
-adds one last commit that sets the task *Done* and ticks its criteria; that reaches `main` only when Jan merges.
+adds one last commit that sets the task *Done* and ticks its criteria; that reaches `main` when the PR is merged.
 Without approval the run ends in state `review` and the task stays *In Progress*. A task with the label `manual-close` is left alone (for work verified
-only after the merge); parent tasks are closed by hand. Claude reviews the diff against the criteria on request (the second-model review does not replace Jan's merge decision). For PRs not
+only after the merge); parent tasks are closed by hand. Claude reviews the diff against the criteria on request (without auto-merge the second-model review does not replace Jan's merge decision). For PRs not
 made by the coder the author does the same in the PR's last commit once the checks are green.
 A task is ready for the headless coder when it is *To Do*, assigned `@copilot`, its dependencies are Done, it has neither
-the label `on-hold` nor `manual-path`, and it meets the definition of ready above. Its PRs carry the label `agent`; the coder never merges. Changes to `tools/coder/` need
+the label `on-hold` nor `manual-path`, and it meets the definition of ready above. Its PRs carry the label `agent`. Changes to `tools/coder/` need
 Jan's review like `.github/` and `e2e/ci/`.
+Auto-merge (TASK-46) is opt-in with the root-owned file `/etc/ha2n-coder/automerge` (`install-vm.sh` never creates it):
+when all PR checks incl. `e2e-pi` are green on the head commit and the second-model review verdict is `approve`, the coder
+merges its own PR (`gh pr merge --merge --match-head-commit <the head the checks ran on> --delete-branch`; the close commit is a new head,
+so it waits for the checks on it first), records state `merged` and starts `--next` once (its kill switch `autostart`, daily
+limit and readiness rules still apply). Never auto-merged: runs without a configured review-model, tasks labelled `release`
+or `manual-path`, PRs whose diff touches a protected path, PRs not opened by that run. `manual-close` tasks are merged but
+not set Done. A refused merge (conflict, protection, changed head, red checks) leaves state `green` with the reason in a PR
+comment and is not retried. Without the file the coder never merges and Jan merges.
 
 1. Backlog workflow above (`backlog instructions task-execution` / `task-finalization`).
 2. Unit tests added in the style of `tests/test_*.py`; full suite + `validate.py` green.

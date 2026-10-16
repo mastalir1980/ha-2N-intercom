@@ -14,7 +14,9 @@
 # fix round, then checks and one more review) → report.
 # Copilot never sees the repo token; this script never runs code from the repo (only git, gh, backlog).
 # When everything is green and the review approved (or is not configured) it adds ONE last commit to the PR branch that sets the task Done and ticks its
-# criteria (takes effect on main only when Jan merges; label manual-close opts out). Never merges. State: /var/lib/ha2n-coder/runs/<run>/{status,run.log,*.patch}; see ha2n-task-status.
+# criteria (takes effect on main when the PR is merged; label manual-close opts out). Merges only with the opt-in
+# /etc/ha2n-coder/automerge (approved review, no release/manual-path label, no protected path, head unchanged since
+# the checks), then starts --next once. State: /var/lib/ha2n-coder/runs/<run>/{status,run.log,*.patch}; see ha2n-task-status.
 set -uo pipefail
 umask 027
 if [ "${HA2N_CODER_TEST_ROOT+x}" = x ]; then
@@ -31,6 +33,8 @@ LIB="${HA2N_CODER_TEST_ROOT:-}/usr/local/lib/ha2n-coder"
 SANDBOX=(sudo -n -u ha2n-copilot "$LIB/sandbox.sh")
 REPO_TOKEN_FILE="${HA2N_CODER_TEST_ROOT:-}/etc/ha2n-coder/repo.token"
 REVIEW_MODEL_FILE="${HA2N_CODER_TEST_ROOT:-}/etc/ha2n-coder/review-model"   # optional: its presence turns the review on
+AUTOMERGE_FILE="${HA2N_CODER_TEST_ROOT:-}/etc/ha2n-coder/automerge"         # optional: its presence lets an approved green PR merge
+AUTOSTART_FILE="${HA2N_CODER_TEST_ROOT:-}/etc/ha2n-coder/autostart"
 PROTECTED='(^|/)\.git|^(\.github/|e2e/ci/|e2e/scripts/|e2e/run\.sh$|e2e/nightly\.sh$|e2e/e2e\.sh$|e2e/staging/|e2e/\.env|e2e/tests/conftest\.py$|tools/coder/|CLAUDE\.md$|backlog/config\.yml$)'
 MAX_FILES=40; MAX_LINES=2500; LOCAL_ROUNDS=2; CI_ROUNDS=3; REVIEW_ROUNDS=1; CHECKS_TIMEOUT=$((45*60))
 COST_CSV="$BASE/cost.csv"   # one line per Copilot call; stays on the VM (the repo is public)
@@ -157,7 +161,7 @@ pick_next() {  # prints the task to start (nothing when none is ready); exits 1 
 
 start_next() {  # the timer's entry point: start the next ready task if autostart allows it
   local cfg="${HA2N_CODER_TEST_ROOT:-}/etc/ha2n-coder" max=3 recent=0 task
-  [ -e "$cfg/autostart" ] || return 0   # kill switch: no root-owned file, nothing starts (silent)
+  [ -e "$AUTOSTART_FILE" ] || return 0   # kill switch: no root-owned file, nothing starts (silent)
   if [ -e "$cfg/max-runs-per-day" ]; then
     max="$(tr -d '[:space:]' < "$cfg/max-runs-per-day")"
     [[ "$max" =~ ^[0-9]+$ ]] || { echo "invalid /etc/ha2n-coder/max-runs-per-day" >&2; return 1; }
@@ -186,8 +190,9 @@ RUN="${2:-}"; [ "${1:-}" = "--run" ] && [ -n "$RUN" ] || RUN="$(date +%Y%m%d-%H%
 DIR="$RUNS/$RUN"; mkdir -p "$DIR"
 STARTED="$(date +%s)"   # epoch of this run; last_run_blocks compares task-file commits with it
 
-status() {  # status <state> <message>  — states: running, stopped, green, review, failed
+status() {  # status <state> <message>  — states: running, stopped, green, merged, review, failed
   { echo "task=$TASK"; echo "started=$STARTED"; echo "state=$1"; echo "message=$2"; echo "branch=${BRANCH:-}"; echo "pr=${PR_URL:-}"
+    echo "next=${NEXT_RUN:-}"
     echo "round=${ROUND:-0}"; echo "review=${REVIEW_VERDICT:-}"; echo "updated=$(date -Is)"; } > "$DIR/status.tmp" && mv "$DIR/status.tmp" "$DIR/status"
   echo "[$(date +%H:%M:%S)] $1: $2"
 }
@@ -335,7 +340,8 @@ open_pr() {
     echo "Opened by **ha2n-coder** (GitHub Copilot CLI, headless on the VM) on Jan's command."
     echo "Local gates (unit tests, validate.py, py_compile on Python 3.12) were green before push;"
     echo "E2E runs as the \`e2e-pi\` check. When all checks are green the coder adds one last commit that"
-    echo "sets the task Done and ticks its criteria; that takes effect when you merge (label manual-close opts out)."
+    echo "sets the task Done and ticks its criteria; that takes effect when the PR is merged (label manual-close opts out)."
+    echo "With auto-merge on, the coder merges an approved green PR itself unless it is a release, manual-path or protected-path change."
   } > "$DIR/pr-body.md"
   PR_URL="$(ghx pr create -R "$REPO" --base main --head "$BRANCH" --title "$TASK: $TITLE" \
             --body-file "$DIR/pr-body.md" --label agent 2>/dev/null \
@@ -344,12 +350,16 @@ open_pr() {
   status running "PR opened"
 }
 
-wait_checks() {  # -> 0 green (e2e-pi = pass, nothing failed), 1 failed (details in $DIR/ci-$ROUND.txt)
-  local head deadline=$(( $(date +%s) + CHECKS_TIMEOUT ))
+wait_checks() {  # [soft] -> 0 green (e2e-pi = pass, nothing failed), 1 failed (details in $DIR/ci-$ROUND.txt)
+  # soft (before an auto-merge): a timeout returns 2 instead of stopping the run
+  local mode="${1:-}" head deadline=$(( $(date +%s) + CHECKS_TIMEOUT ))
   head="$(git rev-parse HEAD)"
   # GitHub must see the new head first, otherwise we would read the previous push's checks
   until [ "$(ghx pr view "$PR_URL" -R "$REPO" --json headRefOid -q .headRefOid 2>/dev/null)" = "$head" ]; do
-    [ "$(date +%s)" -gt "$deadline" ] && stop "GitHub does not show the pushed commit on the PR"
+    if [ "$(date +%s)" -gt "$deadline" ]; then
+      [ "$mode" = soft ] && return 2
+      stop "GitHub does not show the pushed commit on the PR"
+    fi
     sleep 10
   done
   sleep 30
@@ -361,7 +371,10 @@ c = json.load(open(sys.argv[1]))
 done = any(x["name"] == "e2e-pi" for x in c) and all(x["bucket"] != "pending" for x in c)
 sys.exit(0 if done else 1)
 PY
-    [ "$(date +%s)" -gt "$deadline" ] && stop "checks did not finish within $((CHECKS_TIMEOUT/60)) min (is the Pi runner online?)"
+    if [ "$(date +%s)" -gt "$deadline" ]; then
+      [ "$mode" = soft ] && return 2
+      stop "checks did not finish within $((CHECKS_TIMEOUT/60)) min (is the Pi runner online?)"
+    fi
     sleep 30
   done
   python3 - "$DIR/checks.json" > "$DIR/ci-$ROUND.txt" <<'PY'
@@ -501,8 +514,49 @@ PY
   CLOSE_NOTE="task set to Done in the PR's last commit (takes effect when merged)"
 }
 
+auto_merge() {  # only with AUTOMERGE_FILE: merge THIS run's PR when every rule allows it -> MERGED=1, else MERGE_NOTE=<reason>
+  MERGED=0; MERGE_NOTE=""
+  local head files labels
+  if [ "$REVIEW_ON" != 1 ] || [ "$REVIEW_VERDICT" != approve ]; then MERGE_NOTE="no approved second-model review"; return 0; fi
+  labels="$(sed -n 's/^Labels: //p' <<<"$HEADER" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -xE 'release|manual-path' | head -1)"
+  [ -z "$labels" ] || { MERGE_NOTE="task has the label $labels"; return 0; }
+  files="$(git diff --no-renames --name-only origin/main...HEAD 2>/dev/null)" || { MERGE_NOTE="cannot list the PR's files"; return 0; }
+  [ -n "$files" ] || { MERGE_NOTE="cannot list the PR's files"; return 0; }
+  if grep -E "$PROTECTED" <<<"$files" > "$DIR/merge-protected.txt"; then
+    MERGE_NOTE="the PR touches protected paths: $(head -3 "$DIR/merge-protected.txt" | tr '\n' ' ')"; return 0
+  fi
+  head="$(git rev-parse HEAD)"
+  if [ "$head" != "$CHECKED_HEAD" ]; then   # the close commit is a new head: GitHub runs all checks on it again
+    status running "waiting for PR checks on ${head:0:9} before the auto-merge"
+    local rc=0; wait_checks soft || rc=$?
+    case "$rc" in
+      0) ;;
+      2) MERGE_NOTE="checks on ${head:0:9} did not finish in time"; return 0 ;;
+      *) MERGE_NOTE="checks on ${head:0:9} are not green: $(cut -d' ' -f1,2 "$DIR/ci-$ROUND.txt" | tr '\n' ' ')"; return 0 ;;
+    esac
+  fi
+  status running "merging $PR_URL (head ${head:0:9})"
+  if ghx pr merge "$PR_URL" -R "$REPO" --merge --match-head-commit "$head" --delete-branch > "$DIR/merge.log" 2>&1; then
+    MERGED=1; return 0
+  fi
+  MERGE_NOTE="GitHub refused the merge: $(grep -v '^[[:space:]]*$' "$DIR/merge.log" | tail -2 | tr '\n' ' ' | cut -c1-200)"
+}
+
+trigger_next() {  # once, after a merge: --next (kill switch, daily limit, readiness) decides -> NEXT_RUN, NEXT_NOTE
+  local out
+  exec 9>&-   # release run.lock, --next takes it itself
+  if [ ! -e "$AUTOSTART_FILE" ]; then NEXT_NOTE="next task not started (autostart is off)"; return 0; fi
+  out="$("$0" --next 2>&1)"
+  printf '%s\n' "$out" > "$DIR/next.log"
+  NEXT_RUN="$(sed -nE 's/^started ([^ ]+) .*/\1/p' <<<"$out" | head -1)"
+  if [ -n "$NEXT_RUN" ]; then NEXT_NOTE="next: started $NEXT_RUN"
+  elif [ -z "$out" ]; then NEXT_NOTE="no next task is ready"
+  else NEXT_NOTE="next task not started: $(head -1 <<<"$out" | cut -c1-160)"; fi
+}
+
 # ---- 2. implement --------------------------------------------------------------------------
 ROUND=0; CI_USED=0; REVIEWS=0; REVIEW_FIX=0; REVIEW_VERDICT=""; REVIEW_BLOCKING=0; REVIEW_MINOR=0; CLOSE_NOTE=""
+MERGED=0; MERGE_NOTE=""; NEXT_RUN=""; NEXT_NOTE=""; CHECKED_HEAD=""
 "${SANDBOX[@]}" prepare "$BRANCH" > "$DIR/prepare.log" 2>&1 || stop "sandbox prepare failed (prepare.log)"
 status running "Copilot implementing"
 copilot_round implement.md - "" "implement"
@@ -531,7 +585,19 @@ while :; do
         *)       status review "independent review failed (output unusable, see review-$REVIEWS.log) — not approved; task stays In Progress: $PR_URL"; exit 1 ;;
       esac
     fi
+    CHECKED_HEAD="$(git rev-parse HEAD)"
     close_task
+    [ -e "$AUTOMERGE_FILE" ] && auto_merge
+    if [ "$MERGED" = 1 ]; then
+      ghx pr comment "$PR_URL" -R "$REPO" --body "✅ All checks green (incl. \`e2e-pi\`) after $ROUND fix round(s). ${REVIEW_NOTE:+Review: $REVIEW_NOTE.} Merged by the coder (auto-merge).${CLOSE_NOTE:+ Task: $CLOSE_NOTE.}" >/dev/null 2>&1 || true
+      status running "PR merged — checking for the next task"
+      trigger_next
+      status merged "PR merged: $PR_URL — $REVIEW_NOTE${CLOSE_NOTE:+ — $CLOSE_NOTE} — $NEXT_NOTE"; exit 0
+    fi
+    if [ -n "$MERGE_NOTE" ]; then
+      ghx pr comment "$PR_URL" -R "$REPO" --body "✅ All checks green (incl. \`e2e-pi\`) after $ROUND fix round(s). Ready for review — not merged automatically: $MERGE_NOTE. ${REVIEW_NOTE:+Review: $REVIEW_NOTE.}${CLOSE_NOTE:+ Task: $CLOSE_NOTE.}" >/dev/null 2>&1 || true
+      status green "PR ready for review: $PR_URL — $REVIEW_NOTE${CLOSE_NOTE:+ — $CLOSE_NOTE} — not merged automatically: $MERGE_NOTE"; exit 0
+    fi
     ghx pr comment "$PR_URL" -R "$REPO" --body "✅ All checks green (incl. \`e2e-pi\`) after $ROUND fix round(s). Ready for review — the coder never merges. ${REVIEW_NOTE:+Review: $REVIEW_NOTE.}${CLOSE_NOTE:+ Task: $CLOSE_NOTE.}" >/dev/null 2>&1 || true
     status green "PR ready for review: $PR_URL — $REVIEW_NOTE${CLOSE_NOTE:+ — $CLOSE_NOTE}"; exit 0
   fi

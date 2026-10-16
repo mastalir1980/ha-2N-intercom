@@ -1,7 +1,8 @@
 # Headless kodér na virtuálu (TASK-23)
 
 Druhá polovina autonomní pipeline. Na tvůj pokyn („vezmi TASK-12“) udělá virtuál z připraveného
-Backlog úkolu PR. E2E na Pi (check `e2e-pi`, TASK-22) ho pak otestuje. **Merguješ vždycky ty.**
+Backlog úkolu PR. E2E na Pi (check `e2e-pi`, TASK-22) ho pak otestuje. **Merguješ ty**, kromě opt-in
+auto-merge (TASK-46, viz *Auto-merge*).
 
 ```
 ty → Hermes (VM): „vezmi TASK-12“
@@ -15,6 +16,7 @@ ty → Hermes (VM): „vezmi TASK-12“
     ├─ čeká na checky (e2e-pi, hassfest, HACS) → když padnou, log jde zpět Copilotovi (max. 3 kola)
     └─ zelené checky → nezávislé review druhým modelem (TASK-33) → komentář v PR s verdiktem;
        blokující nálezy jdou zpět kodéru (1 kolo `review-fix-1`) → checky → znovu review
+    └─ jen s /etc/ha2n-coder/automerge: approve → merge vlastního PR → jednou `--next`
   → stav: ha2n-task-status   → Hermes ti napíše výsledek (včetně verdiktu review) a odkaz na PR
 ```
 
@@ -23,7 +25,7 @@ ty → Hermes (VM): „vezmi TASK-12“
 | Kdo | Co smí | Co nesmí |
 |---|---|---|
 | `hermes` | spustit `ha2n-run-task` a `ha2n-task-status` (sudo) | číst tokeny, sahat do klonů |
-| `ha2n-coder` (orchestrátor) | token k repu, git push, `gh pr create/comment` | spouštět kód z repa; volá jen git, gh, backlog |
+| `ha2n-coder` (orchestrátor) | token k repu, git push, `gh pr create/comment`, `gh pr merge` (jen s auto-merge) | spouštět kód z repa; volá jen git, gh, backlog |
 | `ha2n-copilot` (pískoviště) | Copilot, editace kódu, testy | token k repu; `git push`, `gh` a `url` má Copilot zakázané |
 
 - **Token k repu** (fine-grained, jen `ha-2N-intercom`): Contents + Pull requests RW, **bez Workflows
@@ -32,10 +34,10 @@ ty → Hermes (VM): „vezmi TASK-12“
 - **Chráněné cesty** v patchi zastaví běh ještě před pushem: `.github/`, `e2e/ci/`, `e2e/scripts/`,
   `e2e/run.sh`, `e2e/nightly.sh`, `e2e/e2e.sh`, `e2e/staging/`, `tools/coder/`, `CLAUDE.md`,
   `backlog/config.yml`.
-- **Kodér nikdy nemerguje.** Na `main` nastav ruleset bez výjimek (níž), pak token do `main`
-  nepushne ani omylem.
+- **Kodér bez `/etc/ha2n-coder/automerge` nikdy nemerguje.** Na `main` nastav ruleset bez výjimek (níž), pak
+  token do `main` nepushne ani omylem; merge jde vždycky přes PR.
 - Copilot si může upravit testy tak, aby prošly. Proto každé PR kodéra prochází nezávislým review
-  druhým modelem (viz níž); Claude reviewuje navíc na tvůj pokyn. Auto-merge zatím není.
+  druhým modelem (viz níž); Claude reviewuje navíc na tvůj pokyn. Auto-merge je jen opt-in a jen po `approve`.
 
 ## Instalace (jednorázově, jako uživatel se sudo)
 
@@ -110,7 +112,9 @@ a na VM zkontroluj `ha2n-run-task --next` se zapnutým `autostart` na úkolu se 
   `sudo -n -u ha2n-coder /usr/local/bin/ha2n-run-task TASK-12`
 - Stav: `sudo -n -u ha2n-coder /usr/local/bin/ha2n-task-status` (nebo `--list`).
 - Výsledek je vždycky jeden z těchto:
-  - `green`: PR s odkazem čeká na review,
+  - `green`: PR s odkazem čeká na review (s auto-merge i s důvodem, proč se nemergnulo),
+  - `merged`: kodér PR sám mergnul (auto-merge); ve zprávě je odkaz na PR a co udělal `--next`, run id dalšího
+    běhu je v řádku `next=` (prázdný, když se nic nespustilo),
   - `stopped`: s důvodem (úkol není připravený, Copilot narazil na nejasnost, patch sahá na chráněné soubory…),
   - `review`: checky jsou zelené, ale review neschválilo (blokující nálezy zůstaly i po opravě, nebo review
     selhalo). Nálezy jsou v komentáři v PR a ve zprávě; úkol zůstává *In Progress* a rozhoduješ ty,
@@ -122,11 +126,11 @@ a na VM zkontroluj `ha2n-run-task --next` se zapnutým `autostart` na úkolu se 
 - Pokud je vlastní klon poškozený, obnovíš ho příkazem `sudo rm -rf /var/lib/ha2n-coder/repo`; další běh ho znovu naklonuje (nejdřív ověř, že žádný běh neprobíhá).
 - Když jsou všechny checky zelené (včetně `e2e-pi`) a review dalo `approve` (nebo je vypnuté), kodér přidá do PR **jeden poslední commit**: úkol dostane
   stav *Done*, odškrtnou se kritéria a doplní se shrnutí (odkaz na PR, checky, počet oprav). Na `main` se to dostane
-  až tvým mergem. Když PR nezamergeš, na `main` se nezmění nic. Úkol se štítkem `manual-close` kodér nechá být
+  až mergem (tvým, nebo auto-merge). Když PR nikdo nezamerguje, na `main` se nezmění nic. Úkol se štítkem `manual-close` kodér nechá být
   (pro věci, které se ověřují až po mergi). Když se zavření nepovede, běh zůstane `green` a ve zprávě stojí, že
   úkol musíš zavřít ručně. Rodičovské úkoly (třeba TASK-2) se zavírají ručně.
-- Omezení: poslední commit nemá žádné checky. Pokud někdy zapneš na `main` povinný check `e2e-pi`, GitHub tento
-  commit zablokuje a zavírání se musí přesunout do workflow po mergi.
+- GitHub na posledním commitu pustí checky znovu (filtr cest hodnotí celý diff PR). Bez auto-merge na ně kodér
+  nečeká; s auto-merge ano (viz *Auto-merge*).
 
 ## Automatický start (časovač)
 
@@ -156,6 +160,32 @@ Pojistky proti smyčkám:
   Připravenost úkolu (stav, přiřazení, hotové závislosti) kontroluje stejně.
 - Chyba konfigurace (nečíselný `max-runs-per-day`) skončí chybou a nic nespustí.
 
+## Auto-merge (TASK-46)
+
+Volitelné. Zapíná se souborem `/etc/ha2n-coder/automerge` (vlastník root), `install-vm.sh` ho nikdy nevytvoří,
+jen v self-checku vypíše, jestli je zapnutý. Bez souboru se kodér chová jako dřív (`green`, PR čeká na tebe).
+
+- Zapnout: `sudo touch /etc/ha2n-coder/automerge`, vypnout: `sudo rm /etc/ha2n-coder/automerge`
+  (kontroluje se až těsně před mergem, takže vypnutí platí i pro běžící běh).
+- Merguje se jen PR, které otevřel ten samý běh, a jen když:
+  - jsou všechny checky včetně `e2e-pi` zelené na hlavním commitu PR,
+  - je nastavený `review-model` a review dalo `approve` (bez review se nemerguje nikdy),
+  - úkol nemá štítek `release` ani `manual-path`,
+  - diff PR nesahá na chráněné cesty (stejný seznam jako u patche),
+  - hlavní commit se od checků nezměnil: `gh pr merge --merge --match-head-commit <sha> --delete-branch`.
+- Po mergi GitHub smaže větev PR na remote (`--delete-branch`). Lokální klon a pracovní adresáře běhu se
+  uklízejí jako dřív. U nezamergovaného PR větev zůstává.
+- Commit, který zavírá úkol, je nový hlavní commit a GitHub na něm pustí checky znovu (včetně `e2e-pi`).
+  Kodér proto před mergem počká na checky i na něm. U `manual-close` (úkol se nezavírá) se hlavní commit nemění
+  a merguje se hned; úkol pak zůstává pro tvé ověření (*To Test*), kodér ho na *Done* nenastaví.
+- Odmítnutý merge (konflikt, ochrana větve, změněný hlavní commit, červené nebo nedokončené checky na zavíracím
+  commitu): stav zůstane `green`, důvod je ve zprávě i v komentáři u PR. Žádné opakování, PR čeká na tebe.
+- Po úspěšném mergi: stav `merged` a **jednou** `ha2n-run-task --next`. Ten dál platí celý: bez
+  `/etc/ha2n-coder/autostart` nic nespustí (auto-merge bez autostartu tedy jen merguje), denní limit
+  a pravidla připravenosti zůstávají. Spuštěný běh má značku `auto` a počítá se do denního limitu.
+  Výstup `--next` je v `runs/<run>/next.log`.
+- Release (štítek `release`) a tagování dělá vždy Jan, stejně jako ověření úkolů v *To Test* na zařízení.
+
 ## Regresní testy orchestrátoru
 
 ```bash
@@ -171,7 +201,10 @@ pořadí podle milníku a priority a zákaz opakování po ukončeném běhu (kr
 se testují ve všech třech podobách výstupu `backlog` (řádek, strom, `--json`) pro `--next` i ruční start. Stejná sada pokrývá celý
 průběh review (TASK-33) od PR po zavření úkolu: approve, changes → oprava → approve, changes bez opravy,
 chybějící `review-model`, nečitelný výstup, selhání reviewera, oddělený rozpočet oprav CI, štítky v `cost.csv`
-a `bash -n` všech skriptů. `sandbox.sh` samotný běží jen na VM (`bash -n` v testech).
+a `bash -n` všech skriptů. Auto-merge (TASK-46): vypnutý přepínač, approve → merge přesně ověřeného commitu
+a smazání větve na remote, a jednou `--next` (spuštění dalšího úkolu, vypnutý autostart, denní limit), chybějící review nebo `changes`, štítky
+`release`/`manual-path`, chráněné cesty, změněný hlavní commit, odmítnutý merge, červené checky na zavíracím commitu
+a `manual-close`. `sandbox.sh` samotný běží jen na VM (`bash -n` v testech).
 
 Proměnná `HA2N_CODER_TEST_ROOT` přesměruje pracovní adresáře, cestu k testovací náhradě tokenu
 a přidá testovací `bin` na `PATH`; kontrola uživatele zůstává platná. Je jen pro testy:
@@ -184,10 +217,13 @@ Před změnou `PATH` se účet ověří přes `/usr/bin/id -un` a produkčnímu 
 > Když tě Jan požádá „vezmi TASK-N“ / „pusť kodéra na TASK-N“, spusť
 > `sudo -n -u ha2n-coder /usr/local/bin/ha2n-run-task TASK-N` a pošli mu vypsané run id.
 > Pak každých 5 minut spusť `sudo -n -u ha2n-coder /usr/local/bin/ha2n-task-status` a jakmile je
-> `state` `green`, `review`, `stopped` nebo `failed`, pošli Janovi `message`, `pr` a verdikt review (řádek `review=`:
-> `approve`/`changes`/`failed`/`skipped`) jednou zprávou. Běhy spuštěné časovačem (značka `auto`) hlásíš stejně:
+> `state` `green`, `merged`, `review`, `stopped` nebo `failed`, pošli Janovi `message`, `pr` a verdikt review (řádek `review=`:
+> `approve`/`changes`/`failed`/`skipped`) jednou zprávou. U `merged` napiš, že kodér PR sám mergnul, přidej odkaz
+> na PR (`pr=`) a další spuštěný úkol: run id z řádku `next=` (když je prázdný, napiš důvod ze zprávy, např. autostart
+> vypnutý nebo nic připraveno). Stav `merged` hlásíš za každé run id jen jednou; další běh z `next=` hlásíš zvlášť,
+> až skončí. Běhy spuštěné časovačem (značka `auto`) hlásíš stejně:
 > každých 5 minut spusť `sudo -n -u ha2n-coder /usr/local/bin/ha2n-task-status --list`; u každého run id, které
 > dosáhlo konečného stavu a ještě jsi ho nehlásil, spusť `ha2n-task-status <run-id>` a pošli Janovi totéž.
 > Hlídej si, které run id jsi už nahlásil. Časovač sám nic
 > neohlašuje. Ty ho nespouštíš (`--next`), ale můžeš pustit `ha2n-run-task TASK-N`, když Jan výslovně požádá.
-> Jiné příkazy s `ha2n-coder` ani `ha2n-copilot` nespouštěj, tokeny nečti, nic nemerguj.
+> Jiné příkazy s `ha2n-coder` ani `ha2n-copilot` nespouštěj, tokeny nečti, sám nic nemerguj.

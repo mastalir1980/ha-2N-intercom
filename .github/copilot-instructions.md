@@ -69,10 +69,18 @@ Assistant or the intercom, so **do not run `e2e/e2e.sh`** — E2E runs on the Pi
 orchestrator pushes; you cannot push (no token) and must not edit `.github/`, `e2e/ci/`, `e2e/scripts/`,
 `e2e/run.sh`, `e2e/nightly.sh`, `e2e/e2e.sh`, `e2e/staging/`, `tools/coder/`, `CLAUDE.md` or `backlog/config.yml`
 (the patch is rejected). Do not tick criteria or set Done: once the PR checks incl. `e2e-pi` are green the orchestrator
-adds one last commit that does it (takes effect when Jan merges; label `manual-close` opts out). Commit your work locally with `TASK-<id>: …` messages.
+adds one last commit that does it (takes effect when the PR is merged; label `manual-close` opts out). Commit your work locally with `TASK-<id>: …` messages.
 Every coder PR is then reviewed independently by a second model (TASK-33) against the task's criteria and the architecture rules;
 the orchestrator feeds its `blocking` findings back to you as one extra fix round and sets the task Done only after `approve`
 (Claude reviews on request in addition). Never weaken, skip or delete a test to satisfy a finding or a red check.
+Auto-merge (TASK-46) is opt-in with the root-owned file `/etc/ha2n-coder/automerge` (`install-vm.sh` never creates it):
+when all PR checks incl. `e2e-pi` are green on the head commit and the second-model review verdict is `approve`, the coder
+merges its own PR (`gh pr merge --merge --match-head-commit <the head the checks ran on> --delete-branch`; the close commit is a new head,
+so it waits for the checks on it first), records state `merged` and starts `--next` once (its kill switch `autostart`, daily
+limit and readiness rules still apply). Never auto-merged: runs without a configured review-model, tasks labelled `release`
+or `manual-path`, PRs whose diff touches a protected path, PRs not opened by that run. `manual-close` tasks are merged but
+not set Done. A refused merge (conflict, protection, changed head, red checks) leaves state `green` with the reason in a PR
+comment and is not retried. Without the file the coder never merges and Jan merges.
 
 ## Working with the backlog
 
