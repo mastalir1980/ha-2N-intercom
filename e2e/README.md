@@ -31,7 +31,9 @@ Agent smí jen číst soubory a volat `backlog` + read-only `git`. Kód neupravu
    pro ruční test. Na interkomu použij **vlastní HTTP API účet** (např. `e2e`, *Services → HTTP API →
    Accounts*), ne admin účet webu. Potřebná práva:
    - **čtení (monitoring):** System, Switch, I/O, Phone/Call, Camera, Logging (události);
-   - **ovládání (control):** Switch, I/O, Phone/Call — bez Switch control nejde ruční test relé.
+   - **ovládání (control):** System, Switch, I/O, Phone/Call — bez Switch control nejde ruční test relé.
+     System - Control je potřeba pro `/api/dir/query` (jména uživatelů pro grant-access,
+     E2E kontrola z TASK-48).
    Konfiguraci interkomu pipeline nemění. Pokud má interkom vypnuté HTTP (jen HTTPS), nech
    `INTERCOM_PROTOCOL=https`. Chybějící právo se v testech projeví jako `401` / `PermissionError`.
    Po změně účtu spusť `e2e/e2e.sh reset-entry`, aby si staging HA vzal nové údaje.

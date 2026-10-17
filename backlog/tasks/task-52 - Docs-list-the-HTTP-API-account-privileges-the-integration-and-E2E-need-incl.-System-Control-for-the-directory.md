@@ -3,11 +3,11 @@ id: TASK-52
 title: >-
   Docs: list the HTTP API account privileges the integration and E2E need (incl.
   System - Control for the directory)
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-17 09:34'
-updated_date: '2026-10-17 09:34'
+updated_date: '2026-10-17 09:52'
 labels:
   - docs
 milestone: m-0
@@ -44,8 +44,16 @@ Expected: one table in README.md of HTTP API account privileges per feature, and
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Read docs/API_REFERENCE.md (privilege notes per endpoint) and the 2N function overview linked in the description; build the privilege -> feature table only from those sources.
-2. README.md: add a subsection 'HTTP API account privileges' under '## Configuration' (before 'Initial setup') with the table and the note for missing System - Control. Replace the duplicated privilege sentences in 'Direct IO output switches' and 'Grant access vs. switch entities' with a short pointer to the table (keep the feature-specific error behaviour text).
-3. e2e/README.md step 2: add System to the control list with the reason (dir/query - grant-access user names, TASK-48 E2E). Keep the rest of the step unchanged; the file stays in Czech.
-4. Must not change: code, tests, e2e/ci, e2e/scripts, CHANGELOG.md, manifest version. No host names, IPs or the E2E intercom's device model (public repo).
+1. Read docs/API_REFERENCE.md and the official 2N HTTP API function overview to confirm privilege-to-feature mappings.
+2. Add the HTTP API account privileges table under Configuration before Initial setup in README.md, explain directory degradation and System - Control risks, and replace per-feature privilege duplication with table links while preserving error behaviour.
+3. Add System - Control and its dir/query / TASK-48 rationale to step 2 of e2e/README.md in Czech, leaving the rest unchanged.
+4. Keep code, tests, protected paths, CHANGELOG.md and manifest version unchanged. Run the three required local Python gates, record implementation notes, and commit locally on the existing branch; leave acceptance criteria unchecked and status In Progress for the orchestrator.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Added README Configuration > HTTP API account privileges with privilege-to-feature mappings for System, Switches, I/O, Phone/Calls, Camera and Access Control, plus links to the official 2N function overview/log subscription documentation and docs/API_REFERENCE.md. Documented missing System - Control degradation, the non-blocking directory_unavailable options error, retained saved UUIDs, and the broader system-configuration permission. Replaced the direct-output and grant-access privilege duplication with links while preserving error behaviour.
+Updated only the control list in e2e/README.md step 2 and its System - Control rationale (/api/dir/query, grant-access user names, TASK-48). Code, tests, protected paths, CHANGELOG.md and manifest are unchanged.
+Local gates on Python 3.12.15 passed: all 655 unit tests, python3 validate.py, and py_compile for the integration; git diff --check passed. No device/E2E commands were run. The orchestrator must obtain a green e2e-pi PR check before finalization; status remains In Progress and all acceptance criteria remain unchecked.
+<!-- SECTION:NOTES:END -->
