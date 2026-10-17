@@ -189,6 +189,42 @@ certificate verification enabled through **Reconfigure**, and keep untrusted
 devices off the intercom's network. Manual setup remains available if SSDP
 announcements cannot reach Home Assistant.
 
+### HTTP API account privileges
+
+Configure the integration's HTTP API account under **Services > HTTP API > Accounts**
+on the intercom. Grant the privileges for the features you use:
+
+| Privilege (group - Monitoring/Control) | Features that need it |
+|---|---|
+| **System - Monitoring** | Device information and capability discovery (`/api/system/info`, `/api/system/caps`) |
+| **System - Control** | Directory lookup (`/api/dir/query`): called-ID peers, the grant-access user list, and user names for access events |
+| **Switches - Monitoring** | Logical relay discovery and state for switch/cover entities (`/api/switch/caps`, `/api/switch/status`) |
+| **Switches - Control** | Door/gate relay commands from switch/cover entities (`/api/switch/ctrl`) |
+| **I/O - Monitoring** | Physical input/output discovery and state, including module and tamper ports (`/api/io/caps`, `/api/io/status`) |
+| **I/O - Control** | Direct latching output switches (`/api/io/ctrl`) |
+| **Phone/Calls - Monitoring** | SIP registration and call state (`/api/phone/status`, `/api/call/status`) |
+| **Phone/Calls - Control** | The `answer_call` and `hangup_call` services (`/api/call/answer`, `/api/call/hangup`) |
+| **Camera - Monitoring** | Camera capabilities, JPEG snapshots, MJPEG live view, and the last-ring image (`/api/camera/caps`, `/api/camera/snapshot`) |
+| **Access Control - Control** (API Access Control service group) | The `grant_access` service (`/api/accesspoint/grantaccess`); separate from relay switch/cover control |
+
+Enable the **Logging** service for the event stream (`/api/log/*`). Events are
+filtered by the account's per-event monitoring privileges; see the
+[2N log subscription documentation](https://wiki.2n.com/hip/hapi/latest/en/5-prehled-funkci-http-api/5-10-api-log/5-10-2-api-log-subscribe)
+for the event-specific requirements. The endpoint privileges above follow the
+[2N HTTP API function overview](https://wiki.2n.com/hip/hapi/latest/en/5-prehled-funkci-http-api);
+the integration's endpoint usage is listed in [API Reference](docs/API_REFERENCE.md).
+
+**Without System - Control**, the integration still works with the other required
+privileges, but directory-backed features degrade: called-ID peers and grant-access
+users cannot be loaded from the directory, and access-event names cannot be
+resolved through it. The options flow's **Device** step shows the translated
+`directory_unavailable` error without blocking the form; an already saved
+grant-access user UUID remains selectable.
+
+**System - Control also permits system configuration changes**, not just directory
+reads. Only grant it if you accept that broader permission; the integration uses
+it for directory queries, not to change system configuration.
+
 ### Initial setup
 
 The setup wizard has two steps:
@@ -311,8 +347,8 @@ for a short pulse. A direct output switch is exposed even when a logical switch
 or gate cover already controls that same relay. Prefer the existing logical
 switch/cover for normal timed door or gate opening.
 
-The API account must have the **I/O control privilege** in the intercom's
-HTTP API settings. Without it, output control raises an error in Home Assistant;
+See [HTTP API account privileges](#http-api-account-privileges) for the required
+output-control permission. Without it, output control raises an error in Home Assistant;
 the device rejection is also logged with its code and description.
 
 ## Services
@@ -341,7 +377,7 @@ Example actionable-notification snippet:
 Requirements:
 
 - **User** — every call needs a directory user UUID: pass `user` in the call or set the default **grant-access user** in the options flow (Device step). Without either the service fails with a clear error.
-- **Device privilege** — the HTTP API account needs the **Access Control - Control** privilege of the **API Access Control** service group (Services → HTTP API). This is separate from the Switch privilege used by the relay entities; without it the service reports that the account may not grant access.
+- **Device privilege** — see [HTTP API account privileges](#http-api-account-privileges) for the grant-access permission. Without it the service reports that the account may not grant access.
 - The access point must be enabled on the device.
 
 The service never reports success when the door did not open: a denial (`accessGranted: false`, e.g. `invalidCredential`, `accessBlocked`, `invalidAp`) raises an error including the device's reason.
