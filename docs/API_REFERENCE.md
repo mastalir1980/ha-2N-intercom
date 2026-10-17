@@ -22,7 +22,7 @@ Basic**, pokud zařízení vrátí `401` s `WWW-Authenticate: Basic`.
 | `/api/call/status` | GET | `async_get_call_status` | aktivní sessions, stav hovoru, peer |
 | `/api/call/answer` | GET | `async_answer_call` | param `session` |
 | `/api/call/hangup` | GET | `async_hangup_call` | param `session` (+ volitelně `reason`) |
-| `/api/dir/query` | POST | `async_get_directory`, `async_get_directory_users` | peery pro filtr `called_id`, uživatelé (`uuid`, `name`) pro options grant_access a jména u přístupových událostí |
+| `/api/dir/query` | POST | `async_get_directory`, `async_get_directory_users` | peery pro filtr `called_id`, uživatelé (`uuid`, `name`) pro options grant_access a jména u přístupových událostí; vyžaduje oprávnění *System – Control* (jinak chyba 10) |
 | `/api/accesspoint/grantaccess` | GET | `async_grant_access` | `id` (0 vstup / 1 výstup), `user` (uuid) → `accessGranted`, `reason`; vyžaduje oprávnění *Access Control – Control* (skupina API Access Control) |
 | `/api/phone/status` | GET | `async_get_phone_status` | SIP účty, registrace |
 | `/api/switch/caps` | GET | `async_get_switch_caps` | povolená relé, `switchOnDuration` |
@@ -94,17 +94,16 @@ Jména uživatelů: z parametru `name` události, jinak z cache `dir/query` (kl�
 uuid malými písmeny; dir/query vrací uuid velkými, log události malými). Neznámé
 uuid spustí refresh adresáře, nejvýš jednou za 60 s.
 
-The options flow requests `name` and `callPos.peer` from `dir/query`; `uuid`
-is entry metadata returned independently of this field selection, not a
-selectable directory data field. Do not add it to `fields`: this can reject
-the query on fw 3.x. The independent E2E directory client selects only `name`
-and retains the response UUIDs; failures report the numeric device error code,
-never directory data or raw error descriptions.
-Grant-access users are matched case-insensitively, but the selected
-option retains the stored UUID string exactly. Directory failures produce one
-WARNING per lookup and a non-blocking translated form error; unknown stored
-users remain selectable. The coordinator's directory API calls keep their
-existing best-effort behavior.
+Integrace žádá z `dir/query` pole `name` a `callPos.peer` (E2E klient jen `name`).
+`uuid` vrací 2N u každého záznamu vždy, i když ho `fields` neobsahuje (ověřeno
+E2E na fw 3.x), proto ho do `fields` nepřidáváme. Funkce `/api/dir/*` patří
+podle dokumentace 2N do skupiny *System* a vyžadují oprávnění **System – Control**;
+účet jen se *System – Monitoring* dostane chybu 10 (insufficient privileges).
+Options flow porovnává uložené uuid uživatele pro grant_access bez ohledu na
+velikost písmen, ale vybraná volba drží uložený řetězec beze změny. Selhání
+adresáře = jeden WARNING na dotaz a přeložená chyba `directory_unavailable`,
+která formulář neblokuje; neznámé uložené uuid zůstává na výběr. Volání adresáře
+z koordinátoru se chovají jako dřív (best effort).
 
 ## RTSP
 
