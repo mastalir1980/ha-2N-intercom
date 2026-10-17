@@ -1,5 +1,6 @@
 {
   "config": {
+    "flow_title": "{name} ({host})",
     "step": {
       "user": {
         "title": "Nastavení 2N Intercom",
@@ -69,6 +70,8 @@
     },
     "abort": {
       "already_configured": "Toto zařízení 2N Intercom je již nakonfigurováno.",
+      "no_host": "Nepodařilo se zjistit adresu zařízení z jeho síťového oznámení.",
+      "no_mac": "Síťové oznámení zařízení neobsahovalo použitelný identifikátor.",
       "reauth_successful": "Přihlašovací údaje byly úspěšně aktualizovány.",
       "reconfigure_successful": "Nastavení zařízení bylo úspěšně aktualizováno."
     }

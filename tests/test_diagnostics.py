@@ -214,6 +214,22 @@ class DiagnosticsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(entry_data["host"], "192.0.2.20")
         self.assertEqual(entry_data["port"], 443)
 
+    async def test_diagnostics_redacts_entry_mac_address(self) -> None:
+        coordinator_module = sys.modules["custom_components.2n_intercom.coordinator"]
+        entry = FakeConfigEntry()
+        entry.data["mac_address"] = "001122AABBCC"
+        entry.runtime_data = coordinator_module.TwoNIntercomRuntimeData(
+            coordinator=FakeCoordinator(),
+            api=types.SimpleNamespace(),
+            loaded_platforms=["camera"],
+        )
+
+        result = await self.diag_module.async_get_config_entry_diagnostics(None, entry)
+
+        self.assertEqual(result["entry"]["data"]["mac_address"], "**REDACTED**")
+        self.assertNotIn("001122AABBCC", repr(result))
+        self.assertEqual(entry.data["mac_address"], "001122AABBCC")
+
     async def test_diagnostics_includes_device_state(self) -> None:
         diag_module = self.diag_module
         coordinator_module = sys.modules["custom_components.2n_intercom.coordinator"]

@@ -170,6 +170,25 @@ All entities, devices, and automation references created by this integration are
 
 ## Configuration
 
+### Automatic discovery
+
+2N intercoms and Control4 DS2 / DS2 Mini units announcing themselves over SSDP
+appear under **Settings > Devices & services > Discovered**. Start setup there:
+the host is prefilled and the announced friendly name is the default display name.
+You still need to enter the intercom's HTTP API credentials.
+
+Once configured, the entry follows the device when its IP address changes.
+The integration matches the announcement against a separately stored MAC address,
+updates the host, and reloads the entry automatically. An INFO log records the
+entry title and the old and new hosts. Existing entries learn their MAC address
+from the device on their next setup; their unique ID remains unchanged.
+
+**This trusts devices on the local network.** Another device announcing the same
+MAC address could redirect the connection to itself. Use HTTPS, preferably with
+certificate verification enabled through **Reconfigure**, and keep untrusted
+devices off the intercom's network. Manual setup remains available if SSDP
+announcements cannot reach Home Assistant.
+
 ### Initial setup
 
 The setup wizard has two steps:

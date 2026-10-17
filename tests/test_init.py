@@ -171,6 +171,11 @@ class FakeConfigEntries:
     def __init__(self, entries: list[FakeConfigEntry]) -> None:
         self._entries = entries
         self.forwarded: list[tuple[str, tuple[str, ...]]] = []
+        self.update_calls: list[tuple[str, dict]] = []
+
+    def async_update_entry(self, entry, *, data):
+        entry.data = data
+        self.update_calls.append((entry.entry_id, dict(data)))
 
     async def async_forward_entry_setups(self, entry, platforms) -> None:
         self.forwarded.append((entry.entry_id, tuple(platforms)))
@@ -351,6 +356,54 @@ class AuthenticationSetupTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(replacement.closed)
         self.assertFalse(api._owns_session)
         await self.init_module.async_unload_entry(self.hass, self.entry)
+
+
+class MacBackfillSetupTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.init_module = load_init_module()
+        self.entry = FakeConfigEntry("entry-1", {
+            "host": "192.0.2.20", "port": 443, "protocol": "https",
+            "username": "user", "password": "secret",
+            "serial_number": "SN-123456",
+        }, options={"scan_interval": 120})
+        self.entry.unique_id = "SN-123456"
+        self.hass = FakeHass([self.entry])
+
+    async def _setup_with_info(self, info) -> None:
+        api = FakeAPI()
+        api.async_get_system_info = AsyncMock(return_value=info)
+        with patch.object(self.init_module, "TwoNIntercomAPI", return_value=api):
+            self.assertTrue(await self.init_module.async_setup_entry(self.hass, self.entry))
+
+    async def test_setup_backfills_normalized_mac_without_changing_identity(self) -> None:
+        original_data = dict(self.entry.data)
+        await self._setup_with_info({"macAddr": " 00:11:22:aa:bb:cc "})
+        try:
+            self.assertEqual(self.hass.config_entries.update_calls, [
+                (self.entry.entry_id, {**original_data, "mac_address": "001122AABBCC"}),
+            ])
+            self.assertEqual(self.entry.unique_id, "SN-123456")
+            self.assertEqual(self.entry.options, {"scan_interval": 120})
+            self.entry.runtime_data.api.async_get_system_info.assert_awaited_once()
+        finally:
+            await self.init_module.async_unload_entry(self.hass, self.entry)
+
+    async def test_setup_keeps_existing_mac(self) -> None:
+        self.entry.data["mac_address"] = "001122334455"
+        await self._setup_with_info({"macAddr": "00-11-22-aa-bb-cc"})
+        try:
+            self.assertEqual(self.entry.data["mac_address"], "001122334455")
+            self.assertEqual(self.hass.config_entries.update_calls, [])
+        finally:
+            await self.init_module.async_unload_entry(self.hass, self.entry)
+
+    async def test_setup_without_device_mac_does_not_update_entry(self) -> None:
+        await self._setup_with_info({})
+        try:
+            self.assertNotIn("mac_address", self.entry.data)
+            self.assertEqual(self.hass.config_entries.update_calls, [])
+        finally:
+            await self.init_module.async_unload_entry(self.hass, self.entry)
 
 
 class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):

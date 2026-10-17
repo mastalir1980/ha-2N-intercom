@@ -7,6 +7,7 @@ in api.py would be invisible to the tests.
 from __future__ import annotations
 
 from typing import Any
+from xml.etree import ElementTree
 
 import requests
 import urllib3
@@ -48,6 +49,24 @@ class TwoN:
 
     def system_info(self) -> dict[str, Any]:
         return self._get("/api/system/info")
+
+    def ssdp_description(self) -> dict[str, str]:
+        """Read the unauthenticated UPnP description independently of HA."""
+        response = requests.get(
+            self.base + "/ssdp_server/description.xml",
+            verify=self.verify,
+            timeout=10,
+        )
+        response.raise_for_status()
+        root = ElementTree.fromstring(response.content)
+        namespaces = {"upnp": "urn:schemas-upnp-org:device-1-0"}
+        description: dict[str, str] = {}
+        for field in ("manufacturer", "serialNumber", "UDN"):
+            value = root.findtext(f"upnp:device/upnp:{field}", namespaces=namespaces)
+            if value is None or not value.strip():
+                raise ValueError(f"SSDP description is missing {field}")
+            description[field] = value.strip()
+        return description
 
     def system_caps(self) -> dict[str, Any]:
         return self._get("/api/system/caps")

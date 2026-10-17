@@ -33,6 +33,7 @@ from .const import (
     CONF_ENABLE_CAMERA,
     CONF_ENABLE_DOORBELL,
     CONF_GRANT_ACCESS_USER,
+    CONF_MAC,
     CONF_PROTOCOL,
     CONF_RELAY_DEVICE_TYPE,
     CONF_RELAYS,
@@ -523,6 +524,18 @@ async def async_setup_entry(
     # status data and doesn't burn ~17k requests/day re-fetching constants.
     await coordinator.async_initialize_static_caches()
     await coordinator.async_config_entry_first_refresh()
+
+    # Backfill the MAC address for entries set up before SSDP discovery
+    # existed — it's what lets discovery recognize this device again (and
+    # update its host) regardless of serial_number's format, which varies
+    # by rebrand (e.g. a Control4 part number instead of the MAC).
+    if CONF_MAC not in entry.data:
+        raw_mac = coordinator.system_info.get("macAddr")
+        if raw_mac:
+            mac = str(raw_mac).replace(":", "").replace("-", "").strip().upper()
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, CONF_MAC: mac}
+            )
 
     entry.runtime_data = TwoNIntercomRuntimeData(coordinator=coordinator, api=api)
 

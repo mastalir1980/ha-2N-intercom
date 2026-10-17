@@ -12,13 +12,13 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_GRANT_ACCESS_USER, CONF_RTSP_PASSWORD, CONF_RTSP_USERNAME
+from .const import CONF_GRANT_ACCESS_USER, CONF_MAC, CONF_RTSP_PASSWORD, CONF_RTSP_USERNAME
 from .coordinator import TwoNIntercomRuntimeData
 
 if TYPE_CHECKING:
     from .coordinator import TwoNIntercomConfigEntry
 
-# Credentials for the device web API and RTSP. Host/port are intentionally NOT
+# Credentials and private identifiers. Host/port are intentionally NOT
 # redacted because they're load-bearing for any meaningful triage.
 TO_REDACT_ENTRY = {
     CONF_USERNAME,
@@ -26,6 +26,7 @@ TO_REDACT_ENTRY = {
     CONF_RTSP_USERNAME,
     CONF_RTSP_PASSWORD,
     CONF_GRANT_ACCESS_USER,
+    CONF_MAC,
 }
 # Directory identities on access events are personal data, not triage data.
 TO_REDACT_ACCESS_EVENT = {"user_uuid", "user_name"}
