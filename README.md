@@ -14,8 +14,8 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 | **2N IP Force** | 2.50.x | **Expected to work** | Same HTTP API family |
 | **2N IP Safety** | 2.50.x | **Untested** | Same API but may lack camera |
 | **2N IP Audio** | 2.50.x | **Untested** | No camera module |
-| **Control4 DS2 Door Station** | — | **Community-reported** | Rebranded 2N IP Verso. Credentials are set by the Control4 installer, see [Control4 DS2 / DS2 Mini](#control4-ds2--ds2-mini-door-stations) |
-| **Control4 DS2 Mini Door Station** | — | **Community-reported** | Rebranded 2N IP Solo. Same as the DS2 |
+| **Control4 DS2 Door Station** | 2.43.1.56.3 | **Community-reported** | Rebranded 2N IP Verso. Credentials are set by the Control4 installer, see [Control4 DS2 / DS2 Mini](#control4-ds2--ds2-mini-door-stations) |
+| **Control4 DS2 Mini Door Station** | 2.43.1.56.3 | **Community-reported** | Rebranded 2N IP Solo. Same as the DS2 |
 | Older 2N devices | < 2.40 | **Not supported** | Different API surface |
 | Non-2N intercoms | — | **Not supported** | 2N HTTP API only |
 
