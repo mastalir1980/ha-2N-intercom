@@ -94,6 +94,18 @@ Jména uživatelů: z parametru `name` události, jinak z cache `dir/query` (kl�
 uuid malými písmeny; dir/query vrací uuid velkými, log události malými). Neznámé
 uuid spustí refresh adresáře, nejvýš jednou za 60 s.
 
+The options flow requests `name` and `callPos.peer` from `dir/query`; `uuid`
+is entry metadata returned independently of this field selection, not a
+selectable directory data field. Do not add it to `fields`: this can reject
+the query on fw 3.x. The independent E2E directory client selects only `name`
+and retains the response UUIDs; failures report the numeric device error code,
+never directory data or raw error descriptions.
+Grant-access users are matched case-insensitively, but the selected
+option retains the stored UUID string exactly. Directory failures produce one
+WARNING per lookup and a non-blocking translated form error; unknown stored
+users remain selectable. The coordinator's directory API calls keep their
+existing best-effort behavior.
+
 ## RTSP
 
 - URL: `rtsp://<user>:<pass>@<host>:<rtsp_port>/h264_stream`

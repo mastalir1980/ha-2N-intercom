@@ -790,11 +790,18 @@ class TwoNIntercomAPI:
             _LOGGER.error("Connection test failed: %s", err)
             return False
 
-    async def async_get_directory(self) -> list[dict[str, Any]]:
-        """Get directory entries from /api/dir/query."""
+    async def async_get_directory(
+        self, *, raise_on_device_error: bool = False
+    ) -> list[dict[str, Any]]:
+        """Get directory entries from /api/dir/query.
+
+        With ``raise_on_device_error``, reject device errors instead of
+        returning an empty list and let the caller handle failure logging.
+        """
         try:
             payload = {
                 "iterator": {"timestamp": 0},
+                # UUID is response metadata, not a selectable directory field.
                 "fields": ["name", "callPos.peer"],
             }
 
@@ -819,6 +826,9 @@ class TwoNIntercomAPI:
             if isinstance(data, dict):
                 if data.get("success") is False:
                     error = parse_device_error(data)
+                    if raise_on_device_error:
+                        detail = error.format() if error is not None else "unknown error"
+                        raise TwoNAPIError(f"Directory query rejected: {detail}")
                     if error is not None:
                         log_device_error(
                             logging.WARNING,
@@ -843,13 +853,16 @@ class TwoNIntercomAPI:
             # Re-raise authentication errors
             raise
         except asyncio.TimeoutError as err:
-            _LOGGER.error("Timeout getting directory: %s", err)
+            if not raise_on_device_error:
+                _LOGGER.error("Timeout getting directory: %s", err)
             raise TwoNConnectionError(f"Timeout: {err}") from err
         except aiohttp.ClientError as err:
-            _LOGGER.error("Error getting directory: %s", err)
+            if not raise_on_device_error:
+                _LOGGER.error("Error getting directory: %s", err)
             raise TwoNConnectionError(f"Connection error: {err}") from err
         except Exception as err:
-            _LOGGER.error("Unexpected error getting directory: %s", err)
+            if not raise_on_device_error:
+                _LOGGER.error("Unexpected error getting directory: %s", err)
             raise TwoNAPIError(f"API error: {err}") from err
 
     async def async_get_call_status(self) -> dict[str, Any]:

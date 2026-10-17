@@ -1712,7 +1712,9 @@ class AdditionalApiMethodTests(unittest.IsolatedAsyncioTestCase):
 
             @asynccontextmanager
             async def _async_request(self, method, path, *, params=None, json_data=None, headers=None):
-                self.requests.append({"method": method, "path": path, "params": params})
+                self.requests.append({
+                    "method": method, "path": path, "params": params, "json_data": json_data,
+                })
                 yield self.response
 
         return TestApi(response_payload, status, content_type)
@@ -1854,6 +1856,26 @@ class AdditionalApiMethodTests(unittest.IsolatedAsyncioTestCase):
         })
         result = await api.async_get_directory()
         self.assertEqual(result, [{"name": "John"}])
+        self.assertEqual(api.requests[0]["method"], "POST")
+        self.assertEqual(api.requests[0]["path"], "/api/dir/query")
+        self.assertEqual(api.requests[0]["json_data"], {
+            "iterator": {"timestamp": 0},
+            "fields": ["name", "callPos.peer"],
+        })
+
+    async def test_get_directory_users_keeps_uuid_metadata_with_field_selection(self) -> None:
+        api = self._make_api({
+            "success": True,
+            "result": {
+                "series": "1",
+                "users": [{"uuid": "USER-1", "name": "Alice", "timestamp": 1}],
+            },
+        })
+        users = await api.async_get_directory_users()
+        self.assertEqual(users, [{"uuid": "USER-1", "name": "Alice"}])
+        self.assertEqual(
+            api.requests[0]["json_data"]["fields"], ["name", "callPos.peer"]
+        )
 
     async def test_get_directory_failure(self) -> None:
         api = self._make_api({
@@ -1862,6 +1884,17 @@ class AdditionalApiMethodTests(unittest.IsolatedAsyncioTestCase):
         })
         result = await api.async_get_directory()
         self.assertEqual(result, [])
+
+    async def test_get_directory_raises_device_errors_only_when_requested(self) -> None:
+        for payload in (
+            {"success": False, "error": {"code": 10, "description": "insufficient privileges"}},
+            {"success": False},
+        ):
+            with self.subTest(payload=payload):
+                api = self._make_api(payload)
+                with self.assertNoLogs(self.api_module._LOGGER, "WARNING"):
+                    with self.assertRaises(self.api_module.TwoNAPIError):
+                        await api.async_get_directory(raise_on_device_error=True)
 
     async def test_get_directory_legacy_users_format(self) -> None:
         api = self._make_api({"users": [{"name": "Jane"}]})

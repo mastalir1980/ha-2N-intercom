@@ -14,10 +14,12 @@ in the contracts that broke (or got added) during the HA 2026.4+ remediation:
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+import logging
 import sys
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from _stubs import (
     API_PATH,
@@ -272,7 +274,7 @@ class FakeAPI:
     async def async_get_system_info(self) -> dict:
         return FakeAPI.system_info
 
-    async def async_get_directory(self):
+    async def async_get_directory(self, *, raise_on_device_error=False):
         return []
 
     async def async_close(self) -> None:
@@ -1006,6 +1008,7 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.config_flow_module = load_config_flow_module()
+        cls.directory_api_type = cls.config_flow_module.TwoNIntercomAPI
         cls.config_flow_module.TwoNIntercomAPI = FakeAPI
 
     def setUp(self) -> None:
@@ -1052,7 +1055,8 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
             ],
         }
 
-        async def get_directory(_self):
+        async def get_directory(_self, *, raise_on_device_error=False):
+            self.assertTrue(raise_on_device_error)
             return directory
 
         entry = FakeConfigEntry(
@@ -1076,10 +1080,40 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             field.config.options,
             [
-                {"label": "Alice", "value": "AAAA-1"},
-                {"label": "BBBB-2", "value": "BBBB-2"},
+                {"label": "Alice", "value": "aaaa-1"},
+                {"label": "BBBB-2 (no name)", "value": "BBBB-2"},
             ],
         )
+        self.assertEqual(form["errors"], {})
+        self.assertTrue(FakeAPI.instances[0].closed)
+
+    async def test_device_step_preserves_selected_grant_user_case_on_save(self) -> None:
+        for stored in ("aaaa-1", "AaAa-1", "AAAA-1"):
+            with self.subTest(stored=stored):
+                entry = FakeConfigEntry(
+                    "entry-1", {"host": "192.0.2.20"},
+                    options={"grant_access_user": stored},
+                )
+                flow = self._make_options_flow(entry)
+                with patch.object(
+                    FakeAPI, "async_get_directory", new_callable=AsyncMock,
+                    return_value={"users": [{"uuid": "AAAA-1", "name": "Alice"}]},
+                ):
+                    form = await flow.async_step_device(None)
+                    marker, field = self._grant_user_marker(form)
+                    suggested = marker.description["suggested_value"]
+                    self.assertEqual(suggested, stored)
+                    self.assertEqual(field.config.options, [
+                        {"label": "Alice", "value": suggested},
+                    ])
+                    result = await flow.async_step_device({
+                        "name": "Intercom", "enable_camera": False,
+                        "enable_doorbell": True, "scan_interval": 60,
+                        "grant_access_user": suggested,
+                    })
+                self.assertEqual(result["type"], "create_entry")
+                self.assertEqual(result["data"]["grant_access_user"], stored)
+                self.assertNotIn("grant_access_user", entry.data)
 
     async def test_device_step_keeps_unknown_stored_grant_user_selectable(self) -> None:
         entry = FakeConfigEntry(
@@ -1089,8 +1123,102 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
         )
         flow = self._make_options_flow(entry)
         form = await flow.async_step_device(None)
-        _marker, field = self._grant_user_marker(form)
-        self.assertEqual(field.config.options, [{"label": "CCCC-3", "value": "CCCC-3"}])
+        marker, field = self._grant_user_marker(form)
+        self.assertEqual(marker.description, {"suggested_value": "CCCC-3"})
+        self.assertEqual(field.config.options, [
+            {"label": "Unknown user (CCCC-3)", "value": "CCCC-3"},
+        ])
+        self.assertEqual(form["errors"], {})
+        result = await flow.async_step_device({
+            "name": "Intercom", "enable_camera": False,
+            "enable_doorbell": True, "scan_interval": 60,
+            "grant_access_user": marker.description["suggested_value"],
+        })
+        self.assertEqual(result["type"], "create_entry")
+        self.assertEqual(result["data"]["grant_access_user"], "CCCC-3")
+
+    async def test_device_step_uses_localized_directory_fallback_labels(self) -> None:
+        for language, unnamed, unknown in (
+            ("en", "BBBB-2 (no name)", "Unknown user (CCCC-3)"),
+            ("de", "BBBB-2 (ohne Namen)", "Unbekannter Benutzer (CCCC-3)"),
+            ("cs", "BBBB-2 (bez jména)", "Neznámý uživatel (CCCC-3)"),
+        ):
+            with self.subTest(language=language):
+                entry = FakeConfigEntry(
+                    "entry-1", {"host": "192.0.2.20"},
+                    options={"grant_access_user": "CCCC-3"},
+                )
+                hass = FakeHass([entry])
+                hass.config.language = language
+                flow = self._make_options_flow(entry, hass)
+                with patch.object(
+                    FakeAPI, "async_get_directory", new_callable=AsyncMock,
+                    return_value={"users": [{"uuid": "BBBB-2", "name": ""}]},
+                ):
+                    form = await flow.async_step_device(None)
+                _marker, field = self._grant_user_marker(form)
+                self.assertEqual(field.config.options, [
+                    {"label": unnamed, "value": "BBBB-2"},
+                    {"label": unknown, "value": "CCCC-3"},
+                ])
+
+    async def test_directory_failure_warns_once_and_allows_saving_stored_user(self) -> None:
+        class Response:
+            status = 200
+
+            def raise_for_status(self):
+                pass
+
+            async def json(self):
+                return {
+                    "success": False,
+                    "error": {"code": 10, "description": "insufficient privileges"},
+                }
+
+        for failure in (TimeoutError, RuntimeError, None):
+            with self.subTest(failure=failure):
+                @asynccontextmanager
+                async def request(_api, *_args, **_kwargs):
+                    if failure is not None:
+                        raise failure("directory lookup failed")
+                    yield Response()
+
+                entry = FakeConfigEntry(
+                    "entry-1",
+                    {"host": "192.0.2.20", "username": "test-user", "password": "test-secret"},
+                    options={"grant_access_user": "cccc-3"},
+                )
+                flow = self._make_options_flow(entry)
+                with (
+                    patch.object(
+                        self.config_flow_module, "TwoNIntercomAPI", self.directory_api_type
+                    ),
+                    patch.object(self.directory_api_type, "_async_request", request),
+                ):
+                    with self.assertLogs("custom_components.2n_intercom", "WARNING") as logs:
+                        form = await flow.async_step_device(None)
+                    self.assertEqual(form["errors"], {"base": "directory_unavailable"})
+                    marker, field = self._grant_user_marker(form)
+                    self.assertEqual(marker.description, {"suggested_value": "cccc-3"})
+                    self.assertEqual(field.config.options, [
+                        {"label": "Unknown user (cccc-3)", "value": "cccc-3"},
+                    ])
+                    self.assertEqual(len(logs.records), 1)
+                    warning = logs.records[0]
+                    self.assertEqual(warning.levelno, logging.WARNING)
+                    self.assertIn("host=192.0.2.20", warning.getMessage())
+                    self.assertNotIn("test-user", warning.getMessage())
+                    self.assertNotIn("test-secret", warning.getMessage())
+                    self.assertIsNone(warning.exc_info)
+                    with self.assertLogs("custom_components.2n_intercom", "WARNING") as saved_logs:
+                        result = await flow.async_step_device({
+                            "name": "Intercom", "enable_camera": False,
+                            "enable_doorbell": True, "scan_interval": 60,
+                            "grant_access_user": marker.description["suggested_value"],
+                        })
+                    self.assertEqual(len(saved_logs.records), 1)
+                    self.assertEqual(result["type"], "create_entry")
+                    self.assertEqual(result["data"]["grant_access_user"], "cccc-3")
 
     async def test_device_step_without_stored_grant_user(self) -> None:
         entry = FakeConfigEntry(
@@ -1762,7 +1890,7 @@ class ConfigFlowHelperTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self, **kwargs):
                 pass
 
-            async def async_get_directory(self):
+            async def async_get_directory(self, *, raise_on_device_error=False):
                 return [
                     {
                         "name": "John",
@@ -1792,7 +1920,7 @@ class ConfigFlowHelperTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self, **kwargs):
                 pass
 
-            async def async_get_directory(self):
+            async def async_get_directory(self, *, raise_on_device_error=False):
                 return {
                     "users": [
                         {"name": "Jane", "callPos": [{"peer": "sip:200@device"}]}
@@ -1819,7 +1947,7 @@ class ConfigFlowHelperTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self, **kwargs):
                 pass
 
-            async def async_get_directory(self):
+            async def async_get_directory(self, *, raise_on_device_error=False):
                 return {
                     "result": {
                         "users": [
@@ -1848,7 +1976,7 @@ class ConfigFlowHelperTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self, **kwargs):
                 pass
 
-            async def async_get_directory(self):
+            async def async_get_directory(self, *, raise_on_device_error=False):
                 return {
                     "result": [
                         {"name": "Alice", "callPos": [{"peer": "sip:400@device"}]}
@@ -1875,7 +2003,7 @@ class ConfigFlowHelperTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self, **kwargs):
                 pass
 
-            async def async_get_directory(self):
+            async def async_get_directory(self, *, raise_on_device_error=False):
                 return [
                     {
                         "users": [
@@ -1905,8 +2033,12 @@ class ConfigFlowErrorStringsTests(unittest.TestCase):
         import re
 
         source = CONFIG_FLOW_PATH.read_text(encoding="utf-8")
-        used = set(re.findall(r'errors\["base"\]\s*=\s*"([a-z_]+)"', source))
+        config_source, options_source = source.split("class TwoNIntercomOptionsFlow", 1)
+        error_pattern = r'errors\["base"\]\s*=\s*"([a-z_]+)"'
+        used = set(re.findall(error_pattern, config_source))
+        options_used = set(re.findall(error_pattern, options_source))
         self.assertIn("invalid_auth", used)
+        self.assertIn("directory_unavailable", options_used)
 
         integration_dir = CONFIG_FLOW_PATH.parent
         for name in (
@@ -1920,6 +2052,7 @@ class ConfigFlowErrorStringsTests(unittest.TestCase):
                     (integration_dir / name).read_text(encoding="utf-8")
                 )
                 self.assertLessEqual(used, set(strings["config"]["error"]))
+                self.assertLessEqual(options_used, set(strings["options"]["error"]))
 
 
 if __name__ == "__main__":

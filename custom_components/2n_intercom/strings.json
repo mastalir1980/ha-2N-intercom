@@ -144,6 +144,9 @@
           "relay_pulse_duration": "Trigger pulse length sent to the relay (ms). Default is the device-configured switchOnDuration."
         }
       }
+    },
+    "error": {
+      "directory_unavailable": "The user list could not be loaded from the intercom; the stored user is kept."
     }
   },
   "selector": {

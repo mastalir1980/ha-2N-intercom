@@ -228,6 +228,8 @@ Intermediate steps show **Next**; the last step shows **Submit**. The flow only 
 
 For Called ID (`called_id`), the part after `/` is ignored when matching peers, so `1234567890/2` matches `1234567890`.
 
+The default grant-access user is displayed by directory name, even when the stored UUID uses different letter case. Unnamed directory entries and unknown stored users have explicit localized labels. If the directory cannot be loaded, the form shows a warning; the stored user remains selected and you can still submit the options without changing it.
+
 ### Example: single-family house (door + gate)
 
 ```
