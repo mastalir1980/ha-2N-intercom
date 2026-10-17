@@ -3,11 +3,11 @@ id: TASK-52
 title: >-
   Docs: list the HTTP API account privileges the integration and E2E need (incl.
   System - Control for the directory)
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-17 09:34'
-updated_date: '2026-10-17 09:52'
+updated_date: '2026-10-17 09:54'
 labels:
   - docs
 milestone: m-0
@@ -34,11 +34,11 @@ Expected: one table in README.md of HTTP API account privileges per feature, and
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 README.md has a section (under Configuration) with a table: privilege (group - Monitoring/Control) -> features that need it, covering at least System - Monitoring, System - Control (dir/query: called-ID peers, grant-access user list, user names for access events), Switches, I/O, Phone/Calls, Camera, Access Control - Control (grant_access)
-- [ ] #2 README.md says what happens without System - Control: the integration works, but directory features degrade and the options device step shows directory_unavailable; it also notes that System - Control allows system configuration changes, so users know what they grant
-- [ ] #3 The existing per-feature privilege notes in README.md (Direct IO output switches, Grant access vs. switch entities) point to the new table instead of duplicating or contradicting it
-- [ ] #4 e2e/README.md step 2 lists System - Control for the E2E account with the reason (dir/query, TASK-48 E2E check)
-- [ ] #5 No code or tests change; validate.py green; PR check e2e-pi green
+- [x] #1 README.md has a section (under Configuration) with a table: privilege (group - Monitoring/Control) -> features that need it, covering at least System - Monitoring, System - Control (dir/query: called-ID peers, grant-access user list, user names for access events), Switches, I/O, Phone/Calls, Camera, Access Control - Control (grant_access)
+- [x] #2 README.md says what happens without System - Control: the integration works, but directory features degrade and the options device step shows directory_unavailable; it also notes that System - Control allows system configuration changes, so users know what they grant
+- [x] #3 The existing per-feature privilege notes in README.md (Direct IO output switches, Grant access vs. switch entities) point to the new table instead of duplicating or contradicting it
+- [x] #4 e2e/README.md step 2 lists System - Control for the E2E account with the reason (dir/query, TASK-48 E2E check)
+- [x] #5 No code or tests change; validate.py green; PR check e2e-pi green
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -57,3 +57,9 @@ Added README Configuration > HTTP API account privileges with privilege-to-featu
 Updated only the control list in e2e/README.md step 2 and its System - Control rationale (/api/dir/query, grant-access user names, TASK-48). Code, tests, protected paths, CHANGELOG.md and manifest are unchanged.
 Local gates on Python 3.12.15 passed: all 655 unit tests, python3 validate.py, and py_compile for the integration; git diff --check passed. No device/E2E commands were run. The orchestrator must obtain a green e2e-pi PR check before finalization; status remains In Progress and all acceptance criteria remain unchecked.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented by the headless coder. Checks green on dad8c1b3b after 0 fix round(s): e2e-pi=pass, validate=pass, validate=pass. PR: https://github.com/mastalir1980/ha-2N-intercom/pull/75. Done takes effect when the PR is merged.
+<!-- SECTION:FINAL_SUMMARY:END -->
