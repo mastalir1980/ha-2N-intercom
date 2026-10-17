@@ -3,11 +3,11 @@ id: TASK-49
 title: >-
   Config flow: SSDP discovery of 2N devices and host update on IP change (from
   PR #30)
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-16 15:37'
-updated_date: '2026-10-16 15:37'
+updated_date: '2026-10-17 09:46'
 labels:
   - discovery
   - config-flow
@@ -60,14 +60,29 @@ Decided with Jan 2026-10-16: ship in v1.5.0, building on PR #30 (keep vemboy200 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Start from PR #30: in the task worktree run `git fetch origin pull/30/head:pr30` and `git cherry-pick` its single commit (keeps vemboy200 as author). Resolve conflicts against main (TASK-41 and TASK-48 change config_flow.py first; this task depends on them). Keep the PR design: CONF_MAC = "mac_address" in const.py, _normalize_mac, async_step_ssdp, MAC backfill in __init__.py async_setup_entry, ssdp matcher in manifest.json.
-2. config_flow.py async_step_ssdp: rename abort reason cannot_connect -> no_host for "no host in the announcement"; keep no_mac. Update strings.json + translations/{en,de,cs}.json (abort.no_host, abort.no_mac, flow_title) and drop the ssdp-specific cannot_connect text.
-3. config_flow.py host update branch: before async_update_entry log `_LOGGER.info("2N intercom %s moved from %s to %s (SSDP); updating the entry", entry.title, old_host, host)`. Never log credentials or the MAC. Keep reload as an async task, once per change.
-4. diagnostics.py: add CONF_MAC to TO_REDACT_ENTRY.
-5. Check reauth/reconfigure keep mac_address in entry.data (they merge into existing data; add a unit test each, fix only if it is dropped).
-6. tests/test_config_flow.py: keep the PR tests, adjust to no_host, add tests for the INFO log line, same-host discovery (no reload), and reconfigure keeping mac_address. tests/test_diagnostics*.py (or the existing diagnostics test file): mac_address redacted.
-7. e2e/e2elib/twon.py: add `ssdp_description() -> dict[str, str]` that GETs /ssdp_server/description.xml (same session/verify settings, no auth needed) and returns manufacturer, serialNumber, UDN parsed with xml.etree (namespace-aware). Do not import the integration. New e2e test in e2e/tests/test_10_entities.py or a new test_60_discovery.py: (a) manufacturer equals the string in manifest.json ssdp matcher (read the manifest file); (b) normalised serialNumber == normalised system_info()["macAddr"]; (c) `/api/diagnostics/config_entry/<id>` data.entry.data has key mac_address (value redacted). Read-only, no relay marker. Never print the MAC or serial in assertions/messages.
-8. README.md: in Installation/Configuration add "Automatic discovery" (2N and Control4 DS2 units show up under Settings > Devices & services > Discovered; the entry follows the device when its IP changes; this trusts the local network - a device announcing the same MAC would receive the connection, use HTTPS). quality_scale.yaml: keep the PR texts for discovery / discovery-update-info, fix wording if needed.
-9. Must not change: unique_id stays the 2N serial (existing entries must not be re-created); dual Basic/Digest auth in api.py; entry.data vs entry.options split (mac_address and host are data). No CHANGELOG/version bump (release task TASK-37).
-10. PR body: "Closes #30, fixes #11", credit vemboy200. Validation: unit suite + validate.py + py_compile on Python 3.12+, PR check e2e-pi green. AC #9 manual part is Jan's (manual-close).
+1. Cherry-pick the single commit from PR #30, preserving vemboy200 as author and the existing serial-based unique_id, dual authentication, and data/options separation.
+2. Complete SSDP abort reasons, safe INFO host-change logging, MAC redaction, and regression coverage for discovery, backfill, reauth, and reconfigure.
+3. Add an independent namespace-aware SSDP XML reader and read-only E2E coverage comparing the manifest matcher, device identity, and redacted entry diagnostics.
+4. Document automatic discovery, DHCP address following, and local-network trust; update quality-scale comments without a version or changelog change.
+5. Run the required Python 3.12+ local gates, record implementation notes and PR attribution/closing text, and commit locally. Leave acceptance criteria unchecked and status In Progress; e2e-pi and manual device verification remain external gates.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Carried PR #30 as commit f7de124, preserving the original contributor as author; resolved additive conflicts with TASK-41/TASK-48 without removing their behavior. PR attribution: based on @vemboy200 contribution. Required PR body text: Closes #30, fixes #11.
+
+Completed no_mac/no_host handling and all translations, a single INFO host-change message, entry MAC redaction, and regression tests for normalized identity, exactly one scheduled reload per host change, unchanged-host/repeated-announcement no-ops, user-step MAC storage, setup backfill, and reauth/reconfigure preservation. Kept the serial-based unique_id, connection/options split, authentication code, manifest version, and CHANGELOG unchanged. Fixed the inherited discovery-name issue: friendlyName now remains the default after the user submits credentials. Invalid/blank MACs and malformed or missing announcement URLs abort with the appropriate reason; a usable location URL remains a fallback.
+
+Added TwoN.ssdp_description() using unauthenticated GET, existing client TLS/timeout settings, namespace-aware ElementTree parsing, and explicit HTTP/XML/missing-field errors. Added offline XML-client regressions and read-only e2e/tests/test_60_discovery.py comparing the local manifest matcher with the device manufacturer, normalized SSDP/API MAC identities, and redacted mac_address in deployed entry diagnostics. Assertions compare private identities via booleans to avoid printing them. README and architecture/quality-scale docs explain discovery, address following, backfill, and local-network trust with HTTPS guidance.
+
+Local gates passed on Python 3.12.15: python3 -m unittest discover -s tests -t tests (655 tests), python3 validate.py, and python3 -m py_compile custom_components/2n_intercom/*.py. The new E2E files also compile. Independent read-only diff review reported no significant issues. No E2E or device/HA requests were run on the VM; e2e-pi and the manual Discovered/IP-change checks remain pending. Kept status In Progress and all acceptance criteria unchecked because this is manual-close.
+
+Existing harness follow-up, outside this task: selecting test_config_flow as the first isolated unittest module fails because its loader depends on coordinator stubs initialized by other modules. The required full discovery-based suite is green; no unrelated test infrastructure changes were made.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented SSDP discovery and MAC-based host following from PR #30, preserving contributor authorship and serial-based config-entry identity. Added abort/logging/privacy fixes, setup backfill and flow regressions, read-only discovery E2E coverage, and trust documentation. All 655 unit tests, validate.py, and py_compile pass on Python 3.12.15. Awaiting e2e-pi and manual device verification; acceptance criteria remain unchecked and status remains In Progress.
+<!-- SECTION:FINAL_SUMMARY:END -->

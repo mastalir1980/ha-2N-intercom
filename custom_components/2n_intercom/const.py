@@ -4,6 +4,7 @@ DOMAIN = "2n_intercom"
 
 # Configuration keys
 CONF_SERIAL_NUMBER = "serial_number"
+CONF_MAC = "mac_address"
 CONF_PROTOCOL = "protocol"
 CONF_VERIFY_SSL = "verify_ssl"
 CONF_ENABLE_CAMERA = "enable_camera"

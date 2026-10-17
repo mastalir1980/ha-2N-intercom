@@ -11,5 +11,10 @@
   "loggers": ["custom_components.2n_intercom"],
   "quality_scale": "platinum",
   "requirements": [],
+  "ssdp": [
+    {
+      "manufacturer": "2N, part of Axis group"
+    }
+  ],
   "version": "1.4.0"
 }

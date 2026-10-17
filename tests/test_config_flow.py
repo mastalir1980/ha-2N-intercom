@@ -14,7 +14,9 @@ in the contracts that broke (or got added) during the HA 2026.4+ remediation:
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
+import json
 import logging
 import sys
 import types
@@ -25,6 +27,7 @@ from _stubs import (
     API_PATH,
     CONFIG_FLOW_PATH,
     CONST_PATH,
+    REPO_ROOT,
     ensure_package,
     install_api_stubs,
     load_module,
@@ -139,6 +142,9 @@ def _install_homeassistant_stubs() -> None:
         def async_create_entry(self, *, title, data):
             return _FormResult(type="create_entry", title=title, data=data)
 
+        def _async_current_entries(self, include_ignore=True):
+            return self.hass.config_entries.async_entries("2n_intercom")
+
     class ConfigFlow(_BaseFlow):
         def __init_subclass__(cls, **kwargs):
             kwargs.pop("domain", None)
@@ -221,6 +227,21 @@ def _install_homeassistant_stubs() -> None:
     helpers.selector = selector_module
     helpers.config_validation = cv_module
 
+    ensure_package("homeassistant.helpers.service_info")
+    ssdp_module = types.ModuleType("homeassistant.helpers.service_info.ssdp")
+
+    class SsdpServiceInfo:
+        def __init__(self, *, upnp, ssdp_location=None):
+            self.upnp = upnp
+            self.ssdp_location = ssdp_location
+
+    ssdp_module.SsdpServiceInfo = SsdpServiceInfo
+    ssdp_module.ATTR_UPNP_FRIENDLY_NAME = "friendlyName"
+    ssdp_module.ATTR_UPNP_PRESENTATION_URL = "presentationURL"
+    ssdp_module.ATTR_UPNP_SERIAL = "serialNumber"
+    sys.modules["homeassistant.helpers.service_info.ssdp"] = ssdp_module
+    helpers.service_info = ssdp_module
+
 
 def load_config_flow_module():
     install_api_stubs()
@@ -291,6 +312,7 @@ class FakeConfigEntry:
         self.data = data
         self.options = options or {}
         self.domain = domain
+        self.title = data.get("name", "Front door")
 
 
 class FakeConfigEntries:
@@ -326,6 +348,11 @@ class FakeHass:
 
     async def async_add_executor_job(self, func, *args):
         return func(*args)
+
+    def async_create_task(self, coro):
+        import asyncio
+
+        return asyncio.get_event_loop().create_task(coro)
 
 
 # ---------------------------------------------------------------------------
@@ -372,6 +399,12 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
     def _make_flow(self, hass: FakeHass | None = None):
         flow = self.config_flow_module.TwoNIntercomConfigFlow()
         flow.hass = hass or FakeHass([])
+        # Real HA's FlowHandler provides `context` as a class-level default
+        # (not via __init__), so our own __init__ override never needing to
+        # call super() is fine in production — the stub's _BaseFlow.__init__
+        # just never runs for a subclass with its own __init__, so set it
+        # explicitly here instead.
+        flow.context = {}
         return flow
 
     async def test_user_step_happy_path_advances_to_device(self) -> None:
@@ -470,6 +503,53 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["type"], "form")
         self.assertEqual(result["step_id"], "user")
         self.assertEqual(result["errors"], {"base": "cannot_connect"})
+
+    async def test_user_step_stores_normalized_mac_separately_from_serial(self) -> None:
+        flow = self._make_flow()
+        with patch.object(FakeAPI, "system_info", {
+            "serialNumber": "SN-123456", "macAddr": "00:11:22:aa:bb:cc",
+        }):
+            await flow.async_step_user(
+                {"host": "192.0.2.20", "username": "user", "password": "secret"}
+            )
+        result = await flow.async_step_device({"name": "Front door"})
+        self.assertEqual(result["type"], "create_entry")
+        self.assertEqual(result["data"]["mac_address"], "001122AABBCC")
+        self.assertEqual(result["data"]["serial_number"], "SN-123456")
+        self.assertEqual(flow._unique_id, "SN-123456")
+
+    async def test_reauth_keeps_mac_address(self) -> None:
+        entry = FakeConfigEntry("entry-1", {
+            "host": "192.0.2.20", "username": "user", "password": "old",
+            "mac_address": "001122AABBCC", "serial_number": "SN-123456",
+        })
+        flow = self._make_flow(FakeHass([entry]))
+        flow.context = {"entry_id": entry.entry_id}
+        await flow.async_step_reauth(entry.data)
+        result = await flow.async_step_reauth_confirm(
+            {"username": "user", "password": "new"}
+        )
+        self.assertEqual(result["reason"], "reauth_successful")
+        self.assertEqual(entry.data["mac_address"], "001122AABBCC")
+        self.assertEqual(entry.data["serial_number"], "SN-123456")
+        self.assertNotIn("mac_address", entry.options)
+
+    async def test_reconfigure_keeps_mac_address(self) -> None:
+        entry = FakeConfigEntry("entry-1", {
+            "host": "192.0.2.20", "username": "user", "password": "secret",
+            "mac_address": "001122AABBCC", "serial_number": "SN-123456",
+        })
+        flow = self._make_flow(FakeHass([entry]))
+        flow.context = {"entry_id": entry.entry_id}
+        result = await flow.async_step_reconfigure({
+            "host": "192.0.2.21", "username": "user", "password": "secret",
+            "protocol": "https", "port": 443, "verify_ssl": True,
+        })
+        self.assertEqual(result["reason"], "reconfigure_successful")
+        self.assertEqual(entry.data["host"], "192.0.2.21")
+        self.assertEqual(entry.data["mac_address"], "001122AABBCC")
+        self.assertEqual(entry.data["serial_number"], "SN-123456")
+        self.assertNotIn("mac_address", entry.options)
 
     async def test_reauth_confirm_with_valid_credentials_updates_and_aborts(
         self,
@@ -1000,6 +1080,185 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result["type"], "abort")
         self.assertEqual(result["reason"], "already_configured")
+
+    # --- SSDP discovery ---
+
+    def _make_ssdp_info(
+        self,
+        *,
+        mac: str = "7C1EB3000000",
+        host: str = "192.0.2.60",
+        friendly_name: str | None = "Control4 DS2 Door Station",
+        via_location: bool = False,
+    ):
+        SsdpServiceInfo = sys.modules[
+            "homeassistant.helpers.service_info.ssdp"
+        ].SsdpServiceInfo
+        upnp: dict[str, str] = {}
+        if mac:
+            upnp["serialNumber"] = mac
+        if friendly_name:
+            upnp["friendlyName"] = friendly_name
+        ssdp_location = None
+        if via_location:
+            ssdp_location = f"http://{host}/ssdp_server/description.xml"
+        else:
+            upnp["presentationURL"] = f"http://{host}"
+        return SsdpServiceInfo(upnp=upnp, ssdp_location=ssdp_location)
+
+    async def test_ssdp_new_device_advances_to_user_step(self) -> None:
+        flow = self._make_flow()
+        result = await flow.async_step_ssdp(self._make_ssdp_info())
+        self.assertEqual(result["type"], "form")
+        self.assertEqual(result["step_id"], "user")
+        self.assertEqual(flow._discovered_host, "192.0.2.60")
+        self.assertEqual(_form_default(result, "host"), "192.0.2.60")
+        self.assertEqual(flow.context["title_placeholders"], {
+            "name": "Control4 DS2 Door Station", "host": "192.0.2.60",
+        })
+        result = await flow.async_step_user({
+            "host": "192.0.2.60", "username": "user", "password": "secret",
+        })
+        self.assertEqual(result["step_id"], "device")
+        self.assertEqual(_form_default(result, "name"), "Control4 DS2 Door Station")
+        result = await flow.async_step_device({"name": "Control4 DS2 Door Station"})
+        self.assertEqual(result["type"], "create_entry")
+        self.assertEqual(flow._unique_id, FakeAPI.system_info["serialNumber"])
+
+    async def test_ssdp_without_friendly_name_uses_api_default(self) -> None:
+        flow = self._make_flow()
+        result = await flow.async_step_ssdp(self._make_ssdp_info(friendly_name=None))
+        self.assertEqual(result["step_id"], "user")
+        result = await flow.async_step_user({
+            "host": "192.0.2.60", "username": "user", "password": "secret",
+        })
+        self.assertEqual(_form_default(result, "name"), "2N Intercom SN-123456")
+
+    async def test_ssdp_extracts_host_from_location_when_no_presentation_url(
+        self,
+    ) -> None:
+        flow = self._make_flow()
+        result = await flow.async_step_ssdp(
+            self._make_ssdp_info(via_location=True)
+        )
+        self.assertEqual(result["type"], "form")
+        self.assertEqual(flow._discovered_host, "192.0.2.60")
+
+    async def test_ssdp_aborts_without_mac(self) -> None:
+        for mac in ("", " ", ":-", "not-a-mac", "00112233445", "00112233445Z"):
+            with self.subTest(mac=mac):
+                flow = self._make_flow()
+                result = await flow.async_step_ssdp(self._make_ssdp_info(mac=mac))
+                self.assertEqual(result["type"], "abort")
+                self.assertEqual(result["reason"], "no_mac")
+                self.assertEqual(flow.hass.config_entries.update_calls, [])
+
+    async def test_ssdp_aborts_without_usable_host(self) -> None:
+        SsdpServiceInfo = sys.modules[
+            "homeassistant.helpers.service_info.ssdp"
+        ].SsdpServiceInfo
+        for url in (None, "", "no-host", "http://", "http://[", "http://bad host"):
+            with self.subTest(url=url):
+                flow = self._make_flow()
+                result = await flow.async_step_ssdp(SsdpServiceInfo(
+                    upnp={"serialNumber": "001122334455", "presentationURL": url},
+                    ssdp_location=url,
+                ))
+                self.assertEqual(result["type"], "abort")
+                self.assertEqual(result["reason"], "no_host")
+                self.assertEqual(flow.hass.config_entries.update_calls, [])
+
+    async def test_ssdp_malformed_presentation_url_falls_back_to_location(self) -> None:
+        info = self._make_ssdp_info(via_location=True)
+        info.upnp["presentationURL"] = "http://["
+        result = await self._make_flow().async_step_ssdp(info)
+        self.assertEqual(_form_default(result, "host"), "192.0.2.60")
+
+    def test_ssdp_manifest_and_translations(self) -> None:
+        integration = REPO_ROOT / "custom_components" / "2n_intercom"
+        manifest = json.loads((integration / "manifest.json").read_text())
+        self.assertIn({"manufacturer": "2N, part of Axis group"}, manifest["ssdp"])
+        for file in (
+            integration / "strings.json",
+            *(integration / "translations" / f"{language}.json" for language in ("en", "de", "cs")),
+        ):
+            with self.subTest(file=file.name):
+                config = json.loads(file.read_text())["config"]
+                self.assertEqual(config["flow_title"], "{name} ({host})")
+                self.assertTrue(config["abort"]["no_host"])
+                self.assertTrue(config["abort"]["no_mac"])
+                self.assertNotIn("cannot_connect", config["abort"])
+
+    async def test_ssdp_updates_host_for_already_configured_device(self) -> None:
+        """Different MAC formatting (colons vs bare) must still match."""
+        entry = FakeConfigEntry(
+            "entry-1",
+            {
+                "host": "192.0.2.50",
+                "mac_address": "7C1EB3000000",
+                "username": "root",
+                "password": "secret",
+                "serial_number": "SN-123456",
+                "protocol": "https",
+                "port": 443,
+                "verify_ssl": True,
+            },
+            options={"scan_interval": 120},
+        )
+        entry.unique_id = "SN-123456"
+        old_data = dict(entry.data)
+        hass = FakeHass([entry])
+        flow = self._make_flow(hass)
+        with self.assertLogs(self.config_flow_module._LOGGER, level="INFO") as logs:
+            result = await flow.async_step_ssdp(
+                self._make_ssdp_info(mac="7c-1e-b3-00-00-00", host="192.0.2.60")
+            )
+        await asyncio.sleep(0)  # let the scheduled reload task run
+        self.assertEqual(result["type"], "abort")
+        self.assertEqual(result["reason"], "already_configured")
+        self.assertEqual(entry.data["host"], "192.0.2.60")
+        self.assertEqual(hass.config_entries.reload_calls, [entry.entry_id])
+        self.assertEqual(hass.config_entries.update_calls, [
+            (entry.entry_id, {**old_data, "host": "192.0.2.60"}),
+        ])
+        self.assertEqual(entry.options, {"scan_interval": 120})
+        self.assertEqual(entry.unique_id, "SN-123456")
+        self.assertEqual([record.getMessage() for record in logs.records], [
+            "2N intercom Front door moved from 192.0.2.50 to 192.0.2.60 "
+            "(SSDP); updating the entry",
+        ])
+        self.assertEqual(logs.records[0].levelno, logging.INFO)
+        for private_value in ("root", "secret", "7C1EB3000000", "7c-1e-b3-00-00-00"):
+            self.assertNotIn(private_value, logs.records[0].getMessage())
+        with self.assertNoLogs(self.config_flow_module._LOGGER, level="INFO"):
+            repeated = await self._make_flow(hass).async_step_ssdp(
+                self._make_ssdp_info(mac="7c:1e:b3:00:00:00")
+            )
+        await asyncio.sleep(0)
+        self.assertEqual(repeated["reason"], "already_configured")
+        self.assertEqual(hass.config_entries.reload_calls, [entry.entry_id])
+        self.assertEqual(len(hass.config_entries.update_calls), 1)
+
+    async def test_ssdp_no_op_when_host_unchanged(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1",
+            {
+                "host": "192.0.2.60",
+                "mac_address": "7C1EB3000000",
+                "username": "root",
+                "password": "secret",
+            },
+        )
+        hass = FakeHass([entry])
+        flow = self._make_flow(hass)
+        result = await flow.async_step_ssdp(
+            self._make_ssdp_info(mac="7C1EB3000000", host="192.0.2.60")
+        )
+        self.assertEqual(result["type"], "abort")
+        self.assertEqual(result["reason"], "already_configured")
+        await asyncio.sleep(0)
+        self.assertEqual(hass.config_entries.update_calls, [])
+        self.assertEqual(hass.config_entries.reload_calls, [])
 
 
 class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):

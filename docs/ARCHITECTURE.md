@@ -68,12 +68,29 @@ u read-only platforem a `1` u switch/cover, které spouští relé).
 
 ### Rozdělení `entry.data` vs `entry.options`
 
-- **`entry.data`** = identita připojení (host, port, protokol, username,
-  password, verify_ssl, serial). Mění se jen přes **reauth / reconfigure**.
+- **`entry.data`** = connection identity (host, port, protocol, username,
+  password, verify_ssl, serial_number, mac_address). Reauth and reconfigure
+  preserve the stored MAC. SSDP discovery can also update the host.
 - **`entry.options`** = chování (scan_interval, kamera transport, RTSP creds,
   relé overrides, called_id). Mění se přes **options flow**.
 
 Toto oddělení zajišťuje, že options flow nikdy nepřepíše úspěšný reauth.
+
+### SSDP discovery and address updates
+
+The manifest matches SSDP manufacturer `2N, part of Axis group`, including
+Control4 DS2 units. Discovery pre-fills the host and friendly name but still
+requires API credentials. The SSDP `serialNumber` is a MAC address, not the
+2N serial returned by `/api/system/info`: normalized `mac_address` in entry
+data is the discovery cross-reference, while the config entry's serial-based
+unique ID remains unchanged. Older entries backfill `mac_address` from the
+coordinator's cached `macAddr` during setup, without an extra API request.
+
+A matching announcement on a new host updates the entry in place and schedules
+a reload; an unchanged host does neither. One INFO line records the entry title
+and old/new hosts without credentials or the MAC. This trusts the local network:
+an announcement reusing the MAC can redirect the connection. HTTPS with
+certificate verification is recommended. Entry diagnostics redact `mac_address`.
 
 ---
 
