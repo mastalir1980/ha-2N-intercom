@@ -35,8 +35,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 - **Event-driven ring detection** via `/api/log/subscribe` + `/api/log/pull` background loop with automatic re-subscribe and exponential backoff
 - Only calls started by the intercom trigger the doorbell (for example, a visitor button press); calls into the intercom from My2N, Control4, or a SIP phone do not
 - **Event-driven state updates** for switches, IO, SIP registration, and device config changes via the same subscription channel
-- Binary sensor with caller name/number/button attributes
-- **Doorbell event** (`event.<intercom>_doorbell`, device class `doorbell`) emits one `ring` per intercom-started ring, with called peer and caller name/number when known. HomeKit automatically links it to the camera on the same device; the existing binary sensor is unchanged
+- **Doorbell event** (`event.<intercom>_doorbell`, device class `doorbell`) is the only doorbell entity. It emits one `ring` per intercom-started ring, with called peer and caller name/number when known. HomeKit automatically links it to the camera on the same device
 - **`2n_intercom.answer_call`** and **`2n_intercom.hangup_call`** services that target a config entry and (optionally) a specific session id, with `reason` selector (`normal`/`rejected`/`busy`)
 - Diagnostic sensors: SIP registration status, call state with `active_session_id` attribute
 
@@ -131,7 +130,7 @@ The integration provides optional **RTSP username** and **RTSP password** fields
 - **MJPEG-first camera** built on `homeassistant.components.mjpeg.MjpegCamera`
 - **Event-driven + backup polling** — real-time state via log subscriptions; low-frequency polling (default 60 s) as a safety net
 - **`TwoNIntercomEntity`** base class shared by all platforms — single source for `device_info`, `available`, and `_attr_has_entity_name`
-- Platform-based: `camera`, `binary_sensor`, `switch`, `cover`, `sensor`
+- Platform-based: `camera`, `image`, `event`, `binary_sensor`, `switch`, `cover`, `sensor`
 
 ## Manual
 
@@ -168,6 +167,16 @@ All entities, devices, and automation references created by this integration are
 
 - **Reconfigure**: Settings → Devices & Services → 2N Intercom → ⋮ → **Reconfigure**. Lets you change host/port/protocol/credentials without removing the entry.
 - **Reauth**: triggered automatically when the device starts rejecting credentials. HA shows a notification — click it to re-enter the password.
+
+### Doorbell migration in v1.5.0 (breaking change)
+
+The doorbell binary sensor is removed without a deprecation period. Its old
+registry entry is removed automatically when the integration loads. Update
+automations and blueprint inputs to use `event.<intercom>_doorbell`, and change
+explicit HomeKit `linked_doorbell_sensor` references to that event entity.
+Automations must react to a new event timestamp with `event_type: ring`, not an
+`on` state; ignore startup, restore and unavailable transitions (see the example
+below). Ring detection, Called ID filtering and the last-ring image are unchanged.
 
 ## Configuration
 
@@ -248,7 +257,7 @@ Relays must first be enabled in the **intercom settings**; the integration canno
 | Connection | `password` | string | *(required)* | Device API password |
 | Device | `name` | string | *(auto-detected)* | Display name in Home Assistant |
 | Device | `enable_camera` | bool | `true` | Create the camera entity |
-| Device | `enable_doorbell` | bool | `true` | Create the doorbell event entity and legacy binary sensor |
+| Device | `enable_doorbell` | bool | `true` | Create the doorbell event entity |
 | Device | `called_id` | string | `All calls` | Ringing account / peer filter |
 
 ### Options flow parameters
@@ -269,7 +278,7 @@ Saved relay names, door/gate types, and pulse durations are preserved for relays
 |---|---|---|---|---|
 | Device | `name` | string | *(from setup)* | Display name |
 | Device | `enable_camera` | bool | `true` | Toggle camera entity |
-| Device | `enable_doorbell` | bool | `true` | Toggle doorbell event entity and binary sensor |
+| Device | `enable_doorbell` | bool | `true` | Toggle doorbell event entity |
 | Device | `scan_interval` | 2-600 (s) | 60 | Backup polling interval. Events deliver real-time updates; polling only runs as a safety net |
 | Device | `called_id` | string | `All calls` | Ringing account / peer filter |
 | Device | `grant_access_user` | directory user (UUID) | *(empty)* | Default user for `2n_intercom.grant_access` when the call does not pass `user`. Picked from the device directory; a UUID can also be typed in |
@@ -311,7 +320,6 @@ Resulting entities:
 - `camera.home_intercom_camera`
 - `image.home_intercom_last_ring` *(snapshot taken at the last ring)*
 - `event.home_intercom_doorbell` *(one `ring` event per ring; auto-linked to the camera by HomeKit)*
-- `binary_sensor.home_intercom_doorbell`
 - `binary_sensor.home_intercom_input_1` *(built-in input, existing entity preserved)*
 - `binary_sensor.home_intercom_input_modul1_input1`, `binary_sensor.home_intercom_input_modul1_input2` *(one per additional input port; actual ports depend on the device and extension modules)*
 - `binary_sensor.home_intercom_tamper_modul1_tamper` *(tamper input, when reported by the device)*
@@ -324,9 +332,9 @@ Resulting entities:
 
 ### HomeKit video doorbell (UI-only)
 
-Enable **Camera** and **Doorbell** in the 2N integration. Add **HomeKit Bridge** from **Settings > Devices & services**, select **Accessory** mode, and include **only the camera entity**. Pair it in Apple Home and enable notifications / HomePod chimes there. HomeKit automatically finds `event.<intercom>_doorbell` on the camera's device; do not expose either doorbell entity as a separate accessory.
+Enable **Camera** and **Doorbell** in the 2N integration. Add **HomeKit Bridge** from **Settings > Devices & services**, select **Accessory** mode, and include **only the camera entity**. Pair it in Apple Home and enable notifications / HomePod chimes there. HomeKit automatically finds `event.<intercom>_doorbell` on the camera's device; do not expose the doorbell event as a separate accessory.
 
-If the camera was already paired as an ordinary camera, remove that old pairing and recreate the accessory so Apple Home discovers the video doorbell. Do not expose the same camera through multiple bridges. Explicit YAML `linked_doorbell_sensor` is still available as a fallback, including existing links to the binary sensor; see [HomeKit Integration](HOMEKIT_INTEGRATION.md).
+If the camera was already paired as an ordinary camera, remove that old pairing and recreate the accessory so Apple Home discovers the video doorbell. Do not expose the same camera through multiple bridges. Explicit YAML `linked_doorbell_sensor` targeting the event entity is still available as a fallback; see [HomeKit Integration](HOMEKIT_INTEGRATION.md).
 
 ### IO input sensors
 
@@ -403,13 +411,13 @@ The service never reports success when the door did not open: a denial (`accessG
 
 ### Blueprint: Doorbell notification with answer/hangup
 
-A ready-to-use blueprint is included at [`blueprints/doorbell_notification_answer_hangup.yaml`](blueprints/doorbell_notification_answer_hangup.yaml). It sends a mobile notification with a camera snapshot and action buttons to answer or hang up the call when the doorbell rings.
+A ready-to-use blueprint is included at [`blueprints/doorbell_notification_answer_hangup.yaml`](blueprints/doorbell_notification_answer_hangup.yaml). Select the doorbell **event** entity and a mobile notification service. It sends a camera snapshot and action buttons to answer or hang up the call. The enabled camera and call-state sensor are found on the event entity's device, so renamed entity IDs and multiple intercoms are supported. Enable both entities before using the blueprint.
 
 To import:
 
 1. Copy the YAML file into your `config/blueprints/automation/2n_intercom/` directory
 2. Reload automations
-3. Create a new automation from the blueprint and fill in your entities
+3. Create a new automation from the blueprint and select your doorbell event and notification service. Existing automations must reselect the event entity after upgrading
 
 ### Quick YAML example: open door on doorbell
 
@@ -418,8 +426,17 @@ automation:
   - alias: "Auto-open door on ring"
     trigger:
       - platform: state
-        entity_id: binary_sensor.home_intercom_doorbell
-        to: "on"
+        entity_id: event.home_intercom_doorbell
+    condition:
+      - condition: template
+        value_template: >
+          {{ trigger.from_state is not none
+             and trigger.from_state.state != 'unavailable'
+             and trigger.to_state is not none
+             and trigger.to_state.state not in ['unknown', 'unavailable']
+             and trigger.to_state.state != trigger.from_state.state
+             and trigger.to_state.attributes.get('event_type') == 'ring'
+             and not trigger.to_state.attributes.get('restored', false) }}
     action:
       - service: switch.turn_on
         target:
@@ -516,7 +533,7 @@ custom_components/2n_intercom/
 ├── entity.py                # Shared TwoNIntercomEntity base
 ├── camera.py                # MjpegCamera-based camera platform
 ├── image.py                 # Last-ring snapshot image
-├── binary_sensor.py         # Doorbell + input + relay-active sensors
+├── binary_sensor.py         # Input + relay-active + motion sensors
 ├── event.py                 # Doorbell ring events + HomeKit camera auto-linking
 ├── sensor.py                # SIP registration + call state diagnostic sensors
 ├── switch.py                # Door relay platform
@@ -533,9 +550,13 @@ custom_components/2n_intercom/
 
 ### Tests
 
+Use Python 3.12+. The offline blueprint checks use test-only Jinja2 and PyYAML;
+the integration still has no external runtime requirements.
+
 ```bash
-python3 -m unittest discover -s tests -t tests   # 442/442
-python3 validate.py                               # manifest + HACS compliance
+python3 -m pip install -r tests/requirements.txt
+python3 -m unittest discover -s tests -t tests
+python3 validate.py                              # manifest + HACS compliance
 python3 -m py_compile custom_components/2n_intercom/*.py
 ```
 

@@ -56,7 +56,7 @@ Device
 After setup you should see:
 
 - `camera.<name>_camera` — JPEG snapshots and a native MJPEG live view (no ffmpeg)
-- `binary_sensor.<name>_doorbell` — event-driven ring detection
+- `event.<name>_doorbell` — one `ring` event per intercom-started ring
 - `binary_sensor.<name>_input_1` — real device input state
 - `binary_sensor.<name>_relay_1_active` — real cached relay state
 - `sensor.<name>_sip_registration` — SIP registration diagnostic
@@ -68,14 +68,18 @@ Relay entities appear only for relays enabled in the **intercom settings**; the 
 
 ### 6. HomeKit (optional)
 
-If you run the HA HomeKit Bridge, the camera entity exposes a HomeKit-compatible MJPEG stream and the doorbell binary sensor can be linked to it for video-doorbell behaviour. See [HOMEKIT_INTEGRATION.md](HOMEKIT_INTEGRATION.md) for the YAML link snippet.
+If you run the HA HomeKit Bridge, include only the camera in **Accessory** mode. HomeKit automatically links the doorbell event entity on the same device for video-doorbell behaviour and HomePod chimes. See [HOMEKIT_INTEGRATION.md](HOMEKIT_INTEGRATION.md) for UI setup and the optional explicit YAML link.
 
 ### 7. Using the entities
 
 - **Camera** — open the camera card; the MJPEG live view starts directly without ffmpeg / HLS
-- **Doorbell** — automate on `binary_sensor.<name>_doorbell` turning `on`. The `sensor.<name>_call_state` entity carries the `active_session_id` attribute you'll need to terminate the same session
+- **Doorbell** — automate on a new timestamp of `event.<name>_doorbell` with `event_type: ring`, ignoring startup/restore and unavailable transitions (see [README automation examples](README.md#automation-examples)). The `sensor.<name>_call_state` entity carries the `active_session_id` attribute you'll need to terminate the same session
 - **Door relay** — call `switch.turn_on` (the relay self-resets after the configured pulse duration)
 - **Gate relay** — call `cover.open_cover` / `cover.close_cover`
+
+Upgrading to v1.5.0 removes the old doorbell binary sensor and its registry entry
+automatically, without a deprecation period. Update existing automations,
+blueprint inputs and explicit HomeKit links to the doorbell event entity.
 
 ## Reconfiguring or Re-authenticating
 
@@ -127,7 +131,7 @@ Recommended pattern: pair `hangup_call` with the call-state sensor's `active_ses
 - If the device's RTSP licence isn't enabled, MJPEG is the only path. The integration prefers MJPEG automatically when RTSP is unreachable
 - Reload the integration after changing camera caps on the device
 
-### Doorbell binary sensor not flipping
+### Doorbell event not firing
 - Ring detection is exclusively event-driven via `/api/log/subscribe` — there is no polling fallback for ring events. Subscription failures are retried with exponential backoff; ring events during a gap are lost
 - Check the integration log; a `Log subscription … established` debug line confirms the event channel is up
 

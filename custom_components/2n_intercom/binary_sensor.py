@@ -69,7 +69,7 @@ async def async_setup_entry(
     """Set up 2N Intercom binary sensor platform."""
     runtime: TwoNIntercomRuntimeData = config_entry.runtime_data
     coordinator: TwoNIntercomCoordinator = runtime.coordinator
-    entities: list[BinarySensorEntity] = [TwoNIntercomDoorbell(coordinator, config_entry)]
+    entities: list[BinarySensorEntity] = []
 
     for port in io_ports_of_type(coordinator.io_caps, coordinator.io_status, "input"):
         if port == "input1":
@@ -87,63 +87,6 @@ async def async_setup_entry(
         entities,
         True,
     )
-
-
-class TwoNIntercomDoorbell(TwoNIntercomEntity, BinarySensorEntity):  # type: ignore[misc]
-    """Representation of a 2N Intercom doorbell.
-
-    Keeps the existing ring pulse and attributes for automations.
-    HomeKit auto-links the separate doorbell event entity to the camera;
-    a binary sensor does not provide that automatic doorbell mapping.
-    """
-
-    _attr_translation_key = "doorbell"
-
-    def __init__(
-        self,
-        coordinator: TwoNIntercomCoordinator,
-        config_entry: TwoNIntercomConfigEntry,
-    ) -> None:
-        """Initialize the doorbell."""
-        super().__init__(coordinator, config_entry)
-        self._attr_unique_id = f"{config_entry.entry_id}_doorbell"
-
-    @property
-    def is_on(self) -> bool:
-        """Return true if doorbell is ringing."""
-        active: bool = self.coordinator.ring_active
-        return active
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the state attributes."""
-        attributes: dict[str, Any] = {}
-
-        if self.coordinator.last_ring_time:
-            attributes["last_ring"] = self.coordinator.last_ring_time.isoformat()
-
-        if self.coordinator.called_peer:
-            attributes["called_peer"] = self.coordinator.called_peer
-
-        caller_info = self.coordinator.caller_info
-        if caller_info:
-            if "name" in caller_info:
-                attributes["caller_name"] = caller_info["name"]
-            if "number" in caller_info:
-                attributes["caller_number"] = caller_info["number"]
-            if "button" in caller_info:
-                attributes["button"] = caller_info["button"]
-
-        # Add call status info if available
-        if self.coordinator.data:
-            call_status = self.coordinator.data.call_status
-            call_state = self.coordinator.call_state
-            if call_state:
-                attributes["call_state"] = call_state
-            if call_status and "direction" in call_status:
-                attributes["call_direction"] = call_status["direction"]
-
-        return attributes
 
 
 class TwoNIntercomInput1Sensor(TwoNIntercomEntity, BinarySensorEntity):  # type: ignore[misc]

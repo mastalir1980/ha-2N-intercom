@@ -9,9 +9,6 @@
       }
     },
     "binary_sensor": {
-      "doorbell": {
-        "default": "mdi:doorbell"
-      },
       "input_1": {
         "default": "mdi:electric-switch"
       },

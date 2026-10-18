@@ -149,10 +149,10 @@ class BinarySensorPlatformTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             [entity._attr_unique_id for entity in added],
-            ["entry-1_doorbell", "entry-1_input1"],
+            ["entry-1_input1"],
         )
 
-    async def test_setup_entry_keeps_only_doorbell_when_input1_is_missing(self) -> None:
+    async def test_setup_entry_adds_no_sensors_when_no_inputs_exist(self) -> None:
         binary_sensor_module = self.binary_sensor_module
         coordinator = FakeCoordinator(
             io_caps={"ports": [{"port": "relay1", "type": "output"}]},
@@ -172,7 +172,7 @@ class BinarySensorPlatformTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             [entity._attr_unique_id for entity in added],
-            ["entry-1_doorbell"],
+            [],
         )
 
     async def test_setup_entry_adds_relay_sensor_when_switch1_is_present(self) -> None:
@@ -203,7 +203,7 @@ class BinarySensorPlatformTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             [entity._attr_unique_id for entity in added],
-            ["entry-1_doorbell", "entry-1_relay1_active"],
+            ["entry-1_relay1_active"],
         )
 
     def test_input_sensor_uses_cached_io_status_payload(self) -> None:
@@ -227,16 +227,17 @@ class BinarySensorPlatformTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(entity.is_on)
 
-    def test_doorbell_entity_has_translation_key(self) -> None:
-        binary_sensor_module = self.binary_sensor_module
+    async def test_setup_never_creates_a_doorbell_binary_sensor(self) -> None:
         coordinator = FakeCoordinator()
-        entity = binary_sensor_module.TwoNIntercomDoorbell(
-            coordinator,
-            FakeConfigEntry("entry-1", {"name": "Front Door"}),
+        entry = FakeConfigEntry("entry-1", {"enable_doorbell": True})
+        entry.runtime_data = types.SimpleNamespace(coordinator=coordinator)
+        added = []
+        await self.binary_sensor_module.async_setup_entry(
+            None, entry, lambda entities, update_before_add=False: added.extend(entities)
         )
 
-        self.assertEqual(entity._attr_translation_key, "doorbell")
-        self.assertTrue(entity._attr_has_entity_name)
+        self.assertNotIn("entry-1_doorbell", [e._attr_unique_id for e in added])
+        self.assertFalse(hasattr(self.binary_sensor_module, "TwoNIntercomDoorbell"))
 
     def test_input1_entity_has_translation_key(self) -> None:
         binary_sensor_module = self.binary_sensor_module
@@ -289,94 +290,6 @@ class BinarySensorPlatformTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(entity._attr_unique_id, "entry-1_relay1_active")
         self.assertEqual(entity._attr_entity_category, "diagnostic")
 
-
-    def test_doorbell_is_on_when_ring_active(self) -> None:
-        binary_sensor_module = self.binary_sensor_module
-        coordinator = FakeCoordinator()
-        coordinator.ring_active = True
-        entity = binary_sensor_module.TwoNIntercomDoorbell(
-            coordinator,
-            FakeConfigEntry("entry-1", {"name": "Door"}),
-        )
-        self.assertTrue(entity.is_on)
-
-    def test_doorbell_is_off_when_not_ringing(self) -> None:
-        binary_sensor_module = self.binary_sensor_module
-        coordinator = FakeCoordinator()
-        coordinator.ring_active = False
-        entity = binary_sensor_module.TwoNIntercomDoorbell(
-            coordinator,
-            FakeConfigEntry("entry-1", {"name": "Door"}),
-        )
-        self.assertFalse(entity.is_on)
-
-    def test_doorbell_extra_state_attributes(self) -> None:
-        binary_sensor_module = self.binary_sensor_module
-        from datetime import datetime
-
-        coordinator = FakeCoordinator()
-        coordinator.ring_active = True
-        coordinator.last_ring_time = datetime(2026, 4, 12, 10, 0)
-        coordinator.called_peer = "sip:100@intercom"
-        coordinator.caller_info = {
-            "name": "John",
-            "number": "100",
-            "button": "1",
-        }
-        coordinator.data = types.SimpleNamespace(
-            call_status={"direction": "incoming"},
-        )
-        coordinator.call_state = "ringing"
-
-        entity = binary_sensor_module.TwoNIntercomDoorbell(
-            coordinator,
-            FakeConfigEntry("entry-1", {"name": "Door"}),
-        )
-        attrs = entity.extra_state_attributes
-        self.assertEqual(attrs["caller_name"], "John")
-        self.assertEqual(attrs["caller_number"], "100")
-        self.assertEqual(attrs["button"], "1")
-        self.assertEqual(attrs["called_peer"], "sip:100@intercom")
-        self.assertIn("last_ring", attrs)
-        self.assertEqual(attrs["call_state"], "ringing")
-        self.assertEqual(attrs["call_direction"], "incoming")
-
-    def test_doorbell_extra_state_attributes_tz_aware_last_ring(self) -> None:
-        binary_sensor_module = self.binary_sensor_module
-        from datetime import datetime, timezone
-
-        coordinator = FakeCoordinator()
-        coordinator.ring_active = True
-        coordinator.last_ring_time = datetime(2026, 4, 12, 10, 0, tzinfo=timezone.utc)
-        coordinator.called_peer = None
-        coordinator.caller_info = {}
-        coordinator.data = types.SimpleNamespace(
-            call_status={"direction": "incoming"},
-        )
-        coordinator.call_state = "ringing"
-
-        entity = binary_sensor_module.TwoNIntercomDoorbell(
-            coordinator,
-            FakeConfigEntry("entry-1", {"name": "Door"}),
-        )
-        attrs = entity.extra_state_attributes
-        self.assertTrue(attrs["last_ring"].endswith("+00:00"))
-
-    def test_doorbell_extra_state_attributes_empty(self) -> None:
-        binary_sensor_module = self.binary_sensor_module
-        coordinator = FakeCoordinator()
-        coordinator.ring_active = False
-        coordinator.last_ring_time = None
-        coordinator.called_peer = None
-        coordinator.caller_info = {}
-        coordinator.data = None
-
-        entity = binary_sensor_module.TwoNIntercomDoorbell(
-            coordinator,
-            FakeConfigEntry("entry-1", {"name": "Door"}),
-        )
-        attrs = entity.extra_state_attributes
-        self.assertEqual(attrs, {})
 
     def test_input1_off_when_state_zero(self) -> None:
         binary_sensor_module = self.binary_sensor_module
@@ -461,7 +374,7 @@ class BinarySensorPlatformTests(unittest.IsolatedAsyncioTestCase):
         entry = FakeConfigEntry("entry-1", {"name": "Front Door"})
         entry.options = {}
 
-        entity = binary_sensor_module.TwoNIntercomDoorbell(coordinator, entry)
+        entity = binary_sensor_module.TwoNIntercomInput1Sensor(coordinator, entry)
 
         # device_info set by base entity __init__ via _attr_device_info
         info = entity._attr_device_info
@@ -475,7 +388,7 @@ class BinarySensorPlatformTests(unittest.IsolatedAsyncioTestCase):
         entry = FakeConfigEntry("entry-1", {"name": "Data Name"})
         entry.options = {"name": "Options Name"}
 
-        entity = binary_sensor_module.TwoNIntercomDoorbell(coordinator, entry)
+        entity = binary_sensor_module.TwoNIntercomInput1Sensor(coordinator, entry)
         info = entity._attr_device_info
         self.assertEqual(info["name"], "Options Name")
 
@@ -658,7 +571,6 @@ class IoInputSensorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             set(sensors),
             {
-                "entry-1_doorbell",
                 "entry-1_input1",
                 "entry-1_io_modul1.input1",
                 "entry-1_io_modul1.input2",
@@ -710,7 +622,7 @@ class IoInputSensorTests(unittest.IsolatedAsyncioTestCase):
             {"port": "unknown_type", "state": 1},
         ])
         sensors = await self._setup_sensors(coordinator)
-        self.assertEqual(len(sensors), 5)
+        self.assertEqual(len(sensors), 4)
         self.assertEqual(
             self.binary_sensor_module.io_ports_of_type(
                 coordinator.io_caps, coordinator.io_status, "input"
@@ -725,11 +637,11 @@ class IoInputSensorTests(unittest.IsolatedAsyncioTestCase):
                     coordinator = self._make_coordinator()
                     setattr(coordinator, payload_name, {"ports": ports})
                     sensors = await self._setup_sensors(coordinator)
-                    self.assertEqual(set(sensors), {"entry-1_doorbell"})
+                    self.assertEqual(set(sensors), set())
             coordinator = self._make_coordinator()
             setattr(coordinator, payload_name, {})
             sensors = await self._setup_sensors(coordinator)
-            self.assertEqual(set(sensors), {"entry-1_doorbell"})
+            self.assertEqual(set(sensors), set())
 
     async def test_tamper_classification_requires_exact_port_or_suffix(self) -> None:
         ports = ["tamper", "modul1.tamper", "modul2.tamper", "tamper1", "notamper"]
@@ -738,7 +650,7 @@ class IoInputSensorTests(unittest.IsolatedAsyncioTestCase):
             io_status={"ports": [{"port": port, "state": 0} for port in ports]},
         )
         sensors = await self._setup_sensors(coordinator)
-        self.assertEqual(len(sensors), 1 + len(ports))
+        self.assertEqual(len(sensors), len(ports))
         for port in ports:
             with self.subTest(port=port):
                 sensor = sensors[f"entry-1_io_{port}"]
@@ -788,7 +700,6 @@ class IoInputSensorTests(unittest.IsolatedAsyncioTestCase):
                     before = {
                         key: sensor.is_on
                         for key, sensor in sensors.items()
-                        if key != "entry-1_doorbell"
                     }
                     self.assertTrue(coordinator._process_log_event({
                         "event": "InputChanged",

@@ -44,6 +44,18 @@ def test_doorbell_event_is_available_and_shares_camera_device(ha, entry, registr
     assert state["state"] != "unavailable"
     assert state["attributes"]["device_class"] == "doorbell"
     assert state["attributes"]["event_types"] == ["ring"]
+    legacy = [
+        ent for ent in registry
+        if ent["entity_id"].startswith("binary_sensor.")
+        and ent.get("unique_id") == f"{entry['entry_id']}_doorbell"
+    ]
+    assert not legacy, "legacy doorbell binary sensor still exists in the entity registry"
+    doorbells = [
+        ent for ent in registry
+        if ent["entity_id"].startswith("event.")
+        and ha.state(ent["entity_id"])["attributes"].get("device_class") == "doorbell"
+    ]
+    assert len(doorbells) == 1, "the entry must have exactly one doorbell event entity"
 
     camera = find_by_suffix(registry, entry["entry_id"], "camera")
     assert camera is not None, "camera entity was not created"

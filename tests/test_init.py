@@ -7,7 +7,7 @@ import sys
 import types
 import unittest
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from _stubs import (
     API_PATH,
@@ -117,6 +117,9 @@ def _install_homeassistant_stubs() -> None:
     config_validation.config_entry_only_config_schema = config_entry_only_config_schema
     sys.modules["homeassistant.helpers.config_validation"] = config_validation
     ensure_package("homeassistant.helpers").config_validation = config_validation
+    entity_registry = types.ModuleType("homeassistant.helpers.entity_registry")
+    entity_registry.async_get = lambda hass: hass.entity_registry
+    sys.modules["homeassistant.helpers.entity_registry"] = entity_registry
 
 
 def load_init_module():
@@ -209,6 +212,8 @@ class FakeHass:
         self.config_entries = FakeConfigEntries(entries)
         self.bus = FakeBus()
         self.data: dict[str, object] = {}
+        self.entity_registry = Mock()
+        self.entity_registry.async_get_entity_id.return_value = None
         self.components = types.SimpleNamespace(
             persistent_notification=types.SimpleNamespace(async_create=lambda *a, **k: None)
         )
@@ -413,6 +418,63 @@ class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):
     def setUpClass(cls) -> None:
         cls.init_module = load_init_module()
         cls.const_module = sys.modules["custom_components.2n_intercom.const"]
+
+    async def test_setup_removes_only_legacy_doorbell_even_when_disabled(self) -> None:
+        for enabled in (True, False):
+            with self.subTest(enable_doorbell=enabled):
+                entry = FakeConfigEntry(
+                    "entry-1",
+                    {"host": "example.invalid", "port": 443,
+                     "username": "test-user", "password": "test-password"},
+                    options={"enable_doorbell": enabled},
+                )
+                hass = FakeHass([entry])
+                registry = hass.entity_registry
+                entries = {
+                    ("binary_sensor", "2n_intercom", "entry-1_doorbell"):
+                        "binary_sensor.renamed_button",
+                    ("event", "2n_intercom", "entry-1_doorbell_event"):
+                        "event.renamed_button",
+                    ("binary_sensor", "2n_intercom", "entry-2_doorbell"):
+                        "binary_sensor.other_intercom",
+                    ("binary_sensor", "other_integration", "entry-1_doorbell"):
+                        "binary_sensor.other_platform",
+                    ("binary_sensor", "2n_intercom", "entry-1_input1"):
+                        "binary_sensor.input",
+                }
+                registry.async_get_entity_id.side_effect = (
+                    lambda domain, platform, uid: entries.get((domain, platform, uid))
+                )
+                registry.async_remove.side_effect = lambda eid: entries.pop(
+                    next(key for key, value in entries.items() if value == eid)
+                )
+                original = dict(entries)
+                with patch.object(self.init_module, "TwoNIntercomAPI", FakeAPI):
+                    self.assertTrue(await self.init_module.async_setup_entry(hass, entry))
+                    await self.init_module.async_unload_entry(hass, entry)
+                    # Setup is idempotent after the old entity has been removed.
+                    self.assertTrue(await self.init_module.async_setup_entry(hass, entry))
+                    await self.init_module.async_unload_entry(hass, entry)
+                registry.async_get_entity_id.assert_called_with(
+                    "binary_sensor", "2n_intercom", "entry-1_doorbell"
+                )
+                registry.async_remove.assert_called_once_with("binary_sensor.renamed_button")
+                del original[("binary_sensor", "2n_intercom", "entry-1_doorbell")]
+                self.assertEqual(entries, original)
+                platforms = hass.config_entries.forwarded[0][1]
+                self.assertEqual("event" in platforms, enabled)
+
+    async def test_setup_without_legacy_doorbell_does_not_remove_entities(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1",
+            {"host": "example.invalid", "port": 443,
+             "username": "test-user", "password": "test-password"},
+        )
+        hass = FakeHass([entry])
+        with patch.object(self.init_module, "TwoNIntercomAPI", FakeAPI):
+            self.assertTrue(await self.init_module.async_setup_entry(hass, entry))
+            await self.init_module.async_unload_entry(hass, entry)
+        hass.entity_registry.async_remove.assert_not_called()
 
     async def test_setup_registers_and_dispatches_call_services(self) -> None:
         init_module = self.init_module

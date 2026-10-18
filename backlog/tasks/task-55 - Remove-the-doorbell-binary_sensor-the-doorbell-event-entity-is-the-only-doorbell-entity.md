@@ -3,10 +3,11 @@ id: TASK-55
 title: >-
   Remove the doorbell binary_sensor; the doorbell event entity is the only
   doorbell entity
-status: To Do
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-18 10:29'
+updated_date: '2026-10-18 12:20'
 labels:
   - doorbell
   - breaking-change
@@ -40,10 +41,38 @@ Approach / pointers: drop the class and its setup branch in `binary_sensor.py`, 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 With `enable_doorbell` on, setup creates no binary_sensor with unique_id `<entry_id>_doorbell`; the doorbell event entity is still created; unit test
-- [ ] #2 An existing registry entry `binary_sensor` / `<entry_id>_doorbell` is removed on setup; unit test
-- [ ] #3 The blueprint triggers on the doorbell event entity and finds the call_state sensor and camera of the same device without string replacement of entity ids; blueprint YAML is valid
-- [ ] #4 strings.json, translations en/de/cs and icons.json no longer contain the binary_sensor doorbell keys; test_translations and validate.py green
-- [ ] #5 README.md, INSTALLATION.md, HOMEKIT_INTEGRATION.md and docs/ARCHITECTURE.md (+ regenerated diagrams) describe only the event entity; the release task can list this as a breaking change (note in the task final summary)
-- [ ] #6 E2E (read-only): staging HA has `event.<intercom>_doorbell` and no doorbell binary_sensor for the entry ("HA says one doorbell entity"); `bash e2e/e2e.sh wip` or PR check e2e-pi green
+- [x] #1 With `enable_doorbell` on, setup creates no binary_sensor with unique_id `<entry_id>_doorbell`; the doorbell event entity is still created; unit test
+- [x] #2 An existing registry entry `binary_sensor` / `<entry_id>_doorbell` is removed on setup; unit test
+- [x] #3 The blueprint triggers on the doorbell event entity and finds the call_state sensor and camera of the same device without string replacement of entity ids; blueprint YAML is valid
+- [x] #4 strings.json, translations en/de/cs and icons.json no longer contain the binary_sensor doorbell keys; test_translations and validate.py green
+- [x] #5 README.md, INSTALLATION.md, HOMEKIT_INTEGRATION.md and docs/ARCHITECTURE.md (+ regenerated diagrams) describe only the event entity; the release task can list this as a breaking change (note in the task final summary)
+- [x] #6 E2E (read-only): staging HA has `event.<intercom>_doorbell` and no doorbell binary_sensor for the entry ("HA says one doorbell entity"); `bash e2e/e2e.sh wip` or PR check e2e-pi green
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Remove TwoNIntercomDoorbell from the binary_sensor platform and migrate the exact legacy domain/platform/unique-ID registry entry in integration async_setup_entry before platform forwarding, including enable_doorbell=false. Preserve other entities and coordinator/event behavior.
+2. Update the notification blueprint to select doorbell events, ignore startup/restore/unavailable and attribute-only transitions, and discover the active call-state sensor and camera on the triggering device without entity-name replacement. Pin answer/hangup to its config entry and session.
+3. Remove binary-sensor doorbell translation/icon keys; add migration/setup, offline blueprint YAML/Jinja and translation regression coverage plus a read-only E2E single-doorbell assertion. Declare blueprint parsing dependencies as test-only.
+4. Update README, installation, HomeKit and architecture guidance, regenerate diagrams, and document the breaking migration for release notes.
+5. Run required Python 3.12 local gates, record results with Pi E2E pending, and commit on the current branch without checking criteria, closing the task or pushing.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Removed the doorbell binary-sensor implementation and its translation/icon keys. The integration setup now removes only binary_sensor / 2n_intercom / <entry_id>_doorbell, including renamed or disabled registry entries and entries with enable_doorbell off. Migration is idempotent and leaves the event, other platforms, physical inputs and other intercom entries untouched. Cleanup is intentionally in __init__.async_setup_entry because the binary_sensor platform is not forwarded when the option is off.
+The blueprint selects event + integration 2n_intercom + device_class doorbell, reacts only to new ring timestamps (including the first ring from unknown), and suppresses startup/restore/unavailable and attribute-only updates. It discovers the active call-state sensor and camera from the triggering device and integration, independent of localized/renamed IDs, and pins call services to that config entry/session. Missing enabled camera or active session produces an explicit automation error. Removed the old unused camera/call-state inputs.
+Added exact migration/non-removal/idempotence coverage, no-binary-sensor setup assertions, retained event metadata/ring/filter regression coverage, translation-key removal assertions, and offline blueprint YAML/template tests. Jinja2/PyYAML are declared only in tests/requirements.txt and documented in README; runtime requirements remain empty. Updated the read-only E2E entity check to require exactly one doorbell event and no legacy binary-sensor registry entry.
+Updated README, INSTALLATION, HOMEKIT_INTEGRATION, ARCHITECTURE and the diagram generator; regenerated both Excalidraw diagrams. No coordinator/event implementation change, version bump, CHANGELOG edit or protected-path edit.
+
+Local gates on Python 3.12.15: all 675 unit tests passed; python3 validate.py passed; integration py_compile passed; changed E2E test compiles; git diff --check passed. Full-suite execution exposed a test-stub package-attribute leak introduced by the new registry stub; corrected its isolation and reran the whole suite successfully. Existing unrelated API fake-coroutine RuntimeWarnings remain outside this task.
+No Home Assistant/intercom connection or E2E runner was invoked on the VM. AC #6 still requires the orchestrator PR check e2e-pi. Task remains In Progress and every acceptance criterion is unchecked, as required for headless execution. Work is committed locally only; no push.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented by the headless coder. Checks green on f21e48717 after 0 fix round(s): e2e-pi=pass, validate=pass, validate=pass. PR: https://github.com/mastalir1980/ha-2N-intercom/pull/81. Done takes effect when the PR is merged.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -189,9 +189,6 @@
       }
     },
     "binary_sensor": {
-      "doorbell": {
-        "name": "Klingel"
-      },
       "input_1": {
         "name": "Eingang 1"
       },

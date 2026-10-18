@@ -195,12 +195,13 @@ b.box(360, 540, 320, 70,
 # Platforms (entities)
 plat_y = 170
 b.box(760, plat_y, 200, 40, "camera.py (MjpegCamera)", BLUE, font=13)
-b.box(760, plat_y + 55, 200, 40, "binary_sensor.py\n(doorbell · input · motion)", BLUE, font=12)
+b.box(760, plat_y + 55, 200, 40, "binary_sensor.py\n(input · relay-active · motion)", BLUE, font=12)
 b.box(760, plat_y + 110, 200, 40, "switch.py (door relays)", BLUE, font=13)
 b.box(760, plat_y + 165, 200, 40, "cover.py (gate relays)", BLUE, font=13)
 b.box(760, plat_y + 220, 200, 40, "sensor.py (SIP · call state)", BLUE, font=13)
 b.box(760, plat_y + 275, 200, 40, "diagnostics.py", GRAY, font=13)
 b.box(760, plat_y + 330, 200, 40, "entity.py (shared base)", GRAY, font=13)
+b.box(760, plat_y + 385, 200, 40, "event.py (doorbell rings)", BLUE, font=13)
 
 # Arrows
 b.arrow(280, 185, 360, 200, color="#6741d9", label="setup")
@@ -232,7 +233,7 @@ steps = [
     "events: CallStateChanged,\nSwitchStateChanged, InputChanged,\nMotionDetected, ConfigurationChanged…",
     "_process_log_event() patches\ncached status in place",
     "async_update_listeners()",
-    "is_on / native_value\nread from cache → UI update",
+    "is_on / native_value / ring event\nread from cache → UI update",
 ]
 y = 130
 for i, s in enumerate(steps):

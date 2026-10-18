@@ -24,7 +24,7 @@ Diagramy (otevři v [excalidraw.com](https://excalidraw.com) nebo VS Code rozš�
 | `api.py` | `TwoNIntercomAPI` – bezstavový HTTP klient. Parsování chyb 2N, kamera caps/transport, RTSP digest probe, řízení relé, snapshot. |
 | `entity.py` | Sdílená základní entita (`device_info`, `available`, `has_entity_name`). |
 | `camera.py` | `MjpegCamera` – live view (RTSP/MJPEG/JPEG snapshot stream). |
-| `binary_sensor.py` | Legacy doorbell pulse (unchanged), IO inputs, relay-active, motion. |
+| `binary_sensor.py` | IO inputs, relay-active, motion; no doorbell binary sensor. |
 | `event.py` | Doorbell events (`EventDeviceClass.DOORBELL`) for HomeKit camera auto-linking. |
 | `switch.py` | Door relé – dynamicky objevené z `/api/switch/caps`. |
 | `cover.py` | Gate relé (garážová vrata) – jen pro relé typu `gate`. |
@@ -155,15 +155,24 @@ Detaily endpointů: [`API_REFERENCE.md`](API_REFERENCE.md).
   canonical filter (`all` for All calls) and the decision
   (`rang`, `filtered by peer`, `not a ring`). Raw payloads and credential-bearing
   peer URLs are not logged.
-- `ring_active` je krátký pulz (`DOORBELL_PULSE_DURATION = 1 s`) – binary
-  sensor zvonku se rozsvítí na pulz, ne na celou délku vyzvánění.
+- `ring_active` remains an internal short coordinator pulse
+  (`DOORBELL_PULSE_DURATION = 1 s`); it no longer backs a binary sensor.
 - `ring_count` increases only when a new allowed ring starts, using the same
   guard that deduplicates ring snapshots for the two call event types.
   `event.<intercom>_doorbell` watches this counter and emits `ring` with the
   existing called-peer and caller name/number metadata. It baselines the
   counter when added, so startup/restore and polling do not create rings.
-  The event shares the camera's device for HomeKit's automatic doorbell link;
-  the existing binary sensor's identity, class, pulse and attributes do not change.
+  The event shares the camera's device for HomeKit's automatic doorbell link
+  and is the only doorbell entity. Its unique ID remains
+  `<entry_id>_doorbell_event`; ring detection, filtering, `last_ring_time`
+  and the last-ring snapshot are unchanged.
+- On setup, `__init__.py` removes only the legacy registry entry for
+  domain `binary_sensor`, integration `2n_intercom`, unique ID
+  `<entry_id>_doorbell`, even when the doorbell option is off. This v1.5.0
+  breaking change has no deprecation period. Automations/blueprints and explicit
+  HomeKit links must use the event entity instead. The notification blueprint
+  discovers the active call-state sensor and camera on the triggering device,
+  independent of entity names, and pins services to that config entry/session.
 - `active_session_id` se drží jako zdroj pro `answer_call` / `hangup_call`,
   ale služby si pro jistotu dotáhnou *živý* `call/status` ze zařízení.
 
