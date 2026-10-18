@@ -3,11 +3,11 @@ id: TASK-53
 title: >-
   Doorbell event entity (EventDeviceClass.DOORBELL) so HomeKit links the
   doorbell to the camera without YAML
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-18 08:41'
-updated_date: '2026-10-18 08:45'
+updated_date: '2026-10-18 08:52'
 labels:
   - doorbell
   - homekit
@@ -60,12 +60,20 @@ Splits the doorbell half out of TASK-5 (TASK-5 keeps the access event entity). R
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. coordinator.py: add a monotonically increasing `ring_count` (int, starts 0) exposed as a property. Increment it ONLY where a new ring starts, i.e. inside the `if is_ringing and ring_allowed:` branch when `not self._ring_detected` (the same guard that already captures the ring snapshot once for the CallStateChanged + CallSessionStateChanged pair). Do not change any other ring logic, the pulse, `ring_active` or the peer filter.
-2. New `event.py`: `TwoNIntercomDoorbellEvent(TwoNIntercomEntity, EventEntity)` with `_attr_device_class = EventDeviceClass.DOORBELL`, `_attr_event_types = ["ring"]`, `_attr_translation_key = "doorbell"`, unique_id `f"{entry_id}_doorbell_event"`. Remember the last seen `ring_count` at add time (no event on startup/restore); in `_handle_coordinator_update` when `coordinator.ring_count` grew, call `self._trigger_event("ring", {...})` with called_peer / caller_name / caller_number (same source as TwoNIntercomDoorbell.extra_state_attributes) and then `async_write_ha_state()`. Event entities are stateless otherwise; do not poll.
-3. __init__.py `_get_platforms()`: append "event" in the `CONF_ENABLE_DOORBELL` branch next to "binary_sensor" (unload uses `loaded_platforms`, nothing else to change).
-4. strings.json `entity.event.doorbell` (name "Doorbell"; state_attributes event_type ring), translations en/de/cs, icons.json `event.doorbell` mdi:doorbell. Keep test_translations green.
-5. tests: extend tests/_stubs.py with minimal `homeassistant.components.event` stubs (EventEntity with `_trigger_event`, EventDeviceClass); new tests/test_event.py in the style of tests/test_binary_sensor.py; coordinator tests for `ring_count` (one per ring for the event pair, unchanged for incoming calls and filtered peers) in tests/test_coordinator.py.
-6. e2e/tests: read-only test that finds the event entity of the config entry via the HA client and checks device_class, event_types and that its device_id equals the camera entity device_id. No relay marker.
-7. Docs: HOMEKIT_INTEGRATION.md + README.md per the AC; TwoNIntercomDoorbell docstring.
-Must not change: binary_sensor entity (backwards compatibility, Control4/automations rely on it), event-driven ring detection (architecture rule: ring detection is exclusively event-driven), entry.data/options split, no new options. No version bump / CHANGELOG (release task TASK-37).
+1. Add a monotonic coordinator ring_count only in the existing new-ring guard, preserving ring direction, peer filtering, pulse and binary sensor behavior.
+2. Add the coordinator-backed doorbell EventEntity and enable its platform alongside the doorbell binary sensor; baseline the counter when added and emit ring with the existing caller metadata only on new rings.
+3. Add event translations/icons and focused unit coverage for setup, lifecycle, deduplication, incoming calls, peer filtering and metadata.
+4. Add a read-only staging E2E assertion for event class/types, availability and camera device association.
+5. Update HomeKit and README guidance to prefer UI-only camera accessory auto-linking and retain YAML as fallback; correct the binary sensor docstring.
+6. Run the required Python local gates, record results and remaining Pi/manual checks, and commit locally without marking criteria or task Done.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented the doorbell event platform with EventDeviceClass.DOORBELL, event_types [ring], the shared device identity and unique ID <entry_id>_doorbell_event. It is forwarded only with enable_doorbell. The coordinator counter increments only at the existing new-ring guard, independently of snapshot enablement; the entity baselines at add time and allowlists called_peer/caller_name/caller_number from the same sources as the binary sensor.
+Added unit coverage for paired and batched call events, subsequent rings, pulse independence, incoming calls, Called ID filtering, safe caller metadata, startup/re-add behavior, availability, platform toggles and translations. Existing binary-sensor runtime behavior is unchanged. The current binary-sensor code does not explicitly declare OCCUPANCY; its inherited device class is preserved, and the misleading docstring/rationale was removed rather than changing the entity.
+Added a read-only staging E2E check for event presence, doorbell class, ring type, availability while the independent 2N client can reach the device, and the camera device_id link. Updated HOMEKIT_INTEGRATION.md, README.md and architecture documentation to describe UI-only camera accessory setup, automatic event linking and the explicit YAML fallback.
+Local validation on Python 3.12: all 670 unit tests passed; python3 validate.py passed; integration py_compile passed. The new E2E test file also compiles without importing or running E2E fixtures. No Home Assistant/intercom calls or E2E runner were executed on the VM.
+Pending: the orchestrator must run e2e-pi, and Jan must perform AC #10 (one physical press -> one HA ring, UI-only HomeKit video doorbell and HomePod chime). Task remains In Progress with all acceptance criteria unchecked under manual-close. No version bump, CHANGELOG change, protected-path edit or push.
+<!-- SECTION:NOTES:END -->

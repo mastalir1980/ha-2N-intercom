@@ -218,6 +218,18 @@
         "name": "Kamera"
       }
     },
+    "event": {
+      "doorbell": {
+        "name": "Klingel",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "ring": "Klingeln"
+            }
+          }
+        }
+      }
+    },
     "image": {
       "last_ring": {
         "name": "Letztes Klingeln"

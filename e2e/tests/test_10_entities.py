@@ -33,6 +33,26 @@ def test_camera_snapshot_is_jpeg(ha, entry, registry):
     assert len(r.content) > 5_000, f"snapshot suspiciously small ({len(r.content)} B)"
 
 
+def test_doorbell_event_is_available_and_shares_camera_device(ha, entry, registry, twon):
+    assert twon.system_info(), "intercom is not reachable through the independent API client"
+    doorbell = find_by_suffix(registry, entry["entry_id"], "doorbell_event")
+    assert doorbell is not None, "doorbell event entity was not created"
+    assert doorbell["entity_id"].startswith("event.")
+    assert not doorbell.get("disabled_by"), "doorbell event entity is disabled"
+    state = ha.state(doorbell["entity_id"])
+    # 'unknown' before the first ring is a valid, available event entity.
+    assert state["state"] != "unavailable"
+    assert state["attributes"]["device_class"] == "doorbell"
+    assert state["attributes"]["event_types"] == ["ring"]
+
+    camera = find_by_suffix(registry, entry["entry_id"], "camera")
+    assert camera is not None, "camera entity was not created"
+    assert doorbell.get("device_id"), "doorbell event entity has no device"
+    assert doorbell["device_id"] == camera.get("device_id"), (
+        "HomeKit needs the doorbell event and camera on the same device"
+    )
+
+
 def _relay_entities(registry, entry_id):
     pat = re.compile(rf"^{re.escape(entry_id)}_switch_(\d+)$")
     out = {}

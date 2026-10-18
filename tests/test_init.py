@@ -444,7 +444,7 @@ class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):
             [
                 (
                     entry.entry_id,
-                    ("camera", "image", "binary_sensor", "switch", "sensor"),
+                    ("camera", "image", "binary_sensor", "event", "switch", "sensor"),
                 )
             ],
         )
@@ -1458,7 +1458,7 @@ class GrantAccessServiceTests(unittest.IsolatedAsyncioTestCase):
 
 
 class PlatformSelectionTests(unittest.TestCase):
-    """The last-ring image follows the camera option."""
+    """Optional platforms follow their feature toggles."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -1473,3 +1473,24 @@ class PlatformSelectionTests(unittest.TestCase):
     def test_image_platform_skipped_without_camera(self) -> None:
         entry = FakeConfigEntry("entry-1", {"enable_camera": False})
         self.assertNotIn("image", self.init_module._get_platforms(entry))
+
+    def test_event_platform_follows_doorbell_option(self) -> None:
+        for data, options, enabled in (
+            ({}, {}, True),
+            ({"enable_doorbell": False}, {}, False),
+            ({"enable_doorbell": True}, {"enable_doorbell": False}, False),
+            ({"enable_doorbell": False}, {"enable_doorbell": True}, True),
+        ):
+            with self.subTest(data=data, options=options):
+                entry = FakeConfigEntry("entry-1", data, options=options)
+                platforms = self.init_module._get_platforms(entry)
+                self.assertEqual(platforms.count("event"), int(enabled))
+                self.assertEqual(platforms.count("binary_sensor"), int(enabled))
+
+    def test_doorbell_event_platform_does_not_require_camera(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1", {}, options={"enable_camera": False, "enable_doorbell": True}
+        )
+        platforms = self.init_module._get_platforms(entry)
+        self.assertIn("event", platforms)
+        self.assertNotIn("camera", platforms)

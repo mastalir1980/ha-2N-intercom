@@ -499,6 +499,36 @@ class CallRingDetectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(coordinator.data.ring_snapshot, b"ring-jpeg")
         self.assertEqual(coordinator.active_session_id, "42")
 
+    async def test_ring_count_deduplicates_call_pair_and_increases_for_next_ring(self) -> None:
+        coordinator, tasks, _api = self._make_coordinator()
+        self.assertEqual(coordinator.ring_count, 0)
+        for expected in (1, 2):
+            for event, signal in (
+                ("CallStateChanged", {"direction": "outgoing"}),
+                ("CallSessionStateChanged", {"originator": "button"}),
+            ):
+                coordinator._process_log_event({
+                    "event": event,
+                    "params": {"state": "ringing", "session": 42, **signal},
+                })
+                self.assertEqual(coordinator.ring_count, expected)
+            coordinator._process_log_event({
+                "event": "CallSessionStateChanged",
+                "params": {"state": "terminated", "session": 42},
+            })
+            self.assertEqual(coordinator.ring_count, expected)
+        await asyncio.gather(*tasks)
+
+    async def test_ring_count_works_without_camera_snapshots(self) -> None:
+        coordinator = self.coordinator_module.TwoNIntercomCoordinator(
+            types.SimpleNamespace(), types.SimpleNamespace()
+        )
+        coordinator._process_log_event({
+            "event": "CallStateChanged",
+            "params": {"state": "ringing", "direction": "outgoing"},
+        })
+        self.assertEqual(coordinator.ring_count, 1)
+
     async def test_call_state_requires_outgoing_direction(self) -> None:
         for direction, rings in (
             ("incoming", False),
@@ -517,6 +547,7 @@ class CallRingDetectionTests(unittest.IsolatedAsyncioTestCase):
                     "event": "CallStateChanged", "params": params,
                 }))
                 self.assertEqual(coordinator.ring_active, rings)
+                self.assertEqual(coordinator.ring_count, int(rings))
                 self.assertEqual(coordinator.last_ring_time is not None, rings)
                 self.assertEqual(coordinator.active_session_id, "42")
                 self.assertEqual(coordinator.call_state, "ringing")
@@ -547,6 +578,7 @@ class CallRingDetectionTests(unittest.IsolatedAsyncioTestCase):
                     "event": "CallSessionStateChanged", "params": params,
                 }))
                 self.assertEqual(coordinator.ring_active, rings)
+                self.assertEqual(coordinator.ring_count, int(rings))
                 self.assertEqual(coordinator.last_ring_time is not None, rings)
                 self.assertEqual(coordinator.active_session_id, "42")
                 self.assertEqual(coordinator.call_state, "ringing")
@@ -589,6 +621,7 @@ class CallRingDetectionTests(unittest.IsolatedAsyncioTestCase):
                     },
                 }))
                 self.assertEqual(coordinator.ring_active, rings)
+                self.assertEqual(coordinator.ring_count, int(rings))
                 self.assertEqual(coordinator.last_ring_time is not None, rings)
                 await asyncio.gather(*tasks)
                 self.assertEqual(api.async_get_snapshot.await_count, int(rings))
@@ -613,6 +646,7 @@ class CallRingDetectionTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(coordinator.ring_active, ring_active)
                 if ring_active and not was_ringing:
                     ring_count += 1
+                self.assertEqual(coordinator.ring_count, ring_count)
                 await asyncio.gather(*tasks)
                 self.assertEqual(api.async_get_snapshot.await_count, ring_count)
 
@@ -2125,11 +2159,13 @@ class AsyncUpdateDataErrorTests(unittest.IsolatedAsyncioTestCase):
         # Polling does not trigger ring detection
         self.assertFalse(c._ring_detected)
         self.assertEqual(c._last_call_state_value, "ringing")
+        self.assertEqual(c.ring_count, 0)
 
         data2 = await c._async_update_data()
         c.data = data2
         self.assertFalse(c._ring_detected)
         self.assertEqual(c._last_call_state_value, "idle")
+        self.assertEqual(c.ring_count, 0)
 
 
 class PropertyTests(unittest.IsolatedAsyncioTestCase):

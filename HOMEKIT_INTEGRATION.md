@@ -2,18 +2,33 @@
 
 ## Overview
 
-This integration exposes HomeKit-friendly entities for camera, doorbell, and door/gate control. The doorbell tile lives **on the camera accessory** in HomeKit — you must link the doorbell binary sensor to the camera in the HomeKit bridge YAML.
+This integration exposes HomeKit-friendly entities for camera, doorbell, and door/gate control. The doorbell tile lives **on the camera accessory** in HomeKit. Home Assistant automatically links `event.<intercom>_doorbell` to the camera on the same device, so the recommended setup uses only the UI.
 
 - **Camera path** — the camera is `MjpegCamera`-based, so HomeKit gets a clean MJPEG live view without ffmpeg or HLS
 - **Relay-based path** — door relays are exposed as switches and gate relays as covers
 - **Legacy no-relay path** — the fallback lock entity still uses door/gate semantics for HomeKit mapping
-- **Doorbell path** — the doorbell sensor must be linked to the camera via YAML
+- **Doorbell path** — a doorbell event entity provides automatic camera linking and HomePod chimes
 
-## Doorbell linking (required for HomeKit)
+## Recommended: UI-only video doorbell setup
+
+1. Enable **Camera** and **Doorbell** in the 2N Intercom integration. The device page should show the camera and `event.<intercom>_doorbell`.
+2. Open **Settings > Devices & services > Add integration > HomeKit Bridge**.
+3. Select **Accessory** mode and include **only the camera entity** (`camera.<intercom>_camera`).
+4. Pair the accessory with Apple Home using the pairing code shown by Home Assistant.
+5. In the Home app, enable doorbell notifications and select the HomePods that should chime in the accessory's settings.
+
+HomeKit finds the `EventDeviceClass.DOORBELL` event entity on the camera's device automatically; do not include the event or the legacy doorbell binary sensor as separate accessories. Each intercom-started ring produces one `ring` event, even though the intercom reports it through two call log events. Incoming calls and peers excluded by the Called ID filter do not ring.
+
+Do not expose the same camera through another HomeKit bridge or accessory. If it was previously paired as an ordinary camera or with a separate occupancy accessory, remove that old pairing and recreate the camera accessory with this setup so Apple Home discovers it as a video doorbell.
+
+## Explicit YAML fallback
+
+For an explicit link, or an older setup using the doorbell binary sensor, keep `linked_doorbell_sensor` in YAML:
 
 ```yaml
 homekit:
   - name: 2N Intercom Doorbell
+    mode: accessory
     port: 21065
     filter:
       include_entities:
@@ -23,11 +38,7 @@ homekit:
         linked_doorbell_sensor: binary_sensor.2n_intercom_doorbell
 ```
 
-**Rules:**
-- Do **not** add the `binary_sensor.*_doorbell` to the HomeKit filter
-- Do **not** include the camera or doorbell in any other HomeKit bridge
-- HomeKit bridge configuration is YAML-only; it cannot be set from the UI
-- Restart Home Assistant and re-add the bridge in the Home app after changing this YAML
+The explicit link can also target `event.2n_intercom_doorbell`. Include only the camera in this accessory's filter, not either doorbell entity. Do not expose the camera in another bridge. After changing YAML, restart Home Assistant; if Apple Home still shows the old accessory type, remove its pairing and pair it again.
 
 ## How it works
 
@@ -51,12 +62,13 @@ Home Assistant's HomeKit bridge uses the entity's class to pick an accessory typ
 
 | HA entity | HomeKit accessory |
 |---|---|
-| `camera.<intercom>_camera` (linked to doorbell sensor) | **Video Doorbell** — the doorbell tile lives here, not on the binary sensor |
+| `camera.<intercom>_camera` (auto-linked to the doorbell event on the same device) | **Video Doorbell** — the doorbell tile lives here, not on a separate sensor |
+| `event.<intercom>_doorbell` (`device_class: doorbell`) | Ring trigger for the camera accessory, automatically discovered without adding it to the HomeKit filter |
 | `switch.<intercom>_<door_relay>` | Switch (or Lock, depending on bridge filter) |
 | `cover.<intercom>_<gate_relay>` | **Garage Door Opener** — open/close states |
 | `lock.<intercom>_lock` (legacy fallback) | Lock when `device_class=None`; Garage Door Opener when `device_class="gate"` |
 
-The doorbell binary sensor itself uses `BinarySensorDeviceClass.OCCUPANCY`. HomeKit's "programmable doorbell" service is provided exclusively by the linked-camera-accessory pattern above — the binary sensor's own class is irrelevant for the HomeKit tile.
+The existing doorbell binary sensor remains available for automations, unchanged. A binary sensor is not automatically recognized as the camera's doorbell; exposing it as occupancy only creates a separate occupancy accessory. The doorbell event entity is what enables automatic video-doorbell mapping.
 
 ### 4. Real cached state for status entities
 
@@ -82,8 +94,8 @@ The doorbell binary sensor itself uses `BinarySensorDeviceClass.OCCUPANCY`. Home
 
 Once the integration is set up and the HomeKit bridge is configured in HA:
 
-1. The camera is included in the HomeKit bridge and linked to the doorbell sensor via YAML
-2. The relevant relay entities (or the legacy lock entity) are included in the HomeKit bridge
+1. The camera is included in a UI-configured HomeKit accessory and automatically linked to the doorbell event
+2. The relevant relay entities (or the legacy lock entity) can be included in a separate HomeKit bridge
 3. The device appears in the Home app with the correct accessory type
 4. iOS/macOS users can control the door / gate
 5. Siri commands work (e.g. "Hey Siri, open the front door")
@@ -105,7 +117,9 @@ This tells HA the integration is HomeKit-compatible.
 
 ### Doorbell device class
 
-`binary_sensor.<intercom>_doorbell` uses `BinarySensorDeviceClass.OCCUPANCY` because the underlying signal is "someone is at the door". The HomeKit programmable doorbell tile is created by linking this binary sensor to the camera (`linked_doorbell_sensor`), not by changing its device class.
+`event.<intercom>_doorbell` uses `EventDeviceClass.DOORBELL` and supports the event type `ring`. It shares the camera's device, which lets HomeKit discover and link it automatically. Its attributes include `called_peer` and caller name/number when known. It does not generate a new ring on startup or restore.
+
+The legacy `binary_sensor.<intercom>_doorbell` keeps its existing device class, unique ID, short ring pulse and attributes for backwards compatibility. Binary sensors have no doorbell device class; an occupancy class does not enable HomeKit's automatic doorbell linking. Explicit YAML linking remains a fallback for existing binary-sensor configurations.
 
 ### Camera transport
 

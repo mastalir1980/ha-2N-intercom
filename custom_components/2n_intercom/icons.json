@@ -49,6 +49,11 @@
         "default": "mdi:doorbell-video"
       }
     },
+    "event": {
+      "doorbell": {
+        "default": "mdi:doorbell"
+      }
+    },
     "image": {
       "last_ring": {
         "default": "mdi:doorbell-video"

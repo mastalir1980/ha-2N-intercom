@@ -218,6 +218,18 @@
         "name": "Kamera"
       }
     },
+    "event": {
+      "doorbell": {
+        "name": "Zvonek",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "ring": "Zazvonění"
+            }
+          }
+        }
+      }
+    },
     "image": {
       "last_ring": {
         "name": "Poslední zazvonění"

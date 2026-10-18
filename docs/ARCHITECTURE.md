@@ -24,7 +24,8 @@ Diagramy (otevři v [excalidraw.com](https://excalidraw.com) nebo VS Code rozš�
 | `api.py` | `TwoNIntercomAPI` – bezstavový HTTP klient. Parsování chyb 2N, kamera caps/transport, RTSP digest probe, řízení relé, snapshot. |
 | `entity.py` | Sdílená základní entita (`device_info`, `available`, `has_entity_name`). |
 | `camera.py` | `MjpegCamera` – live view (RTSP/MJPEG/JPEG snapshot stream). |
-| `binary_sensor.py` | Zvonek (occupancy), IO vstup, relé-aktivní, pohyb. |
+| `binary_sensor.py` | Legacy doorbell pulse (unchanged), IO inputs, relay-active, motion. |
+| `event.py` | Doorbell events (`EventDeviceClass.DOORBELL`) for HomeKit camera auto-linking. |
 | `switch.py` | Door relé – dynamicky objevené z `/api/switch/caps`. |
 | `cover.py` | Gate relé (garážová vrata) – jen pro relé typu `gate`. |
 | `sensor.py` | Diagnostika: SIP registrace, stav hovoru. |
@@ -40,7 +41,7 @@ HA Core
        ├─ TwoNIntercomAPI                (HTTP/RTSP klient – bez stavu HA)
        ├─ TwoNIntercomCoordinator        (cache + události + polling)
        │     └─ background log listener   (subscribe → pull → apply)
-       └─ forward_entry_setups(platforms) (camera/binary_sensor/switch/cover/sensor)
+       └─ forward_entry_setups(platforms) (camera/image/binary_sensor/event/switch/cover/sensor)
 ```
 
 `api.py` nezávisí na ničem z HA (jen `aiohttp`), takže je testovatelný samostatně
@@ -156,6 +157,13 @@ Detaily endpointů: [`API_REFERENCE.md`](API_REFERENCE.md).
   peer URLs are not logged.
 - `ring_active` je krátký pulz (`DOORBELL_PULSE_DURATION = 1 s`) – binary
   sensor zvonku se rozsvítí na pulz, ne na celou délku vyzvánění.
+- `ring_count` increases only when a new allowed ring starts, using the same
+  guard that deduplicates ring snapshots for the two call event types.
+  `event.<intercom>_doorbell` watches this counter and emits `ring` with the
+  existing called-peer and caller name/number metadata. It baselines the
+  counter when added, so startup/restore and polling do not create rings.
+  The event shares the camera's device for HomeKit's automatic doorbell link;
+  the existing binary sensor's identity, class, pulse and attributes do not change.
 - `active_session_id` se drží jako zdroj pro `answer_call` / `hangup_call`,
   ale služby si pro jistotu dotáhnou *živý* `call/status` ze zařízení.
 

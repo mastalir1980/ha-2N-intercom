@@ -92,6 +92,19 @@ class TranslationConsistencyTests(unittest.TestCase):
         self.assertEqual(icons["services"]["grant_access"], "mdi:door-open")
         self.assertEqual(set(icons["services"]), set(self.strings["services"]))
 
+    def test_doorbell_event_translations_and_icon(self) -> None:
+        for lang, data in self.languages.items():
+            with self.subTest(lang=lang):
+                event = data["entity"]["event"]["doorbell"]
+                self.assertTrue(event["name"])
+                self.assertEqual(
+                    set(event["state_attributes"]["event_type"]["state"]), {"ring"}
+                )
+                self.assertTrue(event["state_attributes"]["event_type"]["state"]["ring"])
+        self.assertEqual(
+            _load("icons.json")["entity"]["event"]["doorbell"]["default"], "mdi:doorbell"
+        )
+
     def test_io_output_names_errors_and_icons(self) -> None:
         for lang, data in self.languages.items():
             with self.subTest(lang=lang):

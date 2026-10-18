@@ -81,6 +81,7 @@ def _get_platforms(entry: TwoNIntercomConfigEntry | ConfigEntry) -> list[str]:
 
     if _get_option(entry, CONF_ENABLE_DOORBELL, DEFAULT_ENABLE_DOORBELL):
         platforms.append("binary_sensor")
+        platforms.append("event")
 
     # Switch platform is always loaded — it auto-detects enabled relays
     # from the device's switch/caps endpoint. Cover is only added when
