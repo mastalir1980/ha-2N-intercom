@@ -13,8 +13,9 @@
 # independent review by a second model (only with /etc/ha2n-coder/review-model; blocking findings get ONE
 # fix round, then checks and one more review) → report.
 # Copilot never sees the repo token; this script never runs code from the repo (only git, gh, backlog).
-# When everything is green and the review approved (or is not configured) it adds ONE last commit to the PR branch that sets the task Done and ticks its
-# criteria (takes effect on main when the PR is merged; label manual-close opts out). Merges only with the opt-in
+# When everything is green and the review approved (or is not configured) it adds ONE last commit to the PR branch:
+# tick only proven criteria, record evidence, set Done if all are proven without manual-close, otherwise To Test.
+# Without review nothing is ticked. Takes effect on main when merged. Merges only with the opt-in
 # /etc/ha2n-coder/automerge (approved review, no release/manual-path label, no protected path, head unchanged since
 # the checks), then starts --next once. State: /var/lib/ha2n-coder/runs/<run>/{status,run.log,*.patch}; see ha2n-task-status.
 set -uo pipefail
@@ -340,7 +341,8 @@ open_pr() {
     echo "Opened by **ha2n-coder** (GitHub Copilot CLI, headless on the VM) on Jan's command."
     echo "Local gates (unit tests, validate.py, py_compile on Python 3.12) were green before push;"
     echo "E2E runs as the \`e2e-pi\` check. When all checks are green the coder adds one last commit that"
-    echo "sets the task Done and ticks its criteria; that takes effect when the PR is merged (label manual-close opts out)."
+    echo "ticks only criteria proven by the reviewer and records per-criterion evidence. It sets Done only when all"
+    echo "are proven without manual-close; otherwise To Test. Without review nothing is ticked. Takes effect when merged."
     echo "With auto-merge on, the coder merges an approved green PR itself unless it is a release, manual-path or protected-path change."
   } > "$DIR/pr-body.md"
   PR_URL="$(ghx pr create -R "$REPO" --base main --head "$BRANCH" --title "$TASK: $TITLE" \
@@ -408,9 +410,9 @@ review() {  # one review round of the published PR head -> REVIEW_VERDICT (appro
   status running "independent review $n by $REVIEW_MODEL"
   render review.md - "" | "${SANDBOX[@]}" review > "$DIR/review-$n.raw" 2>&1
   rc=$?
-  parsed="$(python3 - "$DIR/review-$n" "$rc" "$REVIEW_MODEL" <<'PY' 2>/dev/null
+  parsed="$(python3 - "$DIR/review-$n" "$rc" "$REVIEW_MODEL" "$DIR/task.txt" <<'PY' 2>/dev/null
 import json, re, sys
-base, rc, model = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+base, rc, model, task = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
 MARK = "\n=== REVIEW JSON ===\n"
 text = open(base + ".raw", encoding="utf-8", errors="replace").read()
 i = ("\n" + text).rfind(MARK)
@@ -446,6 +448,29 @@ try:
         assert line is None or (isinstance(line, int) and not isinstance(line, bool) and line >= 1)
         where = clean(f.get("file") or "", 200) + (f":{line}" if line else "")
         findings.append((f["severity"], where, clean(f["summary"], 600)))
+    section = re.search(r"^Acceptance Criteria:\n(.*?)(?=^[A-Za-z][^\n]*:\n|\Z)",
+                        open(task, encoding="utf-8").read(), re.M | re.S)
+    assert section is not None
+    expected = dict((int(i), text) for i, text in re.findall(
+        r"^- \[[ xX]\] #([0-9]+) (.+)$", section[1], re.M))
+    assert isinstance(data.get("criteria"), list) and len(data["criteria"]) == len(expected)
+    criteria = {}
+    for c in data["criteria"]:
+        assert isinstance(c, dict)
+        cid = c.get("id")
+        assert isinstance(cid, int) and not isinstance(cid, bool) and cid in expected and cid not in criteria
+        assert c.get("status") in ("proven", "manual", "unproven")
+        assert isinstance(c.get("evidence"), str)
+        assert c["status"] != "proven" or c["evidence"].strip()
+        tag = re.search(r"\[(unit|e2e|tester|jan)\]\s*$", expected[cid])
+        if tag and tag[1] in ("tester", "jan"):
+            assert c["status"] == "manual"
+        evidence = clean(c["evidence"], 1200) or (
+            "Manual verification required." if c["status"] == "manual" else "No objective evidence supplied.")
+        criteria[cid] = {"id": cid, "status": c["status"], "evidence": evidence, "text": expected[cid]}
+        if tag and tag[1] in ("unit", "e2e") and c["status"] != "proven":
+            findings.append(("blocking", "", f"AC #{cid} [{tag[1]}] lacks automated proof: {evidence}"))
+    assert criteria.keys() == expected.keys()
 except (ValueError, AssertionError):
     fail("the reviewer output is not valid JSON in the expected shape")
 blocking = [x for x in findings if x[0] == "blocking"]
@@ -463,6 +488,10 @@ if not findings:
     out.append("\nNo findings.\n")
 if verdict == "changes" and not blocking:
     out.append("\nThe reviewer asks for changes but named no blocking finding; a human decides.\n")
+out.append("\n**Acceptance criteria**\n")
+ordered = [criteria[cid] for cid in expected]
+out.extend(f"- AC #{c['id']} ({c['status']}): {c['evidence']}\n" for c in ordered)
+open(base + ".criteria.json", "w", encoding="utf-8").write(json.dumps(ordered))
 open(base + ".comment.md", "w", encoding="utf-8").write("".join(out))
 open(base + ".blocking.txt", "w", encoding="utf-8").write("".join(
     f"- [blocking] {w or 'general'}: {s}\n" for _, w, s in blocking))
@@ -475,25 +504,54 @@ PY
   ghx pr comment "$PR_URL" -R "$REPO" --body-file "$DIR/review-$n.comment.md" >/dev/null 2>&1 || true
 }
 
-close_task() {  # last commit on the PR branch: task Done + criteria ticked. Never fails the run (sets CLOSE_NOTE).
-  # Only called after wait_checks was green, so nothing waits for checks on this commit. Reaches main with Jan's merge.
+close_task() {  # last commit: evidence, proven criteria ticked, Done or To Test. Never fails the run (sets CLOSE_NOTE).
+  # Only called after green checks; auto_merge waits for checks on this new commit before merging.
   CLOSE_NOTE=""
-  if grep -q '^Labels: .*manual-close' <<<"$HEADER"; then CLOSE_NOTE="label manual-close: task not closed"; return 0; fi
-  if grep -q '^Status: .*Done' <<<"$HEADER"; then CLOSE_NOTE="task is already Done"; return 0; fi
   cd "$CLONE" || { CLOSE_NOTE="task not closed (no clone): close it by hand"; return 0; }
   [ "$(git rev-parse --abbrev-ref HEAD)" = "$BRANCH" ] || { CLOSE_NOTE="task not closed (unexpected branch): close it by hand"; return 0; }
-  local before checks summary i
+  if ! backlog task view "$TASK" --plain > "$DIR/task-close.txt" 2>&1; then
+    CLOSE_NOTE="task not closed (cannot read task): close it by hand"; return 0
+  fi
+  local header before checks summary i target evidence_file="-"
+  header="$(sed '/^Description:/q' "$DIR/task-close.txt")"
+  if grep -Eq '^Status: .*(Done|To Test)$' <<<"$header"; then CLOSE_NOTE="task is already Done or To Test"; return 0; fi
   local -a acs=()
+  if [ "$REVIEW_ON" = 1 ] && [ "$REVIEW_VERDICT" = approve ]; then evidence_file="$DIR/review-$REVIEWS.criteria.json"; fi
+  if ! python3 - "$DIR/task-close.txt" "$evidence_file" > "$DIR/close-evidence.txt" 2> "$DIR/close.log" <<'PY'
+import json, re, sys
+task = open(sys.argv[1], encoding="utf-8").read()
+section = re.search(r"^Acceptance Criteria:\n(.*?)(?=^[A-Za-z][^\n]*:\n|\Z)", task, re.M | re.S)
+if section is None:
+    sys.exit("Task acceptance criteria could not be read.")
+expected = [(int(i), text) for i, text in re.findall(r"^- \[[ xX]\] #([0-9]+) (.+)$", section[1], re.M)]
+if sys.argv[2] == "-":
+    criteria = [{"id": i, "status": "unproven", "evidence": "No review-model configured; verification required."}
+                for i, _ in expected]
+else:
+    criteria = json.load(open(sys.argv[2], encoding="utf-8"))
+    if [(c["id"], c["text"]) for c in criteria] != expected:
+        sys.exit("Task criteria changed since the review; evidence cannot be applied.")
+manual_close = re.search(r"^Labels: (.*)$", task.split("Description:", 1)[0], re.M)
+manual_close = manual_close is not None and "manual-close" in [s.strip() for s in manual_close[1].split(",")]
+print("Done" if sys.argv[2] != "-" and all(c["status"] == "proven" for c in criteria) and not manual_close else "To Test")
+print(" ".join(str(c["id"]) for c in criteria if c["status"] == "proven"))
+for c in criteria:
+    print(f"AC #{c['id']}: {c['evidence']} ({c['status']})")
+PY
+  then
+    CLOSE_NOTE="task not closed (evidence could not be applied, see close.log): close it by hand"; return 0
+  fi
+  target="$(head -1 "$DIR/close-evidence.txt")"
+  for i in $(sed -n '2p' "$DIR/close-evidence.txt"); do acs+=(--check-ac "$i"); done
   before="$(git rev-parse HEAD)"
   checks="$(python3 - "$DIR/checks.json" 2>/dev/null <<'PY' || echo "see the PR checks"
 import json, sys
 print(", ".join(f'{x["name"]}={x["bucket"]}' for x in json.load(open(sys.argv[1]))))
 PY
 )"
-  summary="Implemented by the headless coder. Checks green on ${before:0:9} after $ROUND fix round(s): $checks. PR: $PR_URL. Done takes effect when the PR is merged."
-  backlog task view "$TASK" --plain > "$DIR/task-close.txt" 2>&1
-  for i in $(sed -nE 's/^- \[ \] #([0-9]+) .*/\1/p' "$DIR/task-close.txt"); do acs+=(--check-ac "$i"); done
-  if ! backlog task edit "$TASK" -s Done ${acs[@]+"${acs[@]}"} --final-summary "$summary" > "$DIR/close.log" 2>&1; then
+  summary="Implemented by the headless coder. Checks green on ${before:0:9} after $ROUND fix round(s): $checks. PR: $PR_URL. $target takes effect when the PR is merged."
+  summary+=$'\n'"$(tail -n +3 "$DIR/close-evidence.txt")"
+  if ! backlog task edit "$TASK" -s "$target" ${acs[@]+"${acs[@]}"} --final-summary "$summary" > "$DIR/close.log" 2>&1; then
     git reset -q --hard "$before"; git clean -qfd -- backlog
     CLOSE_NOTE="task not closed (backlog edit failed, see close.log): close it by hand"; return 0
   fi
@@ -511,7 +569,7 @@ PY
   if ! gitauth push -q origin "$BRANCH"; then
     git reset -q --hard "$before"; CLOSE_NOTE="task not closed (push failed): close it by hand"; return 0
   fi
-  CLOSE_NOTE="task set to Done in the PR's last commit (takes effect when merged)"
+  CLOSE_NOTE="task set to $target in the PR's last commit (takes effect when merged)"
 }
 
 auto_merge() {  # only with AUTOMERGE_FILE: merge THIS run's PR when every rule allows it -> MERGED=1, else MERGE_NOTE=<reason>

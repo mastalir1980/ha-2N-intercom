@@ -185,9 +185,11 @@ Never run `e2e/e2e.sh relays`, `--relays` or `reset-entry` unless Jan asks in th
 ## Statuses and versions
 
 - **Statuses (board columns):** To Do → In Progress → **To Test** → Done. *To Test* = merged on `main`, automated
-  checks green, waiting for Jan to verify on the real device (criteria that need a ring button, relays, Control4 …;
-  label `manual-close`). A task moves from To Test to Done only after Jan's check (he does it, or tells Claude the result).
-  Until TASK-36 lands, Claude moves `manual-close` tasks to To Test by hand after the merge.
+  checks green, but some criteria still need evidence or manual verification (or no review-model is configured).
+  The final PR commit records this status; Done requires every criterion to be proven and no `manual-close` label.
+  `manual-close` remains an explicit marker requiring Jan's verification even when all criteria are proven.
+  A task moves from To Test to Done only after the outstanding evidence/verification is recorded and Jan confirms
+  any manual checks (he does it, or tells Claude the result).
 - **Versions are Backlog milestones** (`v1.5.0`, …). Every user-facing task gets the next open milestone when it is
   created (`-m vX.Y.Z`); pipeline/tooling tasks (`manual-path`, `ci`, `infra`) get none. `backlog milestone list` shows progress.
 - **Order of work for the headless coder:** ready tasks of the earliest open milestone first (by version number),
@@ -207,10 +209,18 @@ For headless runs on the VM (`tools/coder/`, TASK-23) the E2E gate is the PR che
 once the PR checks (incl. `e2e-pi`) are green the coder runs one independent review by a second model (Copilot CLI with
 `/etc/ha2n-coder/review-model`, a different model than the coder; TASK-33): blocking findings go back to the coder for one
 fix round, then checks and one more review. Only after verdict `approve` (or when no review-model is configured) the coder
-adds one last commit that sets the task *Done* and ticks its criteria; that reaches `main` when the PR is merged.
-Without approval the run ends in state `review` and the task stays *In Progress*. A task with the label `manual-close` is left alone (for work verified
-only after the merge); parent tasks are closed by hand. Claude reviews the diff against the criteria on request (without auto-merge the second-model review does not replace Jan's merge decision). For PRs not
-made by the coder the author does the same in the PR's last commit once the checks are green.
+adds one last commit that ticks only criteria the reviewer marked `proven` and records an `AC #n: evidence` line
+for every criterion in the final summary. The reviewer returns `proven|manual|unproven` and evidence for every
+criterion, including checked ones. Trailing `[unit]`/`[e2e]` tags require automated proof; missing proof blocks
+the review. `[tester]`/`[jan]` tags are always manual. Invalid or incomplete output fails the review.
+The task becomes *Done* only when every criterion is proven and there is no `manual-close` label; otherwise
+*To Test*. Without a configured review-model nothing is ticked and the task goes to *To Test*. Tasks already
+Done or To Test are left unchanged. This reaches `main` when the PR is merged.
+Without approval the run ends in state `review` and the task stays *In Progress*. `manual-close` remains an
+explicit marker requiring Jan's verification; parent tasks are closed by hand. Claude reviews the diff against
+the criteria on request (without auto-merge the second-model review does not replace Jan's merge decision).
+For PRs not made by the coder the author records the same per-criterion evidence and status in the PR's last
+commit once the checks and the full definition of done are green.
 A task is ready for the headless coder when it is *To Do*, assigned `@copilot`, its dependencies are Done, it has neither
 the label `on-hold` nor `manual-path`, and it meets the definition of ready above. Its PRs carry the label `agent`. Changes to `tools/coder/` need
 Jan's review like `.github/` and `e2e/ci/`.
