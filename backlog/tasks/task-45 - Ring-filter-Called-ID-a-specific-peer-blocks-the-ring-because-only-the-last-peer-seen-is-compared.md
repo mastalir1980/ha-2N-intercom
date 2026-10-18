@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-15 19:16'
-updated_date: '2026-10-18 13:23'
+updated_date: '2026-10-18 16:09'
 labels:
   - bug
   - coordinator
@@ -53,14 +53,14 @@ Approach (for the implementer to confirm): keep a set of canonical peers per act
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 With Called ID set to a specific peer, the replayed TASK-29 button-press sequence (peer only on CallStateChanged connecting) rings exactly once when that peer matches - unit test
-- [ ] #2 A button press that calls two peers (two CallStateChanged connecting events with different peers in one session) rings when the selected peer is either the first or the second one; it does not ring when the selected peer is neither - unit tests
-- [ ] #3 A poll during ringing (call/status with a different first call peer) does not remove a peer already seen in the active session - unit test
-- [ ] #4 Peer forms "sip:X@proxy.my2n.com:5061", "sip:X@proxy-101.my2n.com", "X@host;transport=tls" and "X" all match a Called ID option stored as any of these forms - unit tests on the canonical form
-- [ ] #5 Called ID "All calls" behaves as before; the incoming-call sequence from TASK-29 never rings with any Called ID - existing tests stay green
-- [ ] #6 Every CallStateChanged and CallSessionStateChanged is logged at DEBUG with event name, state, direction, originator, session, canonical peer(s) of the session and the ring decision (rang / filtered by peer / not a ring) - unit test asserts the log line, no credentials in it
-- [ ] #7 Full unit suite, validate.py and py_compile green on Python 3.12+; PR check e2e-pi green (no new E2E test: a ring needs a physical press)
-- [ ] #8 Manual (Jan, label manual-close): with Called ID set to the specific peer, a button press turns the Doorbell on, and the debug log shows the call events with the peer and the decision
+- [x] #1 With Called ID set to a specific peer, the replayed TASK-29 button-press sequence (peer only on CallStateChanged connecting) rings exactly once when that peer matches - unit test
+- [x] #2 A button press that calls two peers (two CallStateChanged connecting events with different peers in one session) rings when the selected peer is either the first or the second one; it does not ring when the selected peer is neither - unit tests
+- [x] #3 A poll during ringing (call/status with a different first call peer) does not remove a peer already seen in the active session - unit test
+- [x] #4 Peer forms "sip:X@proxy.my2n.com:5061", "sip:X@proxy-101.my2n.com", "X@host;transport=tls" and "X" all match a Called ID option stored as any of these forms - unit tests on the canonical form
+- [x] #5 Called ID "All calls" behaves as before; the incoming-call sequence from TASK-29 never rings with any Called ID - existing tests stay green
+- [x] #6 Every CallStateChanged and CallSessionStateChanged is logged at DEBUG with event name, state, direction, originator, session, canonical peer(s) of the session and the ring decision (rang / filtered by peer / not a ring) - unit test asserts the log line, no credentials in it
+- [x] #7 Full unit suite, validate.py and py_compile green on Python 3.12+; PR check e2e-pi green (no new E2E test: a ring needs a physical press)
+- [x] #8 Manual (Jan, label manual-close): with Called ID set to the specific peer, a button press turns the Doorbell on, and the debug log shows the call events with the peer and the decision
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -84,6 +84,10 @@ Local validation on Python 3.12.15: targeted coordinator/snapshot/options/setup/
 No E2E or device access attempted, no new E2E test added as explicitly specified, and no protected paths changed. PR e2e-pi and Jan's physical-button verification remain pending. Leave status In Progress, manual-close label intact, and every acceptance criterion unchecked.
 
 Merged in PR #61 (2026-10-16). Label manual-close: moved to To Test by Claude after the merge; waits for Jan's check on the real device.
+
+AC evidence (tester review 2026-10-18): #1-#6 unit tests (peer set, parallel peers, poll during ring, peer forms, debug line); #7 e2e-pi green on PR #61. #8 manual (Jan).
+
+AC evidence (tester review 2026-10-18): #1-#6 unit tests (peer set, parallel peers, poll during ring, peer forms, debug line); #7 e2e-pi green on PR #61; #8 verified manually by Jan.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

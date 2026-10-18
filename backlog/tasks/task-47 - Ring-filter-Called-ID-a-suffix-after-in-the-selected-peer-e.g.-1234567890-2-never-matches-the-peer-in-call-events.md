@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-16 14:40'
-updated_date: '2026-10-18 13:23'
+updated_date: '2026-10-18 16:09'
 labels:
   - bug
   - coordinator
@@ -45,15 +45,15 @@ Must not change: event-driven-only ring detection, TASK-31 direction/originator 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Called ID "1234567890/2" rings on a button press whose call events carry peer "1234567890" - unit test replaying the TASK-29 button-press sequence
-- [ ] #2 Called ID "1234567890/2" does not ring for an incoming call (TASK-31 rule) - unit test
-- [ ] #3 Canonical form: "1234567890/2", "1234567890/1", "1234567890", "sip:1234567890@proxy.my2n.com:5061" and "1234567890@host;transport=tls" all canonicalize to "1234567890" - unit test on `_normalize_peer`
-- [ ] #4 No over-matching: Called ID "1234567891" (with or without "/2") does not match event peer "1234567890" and filters the ring - unit test
-- [ ] #5 The DEBUG call-event line includes the canonical configured Called ID ("all" for All calls); no raw URL, no credentials - unit test asserts the line
-- [ ] #6 "All calls" behaviour unchanged; existing tests stay green
-- [ ] #7 Full unit suite, validate.py and py_compile green on Python 3.12+; PR check e2e-pi green (no new E2E test: a ring needs a physical press)
-- [ ] #8 docs/ARCHITECTURE.md and README.md state in one sentence that the Called ID part after "/" is ignored when matching
-- [ ] #9 Manual (Jan, label manual-close): with Called ID set to a peer with a "/" suffix, a button press turns the Doorbell on and the debug log shows the configured filter and decision "rang"
+- [x] #1 Called ID "1234567890/2" rings on a button press whose call events carry peer "1234567890" - unit test replaying the TASK-29 button-press sequence
+- [x] #2 Called ID "1234567890/2" does not ring for an incoming call (TASK-31 rule) - unit test
+- [x] #3 Canonical form: "1234567890/2", "1234567890/1", "1234567890", "sip:1234567890@proxy.my2n.com:5061" and "1234567890@host;transport=tls" all canonicalize to "1234567890" - unit test on `_normalize_peer`
+- [x] #4 No over-matching: Called ID "1234567891" (with or without "/2") does not match event peer "1234567890" and filters the ring - unit test
+- [x] #5 The DEBUG call-event line includes the canonical configured Called ID ("all" for All calls); no raw URL, no credentials - unit test asserts the line
+- [x] #6 "All calls" behaviour unchanged; existing tests stay green
+- [x] #7 Full unit suite, validate.py and py_compile green on Python 3.12+; PR check e2e-pi green (no new E2E test: a ring needs a physical press)
+- [x] #8 docs/ARCHITECTURE.md and README.md state in one sentence that the Called ID part after "/" is ignored when matching
+- [x] #9 Manual (Jan, label manual-close): with Called ID set to a peer with a "/" suffix, a button press turns the Doorbell on and the debug log shows the configured filter and decision "rang"
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -80,4 +80,8 @@ Local gates passed on Python 3.12.15: python3 -m unittest discover -s tests -t t
 No E2E command was run on the VM and no new E2E test was added, as specified by the task: a ring requires a physical press. The PR e2e-pi gate and Jan manual-close verification remain pending. Acceptance criteria are left unchecked and status remains In Progress.
 
 Merged in PR #63 (2026-10-16). Label manual-close: moved to To Test by Claude after the merge; waits for Jan's check on the real device.
+
+AC evidence (tester review 2026-10-18): #1-#6 unit tests (suffix replay, canonical forms, negative peers, debug line); #7 e2e-pi green on PR #63; #8 ARCHITECTURE.md + README. #9 manual (Jan).
+
+AC evidence (tester review 2026-10-18): #1-#6 unit tests (suffix replay, canonical forms, negative peers, debug line); #7 e2e-pi green on PR #63; #8 ARCHITECTURE.md + README; #9 verified manually by Jan.
 <!-- SECTION:NOTES:END -->

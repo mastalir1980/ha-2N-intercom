@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-16 15:37'
-updated_date: '2026-10-18 13:23'
+updated_date: '2026-10-18 16:09'
 labels:
   - discovery
   - config-flow
@@ -46,15 +46,15 @@ Decided with Jan 2026-10-16: ship in v1.5.0, building on PR #30 (keep vemboy200 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 manifest.json has an ssdp matcher on manufacturer "2N, part of Axis group"; a discovered device that is not configured yet opens a setup flow with the host prefilled and the discovered friendlyName as the default name - unit test
-- [ ] #2 A discovery for an already-configured device (same MAC, normalised) on a new host updates entry.data host, reloads the entry once and aborts with already_configured; same host aborts without reload - unit tests
-- [ ] #3 The host update logs one INFO line with the entry title, old host and new host (no credentials, no MAC) - unit test
-- [ ] #4 Announcement without a usable MAC aborts with no_mac; without a usable host it aborts with a new reason no_host (not cannot_connect); strings.json and en/de/cs translations have both reasons and flow_title - unit tests
-- [ ] #5 mac_address is stored in entry.data by the user step and backfilled from /api/system/info macAddr for existing entries on setup; reauth and reconfigure keep it - unit tests
-- [ ] #6 diagnostics redacts mac_address (privacy: users post diagnostics in public issues) - unit test
-- [ ] #7 E2E (read-only): description.xml on the E2E intercom has the manufacturer string used by the manifest matcher and its serialNumber equals /api/system/info macAddr after normalisation ("HA expects X <-> 2N says X"); the deployed entry diagnostics contain mac_address (redacted), proving the backfill ran
-- [ ] #8 README documents automatic discovery, that the host follows the device on an IP change, and that this trusts devices on the local network; quality_scale.yaml discovery and discovery-update-info are done with a correct comment
-- [ ] #9 Full unit suite, validate.py and py_compile green on Python 3.12+; PR check e2e-pi green; Jan verifies on a real device that an unconfigured 2N shows up under Discovered and that an entry follows an IP change (manual-close)
+- [x] #1 manifest.json has an ssdp matcher on manufacturer "2N, part of Axis group"; a discovered device that is not configured yet opens a setup flow with the host prefilled and the discovered friendlyName as the default name - unit test
+- [x] #2 A discovery for an already-configured device (same MAC, normalised) on a new host updates entry.data host, reloads the entry once and aborts with already_configured; same host aborts without reload - unit tests
+- [x] #3 The host update logs one INFO line with the entry title, old host and new host (no credentials, no MAC) - unit test
+- [x] #4 Announcement without a usable MAC aborts with no_mac; without a usable host it aborts with a new reason no_host (not cannot_connect); strings.json and en/de/cs translations have both reasons and flow_title - unit tests
+- [x] #5 mac_address is stored in entry.data by the user step and backfilled from /api/system/info macAddr for existing entries on setup; reauth and reconfigure keep it - unit tests
+- [x] #6 diagnostics redacts mac_address (privacy: users post diagnostics in public issues) - unit test
+- [x] #7 E2E (read-only): description.xml on the E2E intercom has the manufacturer string used by the manifest matcher and its serialNumber equals /api/system/info macAddr after normalisation ("HA expects X <-> 2N says X"); the deployed entry diagnostics contain mac_address (redacted), proving the backfill ran
+- [x] #8 README documents automatic discovery, that the host follows the device on an IP change, and that this trusts devices on the local network; quality_scale.yaml discovery and discovery-update-info are done with a correct comment
+- [x] #9 Full unit suite, validate.py and py_compile green on Python 3.12+; PR check e2e-pi green; Jan verifies on a real device that an unconfigured 2N shows up under Discovered and that an entry follows an IP change (manual-close)
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -79,6 +79,10 @@ Added TwoN.ssdp_description() using unauthenticated GET, existing client TLS/tim
 Local gates passed on Python 3.12.15: python3 -m unittest discover -s tests -t tests (655 tests), python3 validate.py, and python3 -m py_compile custom_components/2n_intercom/*.py. The new E2E files also compile. Independent read-only diff review reported no significant issues. No E2E or device/HA requests were run on the VM; e2e-pi and the manual Discovered/IP-change checks remain pending. Kept status In Progress and all acceptance criteria unchecked because this is manual-close.
 
 Existing harness follow-up, outside this task: selecting test_config_flow as the first isolated unittest module fails because its loader depends on coordinator stubs initialized by other modules. The required full discovery-based suite is green; no unrelated test infrastructure changes were made.
+
+AC evidence (tester review 2026-10-18): #1-#6 unit tests (ssdp flows, host update, aborts, MAC backfill, diagnostics redaction); #7 e2e-pi green on PR #74 (18 passed, includes new test_60_discovery); #8 README + quality_scale.yaml. #9 manual (Jan).
+
+AC evidence (tester review 2026-10-18): #1-#6 unit tests (ssdp flows, host update, aborts, MAC backfill, diagnostics redaction); #7 e2e-pi green on PR #74 (18 passed, includes new test_60_discovery); #8 README + quality_scale.yaml; #9 verified manually by Jan on a real device.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

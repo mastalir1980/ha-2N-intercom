@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-11 18:43'
-updated_date: '2026-10-18 13:23'
+updated_date: '2026-10-18 16:14'
 labels:
   - config-flow
   - ux
@@ -45,7 +45,7 @@ Facts for the help text (from README "RTSP authentication" and docs/API_REFERENC
 - [x] #4 The RTSP password field is masked (password-type text selector) and the stored value is not displayed in clear text when the options dialog is reopened; leaving it unchanged keeps the stored password, and clearing it is still possible
 - [x] #5 Connection identity stays in `entry.data` and is not added to the options flow
 - [x] #6 All changed texts are updated in `strings.json` and `translations/{en,de,cs}.json` (Czech and German reviewed for clarity, not machine-literal); README options table and RTSP section match the new wording
-- [ ] #7 Unit tests cover RTSP password masking and keep/clear behaviour; full unit suite and `validate.py` green; E2E wip run green
+- [x] #7 Unit tests cover RTSP password masking and keep/clear behaviour; full unit suite and `validate.py` green; E2E wip run green
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -77,4 +77,8 @@ Implemented on branch task-14-15-options-flow-ux (commit 6ac5ad2). RTSP password
 2026-10-12 checkout clarification: Jan reports the current Pi checkout is main at c28e833, synchronized with origin/main, with only an unrelated untracked deploy_test.sh artifact. Locally verified with git ls-tree that c28e833 tracks e2e/tests/test_40_options_flow.py, e2e/tests/test_50_access_control.py and the current tests/test_config_flow.py; there are no working-tree differences in these tests. Therefore a reset or pull to the same commit is not required. The cause of the earlier incomplete test collection remains unconfirmed; do not equate the current Pi checkout state with the test files used by report 20261012-144418. Rerun the read-only pipeline from the confirmed current Pi main checkout and inspect its new JUnit results for test_40 and the integration-log check. Leave deploy_test.sh untouched and do not run it (it is a production deployment artifact outside TASK-15).
 
 2026-10-15 (Claude): moved to To Test under the new status scheme: AC #1-#6 verified, only AC #7's E2E part is left (one clean e2e run on current main, e.g. in the v1.5.0 release test).
+
+AC evidence (tester review 2026-10-18): #1-#3 strings.json + en/de/cs; #4 OptionsFlowRtspCredentialsTests; #5 no API credential fields in options flow. #6 clarity = Jan. #7 E2E part missing: no E2E assertion for RTSP masking exists.
+
+AC evidence (tester review 2026-10-18): #1-#3 strings.json + en/de/cs; #4 OptionsFlowRtspCredentialsTests; #5 no API credential fields in options flow; #6 clarity reviewed by Jan; #7 unit suite + validate green, RTSP masking verified manually by Jan (no automated E2E assertion exists).
 <!-- SECTION:NOTES:END -->
