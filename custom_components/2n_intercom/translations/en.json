@@ -189,9 +189,6 @@
       }
     },
     "binary_sensor": {
-      "doorbell": {
-        "name": "Doorbell"
-      },
       "input_1": {
         "name": "Input 1"
       },

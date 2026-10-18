@@ -8,7 +8,6 @@ import unittest
 from unittest.mock import Mock
 
 from _stubs import ENTITY_PATH, EVENT_PATH, install_event_stubs, load_module
-from test_binary_sensor import load_binary_sensor_module
 from test_coordinator import load_coordinator_module
 
 
@@ -68,7 +67,6 @@ class FakeConfigEntry:
 class DoorbellEventTests(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.binary_sensor_module = load_binary_sensor_module()
         cls.module, cls.coordinator_module = load_event_module()
 
     def _coordinator(self, *, called_id=None):
@@ -162,7 +160,7 @@ class DoorbellEventTests(unittest.IsolatedAsyncioTestCase):
             "params": {"state": "ringing", "direction": "outgoing", "session": 43},
         })
 
-        # The event is independent of the short binary sensor pulse.
+        # The event is independent of the coordinator's internal ring pulse.
         coordinator._ring_pulse_until = None
         coordinator._publish_event_state()
         self.assertFalse(coordinator.ring_active)
@@ -187,7 +185,7 @@ class DoorbellEventTests(unittest.IsolatedAsyncioTestCase):
                 self._call_pair(coordinator, peer="sip:100@example.com:5061")
                 self.assertEqual(entity._trigger_event.call_count, rings)
 
-    async def test_only_known_caller_attributes_match_binary_sensor(self) -> None:
+    async def test_only_known_caller_attributes_are_exposed(self) -> None:
         coordinator = self._coordinator()
         coordinator.data.caller_info = {
             "name": "Visitor", "number": "100", "button": 1, "password": "not-exposed",
@@ -195,12 +193,8 @@ class DoorbellEventTests(unittest.IsolatedAsyncioTestCase):
         entity = self._entity(coordinator)
         await entity.async_added_to_hass()
         self._call_pair(coordinator, peer="sip:100:not-exposed@example.com")
-        binary_sensor = self.binary_sensor_module.TwoNIntercomDoorbell(
-            coordinator, FakeConfigEntry(coordinator)
-        )
         expected = {
-            key: binary_sensor.extra_state_attributes[key]
-            for key in ("called_peer", "caller_name", "caller_number")
+            "called_peer": "100", "caller_name": "Visitor", "caller_number": "100",
         }
 
         entity._trigger_event.assert_called_once_with("ring", expected)
@@ -208,9 +202,6 @@ class DoorbellEventTests(unittest.IsolatedAsyncioTestCase):
             entity._last_event_extra_attributes,
             {"called_peer": "100", "caller_name": "Visitor", "caller_number": "100"},
         )
-        self.assertEqual(binary_sensor._attr_unique_id, "entry-1_doorbell")
-        self.assertIsNone(binary_sensor._attr_device_class)
-        self.assertTrue(binary_sensor.is_on)
 
     async def test_ring_without_caller_metadata_has_no_extra_attributes(self) -> None:
         coordinator = self._coordinator()

@@ -15,6 +15,7 @@ from homeassistant.const import (
 from homeassistant.core import Event, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.typing import ConfigType
 
@@ -555,6 +556,15 @@ async def async_setup_entry(
             EVENT_HOMEASSISTANT_STOP, _async_stop_log_listener_on_shutdown
         )
     )
+
+    # Clean up even when doorbell is off and binary_sensor is not forwarded.
+    registry = er.async_get(hass)
+    legacy_doorbell = registry.async_get_entity_id(
+        "binary_sensor", DOMAIN, f"{entry.entry_id}_doorbell"
+    )
+    if legacy_doorbell:
+        registry.async_remove(legacy_doorbell)
+        _LOGGER.info("Removed legacy doorbell binary sensor %s", legacy_doorbell)
 
     platforms = _get_platforms(entry)
     await hass.config_entries.async_forward_entry_setups(entry, platforms)

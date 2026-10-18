@@ -17,13 +17,13 @@ This integration exposes HomeKit-friendly entities for camera, doorbell, and doo
 4. Pair the accessory with Apple Home using the pairing code shown by Home Assistant.
 5. In the Home app, enable doorbell notifications and select the HomePods that should chime in the accessory's settings.
 
-HomeKit finds the `EventDeviceClass.DOORBELL` event entity on the camera's device automatically; do not include the event or the legacy doorbell binary sensor as separate accessories. Each intercom-started ring produces one `ring` event, even though the intercom reports it through two call log events. Incoming calls and peers excluded by the Called ID filter do not ring.
+HomeKit finds the `EventDeviceClass.DOORBELL` event entity on the camera's device automatically; do not include the event as a separate accessory. Each intercom-started ring produces one `ring` event, even though the intercom reports it through two call log events. Incoming calls and peers excluded by the Called ID filter do not ring.
 
 Do not expose the same camera through another HomeKit bridge or accessory. If it was previously paired as an ordinary camera or with a separate occupancy accessory, remove that old pairing and recreate the camera accessory with this setup so Apple Home discovers it as a video doorbell.
 
 ## Explicit YAML fallback
 
-For an explicit link, or an older setup using the doorbell binary sensor, keep `linked_doorbell_sensor` in YAML:
+For an explicit link, set `linked_doorbell_sensor` to the doorbell event in YAML:
 
 ```yaml
 homekit:
@@ -35,10 +35,10 @@ homekit:
         - camera.2n_intercom_camera
     entity_config:
       camera.2n_intercom_camera:
-        linked_doorbell_sensor: binary_sensor.2n_intercom_doorbell
+        linked_doorbell_sensor: event.2n_intercom_doorbell
 ```
 
-The explicit link can also target `event.2n_intercom_doorbell`. Include only the camera in this accessory's filter, not either doorbell entity. Do not expose the camera in another bridge. After changing YAML, restart Home Assistant; if Apple Home still shows the old accessory type, remove its pairing and pair it again.
+Include only the camera in this accessory's filter, not the doorbell event. Do not expose the camera in another bridge. After changing YAML, restart Home Assistant; if Apple Home still shows the old accessory type, remove its pairing and pair it again.
 
 ## How it works
 
@@ -68,7 +68,10 @@ Home Assistant's HomeKit bridge uses the entity's class to pick an accessory typ
 | `cover.<intercom>_<gate_relay>` | **Garage Door Opener** — open/close states |
 | `lock.<intercom>_lock` (legacy fallback) | Lock when `device_class=None`; Garage Door Opener when `device_class="gate"` |
 
-The existing doorbell binary sensor remains available for automations, unchanged. A binary sensor is not automatically recognized as the camera's doorbell; exposing it as occupancy only creates a separate occupancy accessory. The doorbell event entity is what enables automatic video-doorbell mapping.
+The event is the only doorbell entity. In v1.5.0 the old doorbell binary sensor
+and its registry entry are removed without a deprecation period. Update old
+explicit YAML links and automation/blueprint inputs to the event entity.
+UI-only camera auto-linking needs no change.
 
 ### 4. Real cached state for status entities
 
@@ -119,7 +122,9 @@ This tells HA the integration is HomeKit-compatible.
 
 `event.<intercom>_doorbell` uses `EventDeviceClass.DOORBELL` and supports the event type `ring`. It shares the camera's device, which lets HomeKit discover and link it automatically. Its attributes include `called_peer` and caller name/number when known. It does not generate a new ring on startup or restore.
 
-The legacy `binary_sensor.<intercom>_doorbell` keeps its existing device class, unique ID, short ring pulse and attributes for backwards compatibility. Binary sensors have no doorbell device class; an occupancy class does not enable HomeKit's automatic doorbell linking. Explicit YAML linking remains a fallback for existing binary-sensor configurations.
+For HA automations, react to timestamp changes with `event_type: ring`, not an
+`on` state. Ignore startup/restore and unavailable transitions; the notification
+blueprint and [README example](README.md#automation-examples) include these guards.
 
 ### Camera transport
 

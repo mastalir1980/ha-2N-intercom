@@ -4,30 +4,19 @@ blueprint:
     Sends a mobile notification when the 2N doorbell rings.
     The notification includes a camera snapshot and two action buttons:
     Answer (picks up the call) and Hang Up (rejects the call).
+    Enable the camera and call state sensor on the same intercom device.
+    Their entity IDs can be renamed; they are discovered from the device.
   domain: automation
   input:
     doorbell_entity:
-      name: Doorbell binary sensor
-      description: The doorbell entity from the 2N Intercom integration
+      name: Doorbell event
+      description: The doorbell event entity from the 2N Intercom integration
       selector:
         entity:
           filter:
-            - domain: binary_sensor
-              device_class: occupancy
-    call_state_entity:
-      name: Call state sensor
-      description: The call state sensor that carries the active_session_id attribute
-      selector:
-        entity:
-          filter:
-            - domain: sensor
-    camera_entity:
-      name: Camera entity
-      description: The 2N Intercom camera for the snapshot
-      selector:
-        entity:
-          filter:
-            - domain: camera
+            - domain: event
+              integration: 2n_intercom
+              device_class: doorbell
     notify_service:
       name: Mobile notification service
       description: >
@@ -48,18 +37,50 @@ blueprint:
 trigger:
   - platform: state
     entity_id: !input doorbell_entity
-    to: "on"
+
+condition:
+  - condition: template
+    value_template: >
+      {{ trigger.from_state is not none
+         and trigger.from_state.state != 'unavailable'
+         and trigger.to_state is not none
+         and trigger.to_state.state not in ['unknown', 'unavailable']
+         and trigger.to_state.state != trigger.from_state.state
+         and trigger.to_state.attributes.get('event_type') == 'ring'
+         and not trigger.to_state.attributes.get('restored', false) }}
 
 action:
   - variables:
+      intercom_entities: >
+        {{ device_entities(device_id(trigger.entity_id))
+           | select('in', integration_entities('2n_intercom')) | list }}
+      config_entry: "{{ config_entry_id(trigger.entity_id) }}"
+  - variables:
+      call_state_entities: >
+        {{ expand(intercom_entities)
+           | selectattr('domain', 'eq', 'sensor')
+           | selectattr('attributes.active_session_id', 'defined')
+           | map(attribute='entity_id') | list }}
+      camera_entities: >
+        {{ expand(intercom_entities)
+           | selectattr('domain', 'eq', 'camera')
+           | map(attribute='entity_id') | list }}
+  - if:
+      - condition: template
+        value_template: >
+          {{ call_state_entities | count != 1 or camera_entities | count != 1 }}
+    then:
+      - stop: "Enable one 2N camera and the call state sensor with an active session on the doorbell device."
+        error: true
+  - variables:
       session_id: >
-        {{ state_attr(trigger.entity_id | replace('binary_sensor', 'sensor') | replace('doorbell', 'call_state'), 'active_session_id') }}
+        {{ state_attr(call_state_entities | first, 'active_session_id') }}
   - service: !input notify_service
     data:
       title: !input notification_title
       message: !input notification_message
       data:
-        image: /api/camera_proxy/{{ (states | selectattr('entity_id', 'eq', (trigger.entity_id | replace('binary_sensor', 'camera') | replace('doorbell', 'camera'))) | map(attribute='entity_id') | first) if true else '' }}
+        image: "/api/camera_proxy/{{ camera_entities | first }}"
         actions:
           - action: ANSWER_CALL
             title: "Answer"
@@ -83,6 +104,7 @@ action:
         sequence:
           - service: 2n_intercom.answer_call
             data:
+              config_entry_id: "{{ config_entry }}"
               session_id: "{{ session_id }}"
       - conditions:
           - condition: template
@@ -90,6 +112,7 @@ action:
         sequence:
           - service: 2n_intercom.hangup_call
             data:
+              config_entry_id: "{{ config_entry }}"
               session_id: "{{ session_id }}"
               reason: rejected
 

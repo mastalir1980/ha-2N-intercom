@@ -149,7 +149,7 @@ def main() -> int:
         (COMPONENT_DIR / "api.py", "Async 2N HTTP client"),
         (COMPONENT_DIR / "entity.py", "Shared entity base"),
         (COMPONENT_DIR / "camera.py", "Camera platform (MjpegCamera)"),
-        (COMPONENT_DIR / "binary_sensor.py", "Doorbell + IO + relay-active sensors"),
+        (COMPONENT_DIR / "binary_sensor.py", "IO + relay-active + motion sensors"),
         (COMPONENT_DIR / "sensor.py", "SIP / call diagnostic sensors"),
         (COMPONENT_DIR / "switch.py", "Door relay switch platform"),
         (COMPONENT_DIR / "cover.py", "Gate relay cover platform"),
