@@ -1339,7 +1339,8 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
         marker, field = self._grant_user_marker(form)
         self.assertIsInstance(marker, sys.modules["voluptuous"].Optional)
         self.assertEqual(marker.description, {"suggested_value": "aaaa-1"})
-        self.assertTrue(field.config.custom_value)
+        self.assertFalse(field.config.custom_value)
+        self.assertEqual(field.config.mode, "dropdown")
         self.assertEqual(
             field.config.options,
             [
@@ -1347,6 +1348,13 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
                 {"label": "BBBB-2 (no name)", "value": "BBBB-2"},
             ],
         )
+        called_field = next(
+            field for marker, field in form["data_schema"].schema.items()
+            if marker.key == "called_id"
+        )
+        self.assertTrue(called_field.config.custom_value)
+        self.assertEqual(called_field.config.mode, "dropdown")
+        self.assertIn({"label": "sip:1@x", "value": "sip:1@x"}, called_field.config.options)
         self.assertEqual(form["errors"], {})
         self.assertTrue(FakeAPI.instances[0].closed)
 
