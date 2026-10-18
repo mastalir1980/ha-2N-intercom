@@ -3,11 +3,11 @@ id: TASK-36
 title: >-
   Headless coder: per-criterion evidence from the reviewer; tick only proven
   criteria, To Test when any remain
-status: In Progress
+status: Done
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-15 12:13'
-updated_date: '2026-10-18 16:22'
+updated_date: '2026-10-18 16:37'
 labels:
   - agent
   - infra
@@ -30,12 +30,12 @@ close_task in tools/coder/run-task.sh (around line 478-514) ticks every unchecke
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 review.md output contract adds criteria: [{id, status: proven|manual|unproven, evidence}] covering every criterion of the task; run-task.sh validates it (all ids present, known status, evidence non-empty for proven); invalid output = review failed as today
-- [ ] #2 The reviewer uses the verifier tag at the end of a criterion when present: [unit]/[e2e] must be proven in the diff or by a green check, [tester]/[jan] are reported as manual; an unproven [unit]/[e2e] criterion is a blocking finding
-- [ ] #3 close_task ticks only proven criteria and appends one line per criterion (AC #n: evidence) to the final summary; without a configured review-model nothing is ticked
-- [ ] #4 Status after green checks: Done when every criterion is proven and the task has no manual-close label; otherwise To Test; tasks already Done or To Test are left alone
-- [ ] #5 Stub simulation in tools/coder/tests covers: all proven -> Done, all ticked; mixed -> To Test, only proven ticked; manual-close -> To Test; malformed criteria -> review failed, nothing ticked
-- [ ] #6 Rules in sync (CLAUDE.md, .github/copilot-instructions.md, tools/coder/README.md): meaning of To Test, evidence lines in the final summary, manual-close kept as explicit marker
+- [x] #1 review.md output contract adds criteria: [{id, status: proven|manual|unproven, evidence}] covering every criterion of the task; run-task.sh validates it (all ids present, known status, evidence non-empty for proven); invalid output = review failed as today
+- [x] #2 The reviewer uses the verifier tag at the end of a criterion when present: [unit]/[e2e] must be proven in the diff or by a green check, [tester]/[jan] are reported as manual; an unproven [unit]/[e2e] criterion is a blocking finding
+- [x] #3 close_task ticks only proven criteria and appends one line per criterion (AC #n: evidence) to the final summary; without a configured review-model nothing is ticked
+- [x] #4 Status after green checks: Done when every criterion is proven and the task has no manual-close label; otherwise To Test; tasks already Done or To Test are left alone
+- [x] #5 Stub simulation in tools/coder/tests covers: all proven -> Done, all ticked; mixed -> To Test, only proven ticked; manual-close -> To Test; malformed criteria -> review failed, nothing ticked
+- [x] #6 Rules in sync (CLAUDE.md, .github/copilot-instructions.md, tools/coder/README.md): meaning of To Test, evidence lines in the final summary, manual-close kept as explicit marker
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -63,3 +63,9 @@ AC #5: hermetic simulations cover all required cases and test_automerge_merges_m
 AC #6: CLAUDE.md, .github/copilot-instructions.md and tools/coder/README.md consistently document per-criterion evidence, To Test and the explicit manual-close marker. The shared status rules were compared for consistency.
 All implementation criteria have local evidence; task status and acceptance checkboxes remain unchanged pending the mandatory staging E2E gate.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Merged in PR #86. AC #1: tests review_json_with_malformed_criteria/without_criteria/must_cover_checked_and_unchecked. AC #2: unproven_automated_tags_block_even_an_approve_verdict, manual_tags_cannot_be_reported_as_proven. AC #3: mixed_evidence_sets_to_test_and_ticks_only_proven, missing_reviewer_preserves_existing_ticks. AC #4: all_criteria_proven_sets_done, manual_close_sets_to_test, done_or_to_test_task_is_left_unchanged. AC #5: 13 new stub simulations in tools/coder/tests. AC #6: CLAUDE.md, copilot-instructions, tools/coder/README.md in sync. Checks green on ef7e6b8 incl. e2e-pi.
+<!-- SECTION:FINAL_SUMMARY:END -->
