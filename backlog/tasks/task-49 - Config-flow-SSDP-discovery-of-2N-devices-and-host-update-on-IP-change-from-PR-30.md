@@ -3,11 +3,11 @@ id: TASK-49
 title: >-
   Config flow: SSDP discovery of 2N devices and host update on IP change (from
   PR #30)
-status: To Test
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-16 15:37'
-updated_date: '2026-10-18 08:15'
+updated_date: '2026-10-18 13:23'
 labels:
   - discovery
   - config-flow

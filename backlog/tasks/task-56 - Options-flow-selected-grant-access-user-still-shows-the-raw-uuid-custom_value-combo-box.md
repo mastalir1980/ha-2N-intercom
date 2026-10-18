@@ -3,11 +3,11 @@ id: TASK-56
 title: >-
   Options flow: selected grant-access user still shows the raw uuid
   (custom_value combo box)
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-18 13:11'
-updated_date: '2026-10-18 13:14'
+updated_date: '2026-10-18 13:22'
 labels:
   - bug
   - config-flow
@@ -27,10 +27,10 @@ Why: after TASK-48 the dropdown list shows names, but the selected value in the 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 grant_access_user SelectSelector is built with custom_value=False; unit test
-- [ ] #2 Stored uuid in the directory (any letter case) and the unknown-uuid fallback still produce an option whose value equals the stored value; existing TASK-48 tests green
-- [ ] #3 Clearing the field still removes grant_access_user from options; unit test
-- [ ] #4 Called-id (peer) field is unchanged; full unit suite, validate.py green; e2e-pi green
+- [x] #1 grant_access_user SelectSelector is built with custom_value=False; unit test
+- [x] #2 Stored uuid in the directory (any letter case) and the unknown-uuid fallback still produce an option whose value equals the stored value; existing TASK-48 tests green
+- [x] #3 Clearing the field still removes grant_access_user from options; unit test
+- [x] #4 Called-id (peer) field is unchanged; full unit suite, validate.py green; e2e-pi green
 <!-- AC:END -->
 
 ## Implementation Plan

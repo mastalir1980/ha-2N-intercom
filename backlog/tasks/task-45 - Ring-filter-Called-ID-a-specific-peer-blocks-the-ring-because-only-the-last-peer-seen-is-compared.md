@@ -3,11 +3,11 @@ id: TASK-45
 title: >-
   Ring filter (Called ID): a specific peer blocks the ring because only the last
   peer seen is compared
-status: To Test
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-15 19:16'
-updated_date: '2026-10-16 15:37'
+updated_date: '2026-10-18 13:23'
 labels:
   - bug
   - coordinator

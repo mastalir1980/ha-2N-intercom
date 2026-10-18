@@ -38,6 +38,8 @@ Basic**, pokud zařízení vrátí `401` s `WWW-Authenticate: Basic`.
 | `/api/log/pull` | GET | `async_pull_log` | `id`, `timeout` (long-poll, server blokuje) |
 | `/api/log/unsubscribe` | GET | `async_unsubscribe_log` | `id` |
 
+Firmware endpointy (`/api/firmware`, `/api/firmware/apply`, `/api/firmware/reject`) integrace zatím nevolá – viz sekce *Firmware update* níže (TASK-50, plán v TASK-51).
+
 ### IO input ports
 
 Input discovery uses every port with `type=input` in `/api/io/caps` that is
@@ -104,6 +106,140 @@ velikost písmen, ale vybraná volba drží uložený řetězec beze změny. Sel
 adresáře = jeden WARNING na dotaz a přeložená chyba `directory_unavailable`,
 která formulář neblokuje; neznámé uložené uuid zůstává na výběr. Volání adresáře
 z koordinátoru se chovají jako dřív (best effort).
+
+## Firmware update (aktualizace firmwaru z 2N update serveru)
+
+Zjištěno v TASK-50 (spike) na fw 3.x: z JavaScriptu obou webových rozhraní
+zařízení (nové UI `/new/`, legacy UI `/`), čtením přes HTTP API účet a voláním
+veřejného 2N update serveru. **Žádný firmware se při zjišťování neinstaloval**;
+kroky upload/apply níže jsou z kódu UI a z dokumentace 2N, na zařízení je
+ověří až E2E install test ve feature tasku (TASK-51).
+
+### Kdo co dělá
+
+Tlačítko *Check for updates* / *Update* v UI **nevolá zařízení**. Kontrolu
+i stažení dělá **prohlížeč** přímo proti `https://update.2n.cz/hip` (CSP
+`connect-src` stránky ho povoluje), zařízení dostane hotový soubor přes
+veřejné HTTP API:
+
+1. `GET /api/system/info` → `firmwarePackage`, `swVersion`
+2. `GET https://update.2n.cz/hip/<firmwarePackage>/<track>/?current_ver=<swVersion>&ui_lang=<lang>` (bez autentizace)
+3. stažení `files[].url` (typ `firmware`) – soubor `.bin`, s `checksum` (SHA-256)
+4. `PUT /api/firmware` (multipart, pole `blob-fw`) → `fileId`, `version`, `downgrade`, `note`
+5. `POST /api/firmware/apply?fileid=<fileId>` (dokumentace 2N povoluje GET i POST) → `{"success": true}`, zařízení se restartuje
+   (případně `/api/firmware/reject?fileid=<fileId>` pro zrušení)
+
+Integrace tedy může udělat totéž co prohlížeč: kontrolu z HA proti update
+serveru a instalaci přes `PUT /api/firmware` + `apply`. Žádný skrytý příkaz
+„stáhni a nainstaluj sám" přes HTTP API účet neexistuje (viz níže).
+
+### Update server
+
+| `track` | Větev v UI | `AutoUpdate.UpdateServer.UpgradeMode` |
+|---|---|---|
+| `newest` | Active track | `1` |
+| `lts` | Long-term support (LTS) | `2` |
+| `early` | Beta program | `3` |
+
+- `ui_lang` = jazyk changelogu (`en`, …). Nové UI přidává `&_=<random>` proti cache.
+- **`204 No Content`** = pro danou větev není novější verze než `current_ver`
+  (zařízení je aktuální). Ověřeno pro všechny tři větve s aktuální verzí.
+- **`200`** = je dostupná novější verze (příklad zkrácený, hodnoty smyšlené):
+
+```json
+{
+  "files": [
+    { "type": "firmware",
+      "url": "https://update.2n.cz/api/downloads/<uuid>",
+      "checksum": "<sha256 hex>" }
+  ],
+  "package_lang": "en",
+  "version": "3.y.z.b.i",
+  "changelog.md": [
+    { "version": "3.y.0.b.i", "language": "EN", "text": "### **2N OS version 3.y …** (markdown)" }
+  ],
+  "type": { "stable": true, "intermediate": false, "bugfix": false, "lts": false },
+  "updatedAt": "2026-…Z",
+  "releaseDate": "2026-…+0000",
+  "customer": "generic"
+}
+```
+
+- `changelog.md` je **pole** všech verzí mezi `current_ver` a cílovou verzí
+  (vzestupně), každá položka je markdown. UI je řadí od nejnovější.
+- `type.stable=false` = beta, `type.lts=true` = LTS. UI hlásí „nová verze" jen
+  když typ odpovídá zvolené větvi (Active track ↔ `stable`, LTS ↔ `lts`,
+  Beta ↔ `stable=false`); jinak jako „žádná nová verze".
+- Stažení: `GET` (UI používá `POST`, server přijme obojí) → `application/octet-stream`,
+  `Content-Disposition: attachment;filename=<interní název>_<version>.bin`,
+  bez `Content-Length` (chunked). Před uploadem ověřit SHA-256 proti `checksum`.
+- Spojení občas timeoutuje (pozorováno u `lts`) → chyba kontroly, ne „žádná verze".
+- `AutoUpdate.UpdateServer.UpdateCheckAddress` může nahradit základní URL
+  (vlastní update server); prázdné = `https://update.2n.cz/hip`.
+
+### `PUT /api/firmware` a `apply` (veřejné HTTP API, skupina *System*, oprávnění **System – Control**)
+
+- Upload: multipart `blob-fw`. Odpověď `result`: `fileId` (8 hex), `version`,
+  `downgrade` (bool), `note` (escapovaný text s upozorněním / release notes
+  po verzích; nové UI ho parsuje na položky `{version, language, text}`).
+- Chyby uploadu: **12** (`blob-fw`, neplatný soubor / jiné zařízení),
+  **19** (verze nižší než povolené minimum), **18** (jiná aktualizace už běží –
+  podle kódu UI; nahraný a neaplikovaný soubor se po 5 minutách sám zahodí,
+  jinak nejdřív `reject`). Chybějící oprávnění → kódy 7–10 jako u ostatních
+  *System – Control* funkcí.
+- `downgrade: true` → UI vyžaduje potvrzení (u některých zařízení s factory
+  resetem). Integrace downgrade nemá nikdy aplikovat – udělat `reject`.
+- `apply`: chyby **12** (neplatné `fileid`), **14** („new firmware not found").
+  Po úspěchu se zařízení restartuje. UI pak zastaví log pull, čeká 10 s
+  a každé 2 s volá `/api/system/info`, dokud zařízení neodpoví.
+- **Stavy:** stahování a upload mají průběh jen na straně klienta (bajty);
+  instalace a restart průběh nehlásí. **Úspěch** = po restartu
+  `/api/system/info` vrací `swVersion == version` z uploadu. **Selhání** =
+  chyba uploadu/apply, nebo po timeoutu stále stará `swVersion`.
+- HTTP API účet integrace (Digest) má na E2E zařízení *System – Control*
+  ověřeno: `GET /api/config` (stejné oprávnění) vrací `200`.
+
+### Větev a plánovaná automatická aktualizace v zařízení
+
+Zařízení má vlastní plánovač aktualizací. Konfigurace (cesty z UI a ze zálohy
+`GET /api/config`):
+
+| Cesta | Význam |
+|---|---|
+| `AutoUpdate.UpdateSource` | `0` spravováno externě, `1` update server, `2` auto-provisioning (`AutoUpdate.Firmware.*`) |
+| `AutoUpdate.UpdateServer.UpgradeMode` | větev, viz tabulka výše |
+| `AutoUpdate.UpdateServer.AutoUpdateEnabled` | `0/1` zařízení se aktualizuje samo podle plánu |
+| `AutoUpdate.UpdateServer.Period` | `0` hodinově, `1` denně, `2` týdně, `3` měsíčně |
+| `AutoUpdate.UpdateServer.DayOfWeek` / `WeekOfMonth` / `UpdateTime` | den (`0` = neděle), týden v měsíci, čas `HH:MM` |
+| `AutoUpdate.UpdateServer.CheckAtBootTime` | `0/1` kontrola po startu |
+| `AutoUpdate.UpdateServer.LastResult` | výsledek posledního běhu (v XML zálohy) |
+
+- **Čtení přes HTTP API účet:** jen celou zálohou `GET /api/config`
+  (XML, stovky kB, obsahuje tajné údaje a licenci) – pro integraci nevhodné.
+  `POST /api/system/db/values` (multipart `blob-json` se seznamem cest; tak
+  čte UI) vrací s Digest i Basic `{"success": false, "error": {"code": 9,
+  "description": "authorization required"}}` – funguje jen s webovou session.
+- **Zápis:** jen webová session (`PUT /api/system/db/values`, nebo `/ajax`
+  `db.set`), případně nahráním celé konfigurace. Pro integraci ne.
+- `/ajax` (příkazy `db.get`, `autoupdate.updatefirmware`,
+  `system.applynewfirmware`, …) je interní API UI se session (`sid`);
+  s Digest vrací `400`. `autoupdate.updatefirmware` spouští aktualizaci
+  ze zdroje auto-provisioning, ne z 2N update serveru. Integrace ho nepoužívá.
+- Závěr: větev pro HA je **vlastní volba integrace** (`entry.options`),
+  nastavení zařízení se nečte ani nemění.
+
+### fw 2.50 vs. fw 3.x
+
+- `PUT /api/firmware` / `apply` / `reject` jsou v HTTP API manuálu i pro 2.x.
+- Legacy UI (na fw 3.x stále na `/`) má stejný modul `hip.autoupdate`
+  s `https://update.2n.cz/hip/` a stejnými větvemi `newest`/`lts`/`early`
+  a nahrává přes `PUT /api/firmware`; `firmwarePackage` čte z
+  `State.Product.FirmwarePackage`. Na fw 2.50 neověřeno na zařízení –
+  hypotéza: stejný mechanismus. `firmwarePackage` v `/api/system/info`
+  ověřen jen na fw 3.x; když chybí, update entita se nevytvoří (nebo hlásí
+  nedostupnou kontrolu).
+- Na update serveru `lts` pro starou `current_ver` 2.50 vrací `204`
+  (LTS větev 3.x z 2.x nenabízí).
 
 ## RTSP
 

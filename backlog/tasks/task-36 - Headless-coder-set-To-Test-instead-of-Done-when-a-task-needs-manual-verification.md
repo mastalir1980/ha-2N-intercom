@@ -1,13 +1,13 @@
 ---
 id: TASK-36
 title: >-
-  Headless coder: set "To Test" instead of Done when a task needs manual
-  verification
+  Headless coder: per-criterion evidence from the reviewer; tick only proven
+  criteria, To Test when any remain
 status: To Do
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-15 12:13'
-updated_date: '2026-10-15 12:13'
+updated_date: '2026-10-18 15:47'
 labels:
   - agent
   - infra
@@ -17,7 +17,7 @@ references:
   - tools/coder/run-task.sh
   - tools/coder/README.md
   - CLAUDE.md
-priority: medium
+priority: high
 type: task
 ordinal: 44000
 ---
@@ -25,15 +25,17 @@ ordinal: 44000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Backlog statuses are now To Do / In Progress / To Test / Done (decision by Jan, 15 Oct 2026). To Test = merged on main, automated checks green, waiting for Jan to verify on the real device (ring button, relays, Control4 ...) before the version is released. The coder today skips tasks with the label manual-close entirely (TASK-25), so they stay In Progress after the merge and the board shows them as unfinished work. With To Test they show up in the right column and the release can see what still needs a manual check.
+close_task in tools/coder/run-task.sh (around line 478-514) ticks every unchecked criterion (line 495) without any evidence, and for manual-close tasks it ticks nothing. Result: TASK-31/45/47/49 reached Done with 0 of 8-9 criteria ticked although most were proven by unit tests. review.md already tells the reviewer that a criterion without proof is blocking, but its JSON only carries verdict + findings, so the per-criterion result is lost. Fix: the reviewer returns a status and evidence for every criterion; close_task ticks only proven ones and sets To Test when anything is left.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 After green checks, close_task sets status To Test (instead of skipping) for a task with the label manual-close or with at least one acceptance criterion marked as manual (text contains "Manual" or "relay"); it ticks only the criteria that are not manual and writes the summary as today
-- [ ] #2 All other tasks are set Done exactly as today
-- [ ] #3 Stub simulation covers: normal task -> Done; manual-close task -> To Test with only automated criteria ticked; already Done/To Test task left alone
-- [ ] #4 Rules in sync (CLAUDE.md, .github/copilot-instructions.md, tools/coder/README.md): meaning of To Test, label manual-close kept as an explicit marker
+- [ ] #1 review.md output contract adds criteria: [{id, status: proven|manual|unproven, evidence}] covering every criterion of the task; run-task.sh validates it (all ids present, known status, evidence non-empty for proven); invalid output = review failed as today
+- [ ] #2 The reviewer uses the verifier tag at the end of a criterion when present: [unit]/[e2e] must be proven in the diff or by a green check, [tester]/[jan] are reported as manual; an unproven [unit]/[e2e] criterion is a blocking finding
+- [ ] #3 close_task ticks only proven criteria and appends one line per criterion (AC #n: evidence) to the final summary; without a configured review-model nothing is ticked
+- [ ] #4 Status after green checks: Done when every criterion is proven and the task has no manual-close label; otherwise To Test; tasks already Done or To Test are left alone
+- [ ] #5 Stub simulation in tools/coder/tests covers: all proven -> Done, all ticked; mixed -> To Test, only proven ticked; manual-close -> To Test; malformed criteria -> review failed, nothing ticked
+- [ ] #6 Rules in sync (CLAUDE.md, .github/copilot-instructions.md, tools/coder/README.md): meaning of To Test, evidence lines in the final summary, manual-close kept as explicit marker
 <!-- AC:END -->
 
 ## Implementation Plan

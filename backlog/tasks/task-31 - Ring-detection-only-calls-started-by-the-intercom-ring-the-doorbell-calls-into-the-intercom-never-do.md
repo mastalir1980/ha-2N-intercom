@@ -3,11 +3,11 @@ id: TASK-31
 title: >-
   Ring detection: only calls started by the intercom ring the doorbell, calls
   into the intercom never do
-status: To Test
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-13 19:54'
-updated_date: '2026-10-15 15:53'
+updated_date: '2026-10-18 13:23'
 labels:
   - bug
   - coordinator
