@@ -3,11 +3,11 @@ id: TASK-53
 title: >-
   Doorbell event entity (EventDeviceClass.DOORBELL) so HomeKit links the
   doorbell to the camera without YAML
-status: To Test
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-18 08:41'
-updated_date: '2026-10-18 09:54'
+updated_date: '2026-10-18 11:13'
 labels:
   - doorbell
   - homekit
@@ -45,16 +45,16 @@ Splits the doorbell half out of TASK-5 (TASK-5 keeps the access event entity). R
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 New `event` platform (`event.py`) creates one doorbell event entity per config entry when `enable_doorbell` is on (same condition as the doorbell binary_sensor); not created when it is off
-- [ ] #2 The entity extends TwoNIntercomEntity (same device as the camera), has device_class `EventDeviceClass.DOORBELL`, `event_types == ["ring"]`, translation key `doorbell`, unique_id `<entry_id>_doorbell_event`
-- [ ] #3 Exactly one `ring` event is fired per ring, although CallStateChanged and CallSessionStateChanged both report it (unit test feeds both events and asserts one trigger)
-- [ ] #4 No event for calls into the intercom (TASK-31 rules) and none for peers filtered out by the Called ID filter (TASK-45/47 rules); unit tests for both
-- [ ] #5 Event attributes carry `called_peer` (and caller name/number when known), same values as the binary_sensor attributes; no secrets
-- [ ] #6 Existing `binary_sensor.<intercom>_doorbell` is unchanged (state, device class, unique_id, attributes); existing tests stay green
-- [ ] #7 strings.json, translations en/de/cs and icons.json have the new entity (mdi:doorbell); test_translations green
-- [ ] #8 HOMEKIT_INTEGRATION.md and README.md: UI-only HomeKit setup (accessory mode, include just the camera) is the primary path and auto-links `event.<intercom>_doorbell`; YAML `linked_doorbell_sensor` kept as fallback; the "YAML required / cannot be set from the UI" statements are gone; the misleading OCCUPANCY rationale is fixed (TwoNIntercomDoorbell docstring + HOMEKIT_INTEGRATION.md "Doorbell device class")
-- [ ] #9 E2E (read-only, no relays): the doorbell event entity exists in staging HA with device_class doorbell, event_types [ring], the same device_id as the camera entity, and is available while the intercom is reachable
-- [ ] #10 Manual (manual-close, Jan): a button press on the real intercom fires exactly one `ring` in HA; a UI-only HomeKit Bridge shows a video doorbell in Apple Home and the HomePod chimes
+- [x] #1 New `event` platform (`event.py`) creates one doorbell event entity per config entry when `enable_doorbell` is on (same condition as the doorbell binary_sensor); not created when it is off
+- [x] #2 The entity extends TwoNIntercomEntity (same device as the camera), has device_class `EventDeviceClass.DOORBELL`, `event_types == ["ring"]`, translation key `doorbell`, unique_id `<entry_id>_doorbell_event`
+- [x] #3 Exactly one `ring` event is fired per ring, although CallStateChanged and CallSessionStateChanged both report it (unit test feeds both events and asserts one trigger)
+- [x] #4 No event for calls into the intercom (TASK-31 rules) and none for peers filtered out by the Called ID filter (TASK-45/47 rules); unit tests for both
+- [x] #5 Event attributes carry `called_peer` (and caller name/number when known), same values as the binary_sensor attributes; no secrets
+- [x] #6 Existing `binary_sensor.<intercom>_doorbell` is unchanged (state, device class, unique_id, attributes); existing tests stay green
+- [x] #7 strings.json, translations en/de/cs and icons.json have the new entity (mdi:doorbell); test_translations green
+- [x] #8 HOMEKIT_INTEGRATION.md and README.md: UI-only HomeKit setup (accessory mode, include just the camera) is the primary path and auto-links `event.<intercom>_doorbell`; YAML `linked_doorbell_sensor` kept as fallback; the "YAML required / cannot be set from the UI" statements are gone; the misleading OCCUPANCY rationale is fixed (TwoNIntercomDoorbell docstring + HOMEKIT_INTEGRATION.md "Doorbell device class")
+- [x] #9 E2E (read-only, no relays): the doorbell event entity exists in staging HA with device_class doorbell, event_types [ring], the same device_id as the camera entity, and is available while the intercom is reachable
+- [x] #10 Manual (manual-close, Jan): a button press on the real intercom fires exactly one `ring` in HA; a UI-only HomeKit Bridge shows a video doorbell in Apple Home and the HomePod chimes
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -76,4 +76,12 @@ Added unit coverage for paired and batched call events, subsequent rings, pulse 
 Added a read-only staging E2E check for event presence, doorbell class, ring type, availability while the independent 2N client can reach the device, and the camera device_id link. Updated HOMEKIT_INTEGRATION.md, README.md and architecture documentation to describe UI-only camera accessory setup, automatic event linking and the explicit YAML fallback.
 Local validation on Python 3.12: all 670 unit tests passed; python3 validate.py passed; integration py_compile passed. The new E2E test file also compiles without importing or running E2E fixtures. No Home Assistant/intercom calls or E2E runner were executed on the VM.
 Pending: the orchestrator must run e2e-pi, and Jan must perform AC #10 (one physical press -> one HA ring, UI-only HomeKit video doorbell and HomePod chime). Task remains In Progress with all acceptance criteria unchecked under manual-close. No version bump, CHANGELOG change, protected-path edit or push.
+
+Manual verification (Jan, 2026-10-18, production HA on main after PR #77): a physical button press changed event.<intercom>_doorbell exactly once with event_type ring and called_peer set; a UI-only HomeKit accessory shows the video doorbell and the HomePod chimes. AC 1-8 rely on the coder's Python 3.12 run (670 unit tests, validate.py) recorded above; AC 9 on the e2e-pi check of PR #77, which was merged.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Added the doorbell event entity (EventDeviceClass.DOORBELL, event_types [ring]) on the camera's device so a UI-only HomeKit camera accessory becomes a video doorbell. Verified by unit tests on Python 3.12, the e2e-pi PR check and Jan's manual check on the real intercom (one press = one ring, HomePod chimes).
+<!-- SECTION:FINAL_SUMMARY:END -->
