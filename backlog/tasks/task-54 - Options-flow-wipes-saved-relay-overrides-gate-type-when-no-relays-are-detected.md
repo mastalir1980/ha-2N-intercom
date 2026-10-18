@@ -3,11 +3,11 @@ id: TASK-54
 title: >-
   Options flow wipes saved relay overrides (gate type) when no relays are
   detected
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-18 10:19'
-updated_date: '2026-10-18 10:40'
+updated_date: '2026-10-18 10:43'
 labels:
   - config-flow
   - relay
@@ -38,10 +38,10 @@ Approach / pointers: `_async_after_camera_step` and the final branch of `async_s
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Options flow with zero detected relays (entry not loaded or empty switch caps) saves options whose `relays` equals the previously saved list, incl. a gate override; unit test
-- [ ] #2 Options flow with detected relays updates only the relays shown in the relay steps and keeps saved overrides for relay numbers that were not shown; unit test
-- [ ] #3 A relay saved as gate stays a cover entity (not a switch) after an options flow pass with empty caps followed by a reload; unit test on setup of cover + switch platforms
-- [ ] #4 Unit suite + validate.py green on Python 3.12+; `bash e2e/e2e.sh wip` (or PR check e2e-pi) green
+- [x] #1 Options flow with zero detected relays (entry not loaded or empty switch caps) saves options whose `relays` equals the previously saved list, incl. a gate override; unit test
+- [x] #2 Options flow with detected relays updates only the relays shown in the relay steps and keeps saved overrides for relay numbers that were not shown; unit test
+- [x] #3 A relay saved as gate stays a cover entity (not a switch) after an options flow pass with empty caps followed by a reload; unit test on setup of cover + switch platforms
+- [x] #4 Unit suite + validate.py green on Python 3.12+; `bash e2e/e2e.sh wip` (or PR check e2e-pi) green
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -64,5 +64,5 @@ No E2E commands were run on the VM. PR check e2e-pi remains the external gate. A
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Options flow now preserves saved overrides for unshown relays, keeping gate entities as covers after reload. Three regression tests added; 673 unit tests, manifest validation, and compilation pass on Python 3.12.15. Awaiting orchestrator-run e2e-pi; status and acceptance criteria remain open.
+Implemented by the headless coder. Checks green on 6c78e1bb7 after 0 fix round(s): e2e-pi=pass, validate=pass, validate=pass. PR: https://github.com/mastalir1980/ha-2N-intercom/pull/79. Done takes effect when the PR is merged.
 <!-- SECTION:FINAL_SUMMARY:END -->
