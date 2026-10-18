@@ -218,6 +218,18 @@
         "name": "Camera"
       }
     },
+    "event": {
+      "doorbell": {
+        "name": "Doorbell",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "ring": "Ring"
+            }
+          }
+        }
+      }
+    },
     "image": {
       "last_ring": {
         "name": "Last ring"

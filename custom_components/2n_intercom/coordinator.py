@@ -215,6 +215,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         self.config_entry = config_entry
         self._last_call_state: dict[str, Any] = {}
         self._ring_detected = False
+        self._ring_count = 0
         self._last_ring_time: datetime | None = None
         self._active_session_id: str | None = None
         # Note: _retry_count is safe from race conditions because Home Assistant's
@@ -938,9 +939,11 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             )
         if is_ringing and ring_allowed:
             # CallStateChanged and CallSessionStateChanged both report one
-            # ring; capture the snapshot only on the first of them.
-            if not self._ring_detected and self._ring_snapshot_enabled:
-                self.hass.async_create_task(self._async_capture_ring_snapshot())
+            # ring; count it and capture the snapshot only on the first.
+            if not self._ring_detected:
+                self._ring_count += 1
+                if self._ring_snapshot_enabled:
+                    self.hass.async_create_task(self._async_capture_ring_snapshot())
             self._ring_detected = True
             self._last_ring_time = dt_util.utcnow()
             self._ring_pulse_until = (
@@ -1414,6 +1417,11 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
                 return False
             return dt_util.utcnow() <= self._ring_pulse_until
         return False
+
+    @property
+    def ring_count(self) -> int:
+        """Return the number of new rings detected by the log channel."""
+        return self._ring_count
 
     @property
     def last_ring_time(self) -> datetime | None:

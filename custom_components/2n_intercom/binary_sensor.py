@@ -92,11 +92,9 @@ async def async_setup_entry(
 class TwoNIntercomDoorbell(TwoNIntercomEntity, BinarySensorEntity):  # type: ignore[misc]
     """Representation of a 2N Intercom doorbell.
 
-    Uses ``OCCUPANCY`` rather than ``DOORBELL`` because HomeKit's
-    programmable-switch / doorbell mapping wants the dedicated
-    HomeKit accessory wired up via the ``homekit`` integration —
-    occupancy gives the right HA semantics for "someone pressed
-    the button" without overloading device-class meaning.
+    Keeps the existing ring pulse and attributes for automations.
+    HomeKit auto-links the separate doorbell event entity to the camera;
+    a binary sensor does not provide that automatic doorbell mapping.
     """
 
     _attr_translation_key = "doorbell"

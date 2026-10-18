@@ -36,6 +36,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 - Only calls started by the intercom trigger the doorbell (for example, a visitor button press); calls into the intercom from My2N, Control4, or a SIP phone do not
 - **Event-driven state updates** for switches, IO, SIP registration, and device config changes via the same subscription channel
 - Binary sensor with caller name/number/button attributes
+- **Doorbell event** (`event.<intercom>_doorbell`, device class `doorbell`) emits one `ring` per intercom-started ring, with called peer and caller name/number when known. HomeKit automatically links it to the camera on the same device; the existing binary sensor is unchanged
 - **`2n_intercom.answer_call`** and **`2n_intercom.hangup_call`** services that target a config entry and (optionally) a specific session id, with `reason` selector (`normal`/`rejected`/`busy`)
 - Diagnostic sensors: SIP registration status, call state with `active_session_id` attribute
 
@@ -247,7 +248,7 @@ Relays must first be enabled in the **intercom settings**; the integration canno
 | Connection | `password` | string | *(required)* | Device API password |
 | Device | `name` | string | *(auto-detected)* | Display name in Home Assistant |
 | Device | `enable_camera` | bool | `true` | Create the camera entity |
-| Device | `enable_doorbell` | bool | `true` | Create the doorbell binary sensor |
+| Device | `enable_doorbell` | bool | `true` | Create the doorbell event entity and legacy binary sensor |
 | Device | `called_id` | string | `All calls` | Ringing account / peer filter |
 
 ### Options flow parameters
@@ -266,7 +267,7 @@ Intermediate steps show **Next**; the last step shows **Submit**. The flow only 
 |---|---|---|---|---|
 | Device | `name` | string | *(from setup)* | Display name |
 | Device | `enable_camera` | bool | `true` | Toggle camera entity |
-| Device | `enable_doorbell` | bool | `true` | Toggle doorbell entity |
+| Device | `enable_doorbell` | bool | `true` | Toggle doorbell event entity and binary sensor |
 | Device | `scan_interval` | 2-600 (s) | 60 | Backup polling interval. Events deliver real-time updates; polling only runs as a safety net |
 | Device | `called_id` | string | `All calls` | Ringing account / peer filter |
 | Device | `grant_access_user` | directory user (UUID) | *(empty)* | Default user for `2n_intercom.grant_access` when the call does not pass `user`. Picked from the device directory; a UUID can also be typed in |
@@ -307,6 +308,7 @@ Resulting entities:
 
 - `camera.home_intercom_camera`
 - `image.home_intercom_last_ring` *(snapshot taken at the last ring)*
+- `event.home_intercom_doorbell` *(one `ring` event per ring; auto-linked to the camera by HomeKit)*
 - `binary_sensor.home_intercom_doorbell`
 - `binary_sensor.home_intercom_input_1` *(built-in input, existing entity preserved)*
 - `binary_sensor.home_intercom_input_modul1_input1`, `binary_sensor.home_intercom_input_modul1_input2` *(one per additional input port; actual ports depend on the device and extension modules)*
@@ -317,6 +319,12 @@ Resulting entities:
 - `switch.home_intercom_front_door`
 - `switch.home_intercom_output_relay1`, `switch.home_intercom_output_output1` *(physical outputs, disabled by default; actual ports depend on the device and extension modules)*
 - `cover.home_intercom_driveway_gate`
+
+### HomeKit video doorbell (UI-only)
+
+Enable **Camera** and **Doorbell** in the 2N integration. Add **HomeKit Bridge** from **Settings > Devices & services**, select **Accessory** mode, and include **only the camera entity**. Pair it in Apple Home and enable notifications / HomePod chimes there. HomeKit automatically finds `event.<intercom>_doorbell` on the camera's device; do not expose either doorbell entity as a separate accessory.
+
+If the camera was already paired as an ordinary camera, remove that old pairing and recreate the accessory so Apple Home discovers the video doorbell. Do not expose the same camera through multiple bridges. Explicit YAML `linked_doorbell_sensor` is still available as a fallback, including existing links to the binary sensor; see [HomeKit Integration](HOMEKIT_INTEGRATION.md).
 
 ### IO input sensors
 
@@ -507,6 +515,7 @@ custom_components/2n_intercom/
 ├── camera.py                # MjpegCamera-based camera platform
 ├── image.py                 # Last-ring snapshot image
 ├── binary_sensor.py         # Doorbell + input + relay-active sensors
+├── event.py                 # Doorbell ring events + HomeKit camera auto-linking
 ├── sensor.py                # SIP registration + call state diagnostic sensors
 ├── switch.py                # Door relay platform
 ├── cover.py                 # Gate relay platform

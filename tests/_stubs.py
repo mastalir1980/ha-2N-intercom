@@ -15,9 +15,10 @@ What lives here:
     * ``ensure_package`` and ``load_module`` helpers
     * ``install_api_stubs`` — registers fake ``aiohttp`` and ``async_timeout``
       modules so ``custom_components.2n_intercom.api`` can be imported
+    * ``install_event_stubs`` — minimal HA event entity API, installed explicitly
 
 What does NOT live here:
-    * The Home Assistant component stubs. Each test file stubs only the HA
+    * Most Home Assistant component stubs. Each test file stubs only the HA
       modules it actually exercises (camera, lock, sensor, ...) and those
       vary widely between files. Pulling them all into one mega-stub creates
       cross-test coupling without saving meaningful LOC.
@@ -47,6 +48,7 @@ CONFIG_FLOW_PATH = INTEGRATION_DIR / "config_flow.py"
 COVER_PATH = INTEGRATION_DIR / "cover.py"
 SWITCH_PATH = INTEGRATION_DIR / "switch.py"
 IMAGE_PATH = INTEGRATION_DIR / "image.py"
+EVENT_PATH = INTEGRATION_DIR / "event.py"
 DIAGNOSTICS_PATH = INTEGRATION_DIR / "diagnostics.py"
 
 
@@ -173,3 +175,36 @@ def install_dt_util_stub() -> types.ModuleType:
     util.dt = dt_module  # type: ignore[attr-defined]
     sys.modules["homeassistant.util.dt"] = dt_module
     return dt_module
+
+
+def install_event_stubs() -> types.ModuleType:
+    """Register the event platform API without loading Home Assistant."""
+    ensure_package("homeassistant")
+    ensure_package("homeassistant.components")
+    event_module = types.ModuleType("homeassistant.components.event")
+
+    class EventDeviceClass:
+        DOORBELL = "doorbell"
+
+    class EventEntity:
+        _attr_event_types: list[str] = []
+        _last_event_type = None
+        _last_event_extra_attributes = None
+
+        @property
+        def event_types(self):
+            return self._attr_event_types
+
+        async def async_added_to_hass(self) -> None:
+            self.event_added = True
+
+        def _trigger_event(self, event_type, event_attributes=None) -> None:
+            if event_type not in self.event_types:
+                raise ValueError(f"Unsupported event type: {event_type}")
+            self._last_event_type = event_type
+            self._last_event_extra_attributes = event_attributes
+
+    event_module.EventDeviceClass = EventDeviceClass
+    event_module.EventEntity = EventEntity
+    sys.modules["homeassistant.components.event"] = event_module
+    return event_module
