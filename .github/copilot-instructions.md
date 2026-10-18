@@ -68,11 +68,18 @@ nobody can answer questions, so stop with a `.agent-stop` file instead of guessi
 Assistant or the intercom, so **do not run `e2e/e2e.sh`** — E2E runs on the Pi as the PR check `e2e-pi` after the
 orchestrator pushes; you cannot push (no token) and must not edit `.github/`, `e2e/ci/`, `e2e/scripts/`,
 `e2e/run.sh`, `e2e/nightly.sh`, `e2e/e2e.sh`, `e2e/staging/`, `tools/coder/`, `CLAUDE.md` or `backlog/config.yml`
-(the patch is rejected). Do not tick criteria or set Done: once the PR checks incl. `e2e-pi` are green the orchestrator
-adds one last commit that does it (takes effect when the PR is merged; label `manual-close` opts out). Commit your work locally with `TASK-<id>: …` messages.
+(the patch is rejected). Do not tick criteria or finalize the task: once the PR checks incl. `e2e-pi` are green the
+orchestrator adds one last commit that ticks only criteria the reviewer marked `proven`, with an `AC #n: evidence`
+line for every criterion in the final summary. It sets Done only when every criterion is proven and there is no
+`manual-close` label; otherwise To Test. Without a configured review-model nothing is ticked and the task goes to
+To Test. Tasks already Done or To Test are left unchanged. This takes effect when the PR is merged.
+Commit your work locally with `TASK-<id>: …` messages.
 Every coder PR is then reviewed independently by a second model (TASK-33) against the task's criteria and the architecture rules;
-the orchestrator feeds its `blocking` findings back to you as one extra fix round and sets the task Done only after `approve`
-(Claude reviews on request in addition). Never weaken, skip or delete a test to satisfy a finding or a red check.
+the orchestrator feeds its `blocking` findings back to you as one extra fix round and finalizes the task only after
+`approve` (Claude reviews on request in addition). The reviewer returns `proven|manual|unproven` and evidence for
+every criterion, including checked ones. Trailing `[unit]`/`[e2e]` tags require automated proof; missing proof blocks
+the review. `[tester]`/`[jan]` tags are always manual. Invalid or incomplete review output fails the review and
+leaves the task In Progress. Never weaken, skip or delete a test to satisfy a finding or a red check.
 Auto-merge (TASK-46) is opt-in with the root-owned file `/etc/ha2n-coder/automerge` (`install-vm.sh` never creates it):
 when all PR checks incl. `e2e-pi` are green on the head commit and the second-model review verdict is `approve`, the coder
 merges its own PR (`gh pr merge --merge --match-head-commit <the head the checks ran on> --delete-branch`; the close commit is a new head,
@@ -99,17 +106,21 @@ comment and is not retried. Without the file the coder never merges and Jan merg
   Jan's main checkout, which stays on `main` for Backlog changes. Commit with Jan's GitHub noreply address
   (`164862832+mastalir1980@users.noreply.github.com`), never a work or private e-mail: the repo is public.
 - **Respect `dependencies`** in the task frontmatter — do not start a task whose dependencies are not Done.
-- When done: tick the acceptance criteria, add a short final summary, set status `Done` (via CLI) —
-  only after the full definition of done below, including a green `e2e.sh wip`. Put this in the PR's last commit so
-  that the merge closes the task (not for tasks labelled `manual-close`; parent tasks are closed by hand).
+- When done: tick only acceptance criteria with objective evidence and add an `AC #n: evidence` line for every
+  criterion to the final summary (via CLI). Set `Done` only when all criteria are proven, the full definition of done
+  below is met (including green `e2e.sh wip`), and there is no `manual-close` label; otherwise use `To Test` after
+  green automated checks. Put this in the PR's last commit so that it takes effect on merge. Parent tasks are
+  closed by hand.
 - Bugs found by E2E carry type `bug` and label `e2e`; they include the report path and evidence.
 
 ## Statuses and versions
 
 - **Statuses (board columns):** To Do → In Progress → **To Test** → Done. *To Test* = merged on `main`, automated
-  checks green, waiting for Jan to verify on the real device (criteria that need a ring button, relays, Control4 …;
-  label `manual-close`). A task moves from To Test to Done only after Jan's check (he does it, or tells Claude the result).
-  Until TASK-36 lands, Claude moves `manual-close` tasks to To Test by hand after the merge.
+  checks green, but some criteria still need evidence or manual verification (or no review-model is configured).
+  The final PR commit records this status; Done requires every criterion to be proven and no `manual-close` label.
+  `manual-close` remains an explicit marker requiring Jan's verification even when all criteria are proven.
+  A task moves from To Test to Done only after the outstanding evidence/verification is recorded and Jan confirms
+  any manual checks (he does it, or tells Claude the result).
 - **Versions are Backlog milestones** (`v1.5.0`, …). Every user-facing task gets the next open milestone when it is
   created (`-m vX.Y.Z`); pipeline/tooling tasks (`manual-path`, `ci`, `infra`) get none. `backlog milestone list` shows progress.
 - **Order of work for the headless coder:** ready tasks of the earliest open milestone first (by version number),

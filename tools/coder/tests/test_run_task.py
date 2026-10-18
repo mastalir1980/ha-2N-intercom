@@ -52,17 +52,36 @@ elif name == "backlog" and args[:2] == ["task", "view"] and "--json" in args:
     sys.stdout.write(fixture.read_text(encoding="utf-8"))
 elif name == "backlog" and args == ["task", "view", "TASK-34", "--plain"]:
     print("Task TASK-34 - Test clone recovery")
-    print("Status: To Do")
+    task = Path("backlog/task-34.md")
+    status = re.search(r"^Status: (.+)$", task.read_text(), re.M).group(1) if task.exists() else "To Do"
+    print("Status: " + status)
     print("Assignee: @copilot")
     if (root / "task-labels").exists():
         print("Labels: " + (root / "task-labels").read_text().strip())
     print("Description:")
     print("Hermetic fixture")
     print("Acceptance Criteria:")
-    print("- [ ] #1 Fixture criterion")
+    criteria = root / "task-criteria"
+    changed = root / "task-close-criteria"
+    if changed.exists() and Path("plain.txt").read_text() == "accepted change\\n":
+        criteria = changed
+    print(criteria.read_text().strip() if criteria.exists() else "- [ ] #1 Fixture criterion")
+    print("Definition of Done:")
+    print("- [ ] #1 A separate definition-of-done item, not an acceptance criterion")
 elif name == "backlog" and args[:3] == ["task", "edit", "TASK-34"]:
+    if (root / "backlog-edit-fails").exists():
+        sys.exit("Fixture backlog edit failure")
     Path("backlog").mkdir(exist_ok=True)
-    Path("backlog/task-34.md").write_text("Status: Done\\n")
+    status = args[args.index("-s") + 1]
+    criteria = root / "task-criteria"
+    text = criteria.read_text() if criteria.exists() else "- [ ] #1 Fixture criterion\\n"
+    for index, arg in enumerate(args):
+        if arg == "--check-ac":
+            text = text.replace("- [ ] #" + args[index + 1] + " ", "- [x] #" + args[index + 1] + " ")
+    summary = args[args.index("--final-summary") + 1]
+    Path("backlog/task-34.md").write_text(f"Status: {status}\\n{text}\\nFinal Summary:\\n{summary}\\n")
+    if (root / "backlog-edit-outside").exists():
+        Path("outside-backlog.txt").write_text("Unexpected edit\\n")
 elif name == "backlog" and args[:2] == ["task", "view"] and len(args) == 4 and (root / "tasks" / f"{args[2]}.txt").exists():
     sys.stdout.write((root / "tasks" / f"{args[2]}.txt").read_text(encoding="utf-8"))
 elif name == "backlog" and args[:2] == ["task", "list"]:
@@ -483,15 +502,20 @@ class RunTaskCloneTests(unittest.TestCase):
     BRANCH = "refs/heads/task-34-test-clone-recovery"
 
     def _pipeline(self, reviews=(), review_model: str | None = "review-model-x",
-                  checks=()) -> None:
+                  checks=(), task_status: str | None = None) -> None:
         """Set up a full run: an accepted change, working gh stub, scripted reviews and checks."""
         (self.seed / "plain.txt").write_text("accepted change\n", encoding="utf-8")
+        if task_status is not None:
+            (self.seed / "backlog").mkdir(exist_ok=True)
+            (self.seed / "backlog/task-34.md").write_text(f"Status: {task_status}\n", encoding="utf-8")
         self._write_patch()
         (self.root / "gh-ok").touch()
         if review_model is not None:
             (self.root / "etc/ha2n-coder/review-model").write_text(review_model + "\n", encoding="utf-8")
         (self.root / "reviews").mkdir()
         for number, review in enumerate(reviews, 1):
+            if isinstance(review, dict):
+                review = {"criteria": [self._criterion()], **review}
             text = review if isinstance(review, str) else json.dumps(review)
             (self.root / "reviews" / f"{number}.json").write_text(text, encoding="utf-8")
         (self.root / "checks").mkdir()
@@ -530,12 +554,26 @@ class RunTaskCloneTests(unittest.TestCase):
         files = sorted(folder.glob(f"{kind}-*.md"), key=lambda path: int(path.stem.split("-")[1]))
         return [path.read_text(encoding="utf-8") for path in files]
 
-    def _assert_closed(self, closed: bool) -> None:
-        self.assertEqual("task edit TASK-34 -s Done --check-ac 1" in self._calls(), closed)
+    def _assert_closed(self, closed: bool, status: str = "Done", proven: tuple[int, ...] = (1,)) -> None:
+        edits = [line for line in self._calls().splitlines() if line.startswith("backlog task edit TASK-34 ")]
+        self.assertEqual(len(edits), int(closed), edits)
+        if closed:
+            self.assertIn(f"task edit TASK-34 -s {status} ", edits[0])
+            self.assertEqual(re.findall(r"--check-ac (\d+)", edits[0]), [str(i) for i in proven])
         deleted = self.root / "deleted-branch-head"  # gh pr merge --delete-branch removed the remote branch
         ref = deleted.read_text() if deleted.exists() else self.BRANCH
         tree = self._git(self.origin, "ls-tree", "-r", "--name-only", ref)
         self.assertEqual("backlog/task-34.md" in tree.splitlines(), closed)
+        if closed:
+            text = self._git(self.origin, "show", f"{ref}:backlog/task-34.md")
+            self.assertIn(f"Status: {status}\n", text)
+            for i in proven:
+                self.assertIn(f"- [x] #{i} ", text)
+
+    @staticmethod
+    def _criterion(cid: int = 1, status: str = "proven",
+                   evidence: str = "Fixture unit test passed in the green local gates.") -> dict:
+        return {"id": cid, "status": status, "evidence": evidence}
 
     @staticmethod
     def _finding(severity: str = "blocking", summary: str = "Criterion #2 has no test",
@@ -553,6 +591,9 @@ class RunTaskCloneTests(unittest.TestCase):
         review_prompt = self._prompts("review")[0]
         self.assertIn("TASK-34", review_prompt)
         self.assertIn("git diff origin/main HEAD", review_prompt)
+        for tag in ("[unit]", "[e2e]", "[tester]", "[jan]"):
+            self.assertIn(tag, review_prompt)
+        self.assertIn('"criteria":', review_prompt)
         comments = self._comments()
         self.assertEqual(len(comments), 2)
         self.assertIn("**Verdict: approve**", comments[0])
@@ -560,6 +601,8 @@ class RunTaskCloneTests(unittest.TestCase):
         self.assertNotIn("credit", comments[0].lower())
         self.assertIn("Review: review approved", comments[1])
         self._assert_closed(True)
+        self.assertIn("AC #1: Fixture unit test passed", self._git(
+            self.origin, "show", f"{self.BRANCH}:backlog/task-34.md"))
         self.assertIn("review-model-x", (self.base / "cost.csv").read_text(encoding="utf-8"))
         self.assertIn("approve", result.stdout)
 
@@ -611,7 +654,9 @@ class RunTaskCloneTests(unittest.TestCase):
         comments = self._comments()
         self.assertEqual(len(comments), 1)
         self.assertIn("Review: review skipped", comments[0])
-        self._assert_closed(True)
+        self._assert_closed(True, "To Test", ())
+        summary = self._git(self.origin, "show", f"{self.BRANCH}:backlog/task-34.md")
+        self.assertIn("AC #1: No review-model configured; verification required. (unproven)", summary)
 
     def test_invalid_review_model_stops_before_any_work(self) -> None:
         self._pipeline(review_model="bad model;id")
@@ -651,6 +696,147 @@ class RunTaskCloneTests(unittest.TestCase):
             {"verdict": "approve", "findings": [{"severity": "huge", "summary": "x"}]},
         ))
 
+    def test_review_json_with_malformed_criteria_is_failed(self) -> None:
+        invalid = [
+            None, {}, [], [self._criterion(2)], [self._criterion(), self._criterion()],
+            [self._criterion(True)], [self._criterion("1")], [self._criterion(status="unknown")],
+            [self._criterion(evidence=" \n\t")], [self._criterion(evidence=None)], [None],
+            [{"id": 1, "status": "proven"}],
+        ]
+        for criteria in invalid:
+            with self.subTest(criteria=criteria):
+                self.setUp()
+                self._assert_unusable_review(json.dumps({
+                    "verdict": "approve", "findings": [], "criteria": criteria,
+                }))
+
+    def test_review_json_without_criteria_is_failed(self) -> None:
+        self._assert_unusable_review(json.dumps({"verdict": "approve", "findings": []}))
+
+    def test_review_must_cover_checked_and_unchecked_criteria(self) -> None:
+        (self.root / "task-criteria").write_text("- [x] #1 Already checked\n- [ ] #2 Still pending\n")
+        self._assert_unusable_review(json.dumps({
+            "verdict": "approve", "findings": [], "criteria": [self._criterion(2)],
+        }))
+
+    def test_all_criteria_proven_sets_done_and_ticks_all(self) -> None:
+        (self.root / "task-criteria").write_text("- [ ] #1 Unit behaviour [unit]\n- [ ] #2 E2E behaviour [e2e]\n")
+        self._pipeline(reviews=[{"verdict": "approve", "findings": [], "criteria": [
+            self._criterion(2, evidence="e2e-pi passed test_fixture_e2e on this head."),
+            self._criterion(1, evidence="test_fixture_unit passed in local gates."),
+        ]}])
+        self._run_pipeline(0)
+        self._assert_closed(True, proven=(1, 2))
+        summary = self._git(self.origin, "show", f"{self.BRANCH}:backlog/task-34.md")
+        self.assertIn("AC #1: test_fixture_unit passed in local gates. (proven)", summary)
+        self.assertIn("AC #2: e2e-pi passed test_fixture_e2e on this head. (proven)", summary)
+        self.assertEqual(self._git(self.origin, "rev-list", "--count", f"main..{self.BRANCH}").strip(), "2")
+
+    def test_mixed_evidence_sets_to_test_and_ticks_only_proven(self) -> None:
+        (self.root / "task-criteria").write_text(
+            "- [ ] #1 Automated behaviour [unit]\n- [ ] #2 Device check [tester]\n"
+            "- [ ] #3 Owner check [jan]\n- [ ] #4 Pending evidence\n")
+        self._pipeline(reviews=[{"verdict": "approve", "findings": [], "criteria": [
+            self._criterion(), self._criterion(2, "manual", "Tester must verify the device."),
+            self._criterion(3, "manual", "Jan must verify the result."),
+            self._criterion(4, "unproven", "No objective evidence yet."),
+        ]}])
+        self._run_pipeline(0)
+        self._assert_closed(True, "To Test")
+        summary = self._git(self.origin, "show", f"{self.BRANCH}:backlog/task-34.md")
+        for cid in (2, 3, 4):
+            self.assertIn(f"- [ ] #{cid} ", summary)
+            self.assertIn(f"AC #{cid}:", summary)
+        self.assertIn("AC #4: No objective evidence yet. (unproven)", summary)
+
+    def test_unproven_automated_tags_block_even_an_approve_verdict(self) -> None:
+        for tag, status in (("unit", "unproven"), ("e2e", "manual")):
+            with self.subTest(tag=tag, status=status):
+                self.setUp()
+                (self.root / "task-criteria").write_text(f"- [ ] #1 Required proof [{tag}]\n")
+                review = {"verdict": "approve", "findings": [], "criteria": [self._criterion(status=status)]}
+                self._pipeline(reviews=[review, review])
+                self._run_pipeline(1)
+                self.assertEqual(self._status()["review"], "changes")
+                self.assertIn(f"AC #1 [{tag}] lacks automated proof", self._comments()[0])
+                self.assertIn("lacks automated proof", self._prompts("coder")[-1])
+                self._assert_closed(False)
+
+    def test_manual_tags_cannot_be_reported_as_proven(self) -> None:
+        for tag in ("tester", "jan"):
+            with self.subTest(tag=tag):
+                self.setUp()
+                (self.root / "task-criteria").write_text(f"- [ ] #1 Manual verification [{tag}]\n")
+                self._assert_unusable_review(json.dumps({
+                    "verdict": "approve", "findings": [], "criteria": [self._criterion()],
+                }))
+
+    def test_manual_close_sets_to_test_even_with_all_criteria_proven(self) -> None:
+        (self.root / "task-labels").write_text("agent, manual-close\n")
+        self._pipeline(reviews=[{"verdict": "approve", "findings": []}])
+        self._run_pipeline(0)
+        self._assert_closed(True, "To Test")
+
+    def test_missing_reviewer_preserves_existing_ticks_without_adding_any(self) -> None:
+        (self.root / "task-criteria").write_text("- [x] #1 Already checked\n- [ ] #2 Unchecked\n")
+        self._pipeline(review_model=None)
+        self._run_pipeline(0)
+        self._assert_closed(True, "To Test", ())
+        summary = self._git(self.origin, "show", f"{self.BRANCH}:backlog/task-34.md")
+        self.assertIn("- [x] #1 Already checked", summary)
+        self.assertIn("- [ ] #2 Unchecked", summary)
+        self.assertIn("AC #1:", summary)
+        self.assertIn("AC #2:", summary)
+
+    def test_changed_criteria_do_not_receive_stale_evidence(self) -> None:
+        (self.root / "task-close-criteria").write_text("- [ ] #1 Different behaviour [jan]\n")
+        self._pipeline(reviews=[{"verdict": "approve", "findings": []}])
+        self._run_pipeline(0)
+        self._assert_closed(False)
+        self.assertEqual(self._status()["state"], "green")
+        self.assertIn("evidence could not be applied", self._status()["message"])
+        log = (self.base / "runs" / self.run_id / "close.log").read_text()
+        self.assertIn("Task criteria changed since the review", log)
+
+    def test_finalization_failures_keep_the_run_green(self) -> None:
+        for marker, reason in (
+            ("backlog-edit-fails", "backlog edit failed"),
+            ("backlog-edit-outside", "the edit touched files outside backlog/"),
+        ):
+            with self.subTest(marker=marker):
+                self.setUp()
+                (self.root / marker).touch()
+                self._pipeline(reviews=[{"verdict": "approve", "findings": []}])
+                self._run_pipeline(0)
+                self.assertEqual(self._status()["state"], "green")
+                self.assertIn(reason, self._status()["message"])
+                tree = self._git(self.origin, "ls-tree", "-r", "--name-only", self.BRANCH)
+                self.assertNotIn("backlog/task-34.md", tree.splitlines())
+                self.assertNotIn("outside-backlog.txt", tree.splitlines())
+                self.assertEqual(self._git(self.clone, "status", "--porcelain"), "")
+
+    def test_manual_and_unproven_criteria_allow_empty_evidence(self) -> None:
+        (self.root / "task-criteria").write_text("- [ ] #1 Manual [jan]\n- [ ] #2 Not yet verified\n")
+        self._pipeline(reviews=[{"verdict": "approve", "findings": [], "criteria": [
+            self._criterion(1, "manual", ""), self._criterion(2, "unproven", ""),
+        ]}])
+        self._run_pipeline(0)
+        self._assert_closed(True, "To Test", ())
+        summary = self._git(self.origin, "show", f"{self.BRANCH}:backlog/task-34.md")
+        self.assertIn("AC #1: Manual verification required. (manual)", summary)
+        self.assertIn("AC #2: No objective evidence supplied. (unproven)", summary)
+
+    def test_done_or_to_test_task_is_left_unchanged(self) -> None:
+        for status in ("Done", "To Test"):
+            with self.subTest(status=status):
+                self.setUp()
+                self._pipeline(reviews=[{"verdict": "approve", "findings": []}], task_status=status)
+                self._run_pipeline(0)
+                self.assertNotIn("backlog task edit TASK-34 ", self._calls())
+                self.assertEqual(self._git(self.origin, "show", f"{self.BRANCH}:backlog/task-34.md"),
+                                 f"Status: {status}\n")
+                self.assertEqual(self._git(self.origin, "rev-list", "--count", f"main..{self.BRANCH}").strip(), "1")
+
     def test_reviewer_exit_failure_is_failed_even_with_approve_json(self) -> None:
         self._pipeline(reviews=[{"verdict": "approve", "findings": []}])
         (self.root / "review-rc").write_text("7")
@@ -680,11 +866,14 @@ class RunTaskCloneTests(unittest.TestCase):
     def test_review_comment_is_sanitised(self) -> None:
         token = "ghp_" + "a" * 30
         hostile = f"see https://evil.example/x?t={token} and ping @someone <b>now</b> [x](y) {token}"
-        self._pipeline(reviews=[{"verdict": "approve", "findings": [self._finding("minor", hostile)]}])
+        self._pipeline(reviews=[{"verdict": "approve", "findings": [self._finding("minor", hostile)],
+                                 "criteria": [self._criterion(evidence=hostile)]}])
         self._run_pipeline(0)
         comment = self._comments()[0]
+        summary = self._git(self.origin, "show", f"{self.BRANCH}:backlog/task-34.md")
         for leaked in ("evil.example", "ghp_", "@someone", "<b>", "](y"):
             self.assertNotIn(leaked, comment)
+            self.assertNotIn(leaked, summary)
         self.assertIn("[link removed]", comment)
 
     def test_review_fix_round_does_not_use_up_the_ci_fix_rounds(self) -> None:
@@ -1097,7 +1286,7 @@ class RunTaskCloneTests(unittest.TestCase):
         self._automerge(review_model=None)
         self._run_pipeline(0)
         self._assert_not_merged("no approved second-model review")
-        self._assert_closed(True)
+        self._assert_closed(True, "To Test", ())
 
     def test_automerge_never_merges_requested_changes(self) -> None:
         blocking = {"verdict": "changes", "findings": [self._finding()]}
@@ -1115,14 +1304,14 @@ class RunTaskCloneTests(unittest.TestCase):
                 self._assert_not_merged(f"task has the label {label}")
                 self.assertEqual(self._merge_calls(), [])
 
-    def test_automerge_merges_manual_close_without_closing_the_task(self) -> None:
+    def test_automerge_merges_manual_close_after_to_test_commit_checks(self) -> None:
         self._automerge(labels="agent, manual-close")
         self._run_pipeline(0)
         status = self._status()
         self.assertEqual(status["state"], "merged", status)
-        self.assertIn("label manual-close: task not closed", status["message"])
-        self._assert_closed(False)
-        self.assertEqual((self.root / "checks-count").read_text(), "1")   # head unchanged: no second wait
+        self.assertIn("task set to To Test", status["message"])
+        self._assert_closed(True, "To Test")
+        self.assertEqual((self.root / "checks-count").read_text(), "2")
         self.assertEqual(len(self._merge_calls()), 1)
         self.assertIn(f"--match-head-commit {self._branch_head()}", self._merge_calls()[0])
 

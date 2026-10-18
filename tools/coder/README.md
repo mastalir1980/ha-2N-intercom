@@ -82,12 +82,27 @@ echo <model-id> | sudo tee /etc/ha2n-coder/review-model     # povinné pro revie
 echo high       | sudo tee /etc/ha2n-coder/review-effort    # volitelné (stejné hodnoty jako effort)
 ```
 
-Review dostane úkol, celý diff proti `origin/main` a pravidla z `CLAUDE.md` (architektura, Definition of
-Done) a zapíše JSON `{verdict: approve|changes, findings: [{severity: blocking|minor, file, line, summary}]}`.
-Jakákoli jeho změna souborů se zahodí. Verdikt a nálezy se přidají jako jeden komentář do PR (bez cen
-a bez dat o VM; odkazy, tokeny a zmínky se z textu nálezů odstraní). Nečitelný výstup je „review failed“,
-nikdy ne approve. Blokující nálezy jdou kodérovi zpět v jednom kole `review-fix-1` (nezapočítává se do 3 kol
-oprav CI), pak znovu checky a ještě jedno review. Úkol se zavře až po verdiktu `approve`.
+The reviewer receives the task, the full diff against `origin/main` and the rules from `CLAUDE.md`
+(architecture, definition of done), and writes this JSON contract:
+
+```text
+{verdict: approve|changes,
+ findings: [{severity: blocking|minor, file, line, summary}],
+ criteria: [{id: 1, status: proven|manual|unproven, evidence: "..."}]}
+```
+
+`criteria` must include every task criterion exactly once, including already checked ones, with numeric IDs,
+known statuses and string evidence (non-empty for `proven`). `proven` names an objective test/check and its
+result; a green suite alone does not prove behaviour it does not cover. A trailing `[unit]`/`[e2e]` verifier
+tag requires automated proof; if missing, the criterion adds a blocking finding even if the reviewer says
+`approve`. `[tester]`/`[jan]` criteria must be `manual`. Untagged criteria may remain `manual` or `unproven`
+without blocking an otherwise correct change.
+
+All reviewer file changes are discarded. Verdict, findings and per-criterion evidence are posted in one PR
+comment (no costs or VM data; links, tokens and mentions are sanitized, including evidence later stored in
+the task). Invalid/incomplete output is `review failed`, never approval, and no criteria are ticked.
+Blocking findings return to the coder for one `review-fix-1` round (separate from the three CI fix rounds),
+followed by checks and another review. Task finalization requires `approve` when review is configured.
 Review nemá token k repu, `git push`, `gh` ani `url` mají zakázané jako u kodéra.
 
 Aktualizace po změně v `tools/coder/`: `git pull` v instalačním klonu a znovu `install-vm.sh`.
@@ -124,11 +139,17 @@ a na VM zkontroluj `ha2n-run-task --next` se zapnutým `autostart` na úkolu se 
 - Logy celého běhu: `/var/lib/ha2n-coder/runs/<run>/` (prompt, výstup Copilotu, brány, patche,
   checky).
 - Pokud je vlastní klon poškozený, obnovíš ho příkazem `sudo rm -rf /var/lib/ha2n-coder/repo`; další běh ho znovu naklonuje (nejdřív ověř, že žádný běh neprobíhá).
-- Když jsou všechny checky zelené (včetně `e2e-pi`) a review dalo `approve` (nebo je vypnuté), kodér přidá do PR **jeden poslední commit**: úkol dostane
-  stav *Done*, odškrtnou se kritéria a doplní se shrnutí (odkaz na PR, checky, počet oprav). Na `main` se to dostane
-  až mergem (tvým, nebo auto-merge). Když PR nikdo nezamerguje, na `main` se nezmění nic. Úkol se štítkem `manual-close` kodér nechá být
-  (pro věci, které se ověřují až po mergi). Když se zavření nepovede, běh zůstane `green` a ve zprávě stojí, že
-  úkol musíš zavřít ručně. Rodičovské úkoly (třeba TASK-2) se zavírají ručně.
+- After all checks (including `e2e-pi`) are green and review says `approve` (or is disabled), the coder adds
+  **one final commit**: only `proven` criteria are ticked, and the final summary records the PR, checks,
+  fix-round count and one `AC #n: evidence (status)` line per criterion. Without a configured review-model,
+  nothing is ticked; every criterion is recorded as unproven and the task becomes *To Test*.
+  *Done* requires every criterion to be proven and no `manual-close` label; otherwise the status is *To Test*.
+  `manual-close` remains an explicit marker requiring Jan's verification, even when all criteria are proven.
+  Tasks already *Done* or *To Test* are left unchanged.
+  *To Test* on `main` means merged with green automated checks but outstanding evidence/manual verification;
+  the final commit records that status in advance. Jan confirms manual checks before moving it to *Done*.
+  Nothing changes on `main` until the PR is merged. Finalization failures leave the run `green` with an
+  explicit instruction to finalize by hand. Parent tasks (such as TASK-2) are closed manually.
 - GitHub na posledním commitu pustí checky znovu (filtr cest hodnotí celý diff PR). Bez auto-merge na ně kodér
   nečeká; s auto-merge ano (viz *Auto-merge*).
 
@@ -175,9 +196,9 @@ jen v self-checku vypíše, jestli je zapnutý. Bez souboru se kodér chová jak
   - hlavní commit se od checků nezměnil: `gh pr merge --merge --match-head-commit <sha> --delete-branch`.
 - Po mergi GitHub smaže větev PR na remote (`--delete-branch`). Lokální klon a pracovní adresáře běhu se
   uklízejí jako dřív. U nezamergovaného PR větev zůstává.
-- Commit, který zavírá úkol, je nový hlavní commit a GitHub na něm pustí checky znovu (včetně `e2e-pi`).
-  Kodér proto před mergem počká na checky i na něm. U `manual-close` (úkol se nezavírá) se hlavní commit nemění
-  a merguje se hned; úkol pak zůstává pro tvé ověření (*To Test*), kodér ho na *Done* nenastaví.
+- The finalization commit is a new head, so GitHub runs checks on it again (including `e2e-pi`).
+  The coder waits for these checks before auto-merge, including for `manual-close` tasks that now get
+  a *To Test* commit with proven criteria ticked and per-criterion evidence. It never sets them *Done*.
 - Odmítnutý merge (konflikt, ochrana větve, změněný hlavní commit, červené nebo nedokončené checky na zavíracím
   commitu): stav zůstane `green`, důvod je ve zprávě i v komentáři u PR. Žádné opakování, PR čeká na tebe.
 - Po úspěšném mergi: stav `merged` a **jednou** `ha2n-run-task --next`. Ten dál platí celý: bez
@@ -205,6 +226,10 @@ a `bash -n` všech skriptů. Auto-merge (TASK-46): vypnutý přepínač, approve
 a smazání větve na remote, a jednou `--next` (spuštění dalšího úkolu, vypnutý autostart, denní limit), chybějící review nebo `changes`, štítky
 `release`/`manual-path`, chráněné cesty, změněný hlavní commit, odmítnutý merge, červené checky na zavíracím commitu
 a `manual-close`. `sandbox.sh` samotný běží jen na VM (`bash -n` v testech).
+Per-criterion evidence (TASK-36): all proven → Done with every criterion ticked; mixed/manual/unproven or
+no review-model → To Test with only proven criteria ticked; manual-close → To Test even with full proof.
+Malformed/incomplete criteria fail review without ticking anything; automated verifier tags without proof
+block review, manual tags cannot be marked proven, and Done/To Test tasks remain unchanged.
 
 Proměnná `HA2N_CODER_TEST_ROOT` přesměruje pracovní adresáře, cestu k testovací náhradě tokenu
 a přidá testovací `bin` na `PATH`; kontrola uživatele zůstává platná. Je jen pro testy:

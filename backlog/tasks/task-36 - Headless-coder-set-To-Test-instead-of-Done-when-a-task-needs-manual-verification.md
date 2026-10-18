@@ -3,11 +3,11 @@ id: TASK-36
 title: >-
   Headless coder: per-criterion evidence from the reviewer; tick only proven
   criteria, To Test when any remain
-status: To Do
+status: In Progress
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-15 12:13'
-updated_date: '2026-10-18 15:47'
+updated_date: '2026-10-18 16:22'
 labels:
   - agent
   - infra
@@ -41,8 +41,25 @@ close_task in tools/coder/run-task.sh (around line 478-514) ticks every unchecke
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. run-task.sh close_task(): read labels/criteria from $DIR/task.txt; decide target status (To Test vs Done); when To Test, only --check-ac for criteria without the manual markers; keep the backlog-only-diff guard and the never-fail-a-green-run rule.
-2. Extend the stub simulation from TASK-25.
-3. Rules/docs.
-Must not change: protected paths, token handling, the single closing commit.
+1. Extend review.md with per-criterion evidence and verifier-tag rules. Validate exact criterion IDs, statuses, evidence and tag semantics in run-task.sh; retain only sanitized results for finalization.
+2. Update close_task to tick only proven criteria, append AC evidence lines and choose Done only for a fully proven task without manual-close; otherwise choose To Test, including without a review model. Leave Done/To Test tasks unchanged and preserve the backlog-only guard, non-fatal finalization and single closing commit.
+3. Extend hermetic pipeline simulations for evidence validation, verifier tags, partial/no evidence, existing terminal statuses and auto-merge of the closing commit.
+4. Synchronize CLAUDE.md, .github/copilot-instructions.md and tools/coder/README.md. Run coder regressions and required Python validation, then staging E2E if configured.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented the per-criterion reviewer contract and strict validation of complete numeric IDs, statuses, proven evidence and trailing verifier tags. Sanitized evidence is included in the PR review comment and final task summary. Finalization checks only proven criteria, chooses Done only with complete proof and no manual-close label, otherwise To Test (including when review is disabled), and leaves Done/To Test tasks unchanged. Added a stale-criteria guard while retaining the backlog-only diff guard, non-fatal finalization and a single closing commit. Updated both rule files and the coder README.
+Validation: the complete integration suite passed (675 tests) on Python 3.14 after installing tests/requirements.txt in an isolated session venv; validate.py and py_compile passed. The initial coder simulation suite passed (67 tests); final additional safety regressions are being verified.
+E2E blocker: bash e2e/e2e.sh wip exited 2 with "run e2e/e2e.sh setup first". This worktree has neither the E2E venv nor its local environment configuration. No staging or production system was contacted. Leave TASK-36 In Progress and do not claim the full definition of done until a configured staging E2E run is green. No commit or push was requested or performed.
+
+Final verification: all 70 coder regression tests passed (including finalization rollback, stale evidence rejection and pre-checked criteria without a reviewer).
+AC #1: malformed/missing/duplicate/unknown IDs, invalid statuses and empty proven evidence are rejected by test_review_json_with_malformed_criteria_is_failed, test_review_json_without_criteria_is_failed and test_review_must_cover_checked_and_unchecked_criteria.
+AC #2: verifier-tag semantics are covered by test_all_criteria_proven_sets_done_and_ticks_all, test_unproven_automated_tags_block_even_an_approve_verdict and test_manual_tags_cannot_be_reported_as_proven.
+AC #3: remote task contents and AC evidence lines are asserted by the all-proven/mixed tests and the missing-reviewer tests; test_review_comment_is_sanitised also checks stored evidence.
+AC #4: status transitions and existing Done/To Test states are covered by test_manual_close_sets_to_test_even_with_all_criteria_proven, test_mixed_evidence_sets_to_test_and_ticks_only_proven and test_done_or_to_test_task_is_left_unchanged.
+AC #5: hermetic simulations cover all required cases and test_automerge_merges_manual_close_after_to_test_commit_checks verifies the new finalization commit is checked before merge.
+AC #6: CLAUDE.md, .github/copilot-instructions.md and tools/coder/README.md consistently document per-criterion evidence, To Test and the explicit manual-close marker. The shared status rules were compared for consistency.
+All implementation criteria have local evidence; task status and acceptance checkboxes remain unchanged pending the mandatory staging E2E gate.
+<!-- SECTION:NOTES:END -->
