@@ -882,7 +882,7 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
             selector.SelectSelectorConfig(
                 options=grant_user_options,
                 mode=selector.SelectSelectorMode.DROPDOWN,
-                custom_value=True,
+                custom_value=False,
             )
         )
 
