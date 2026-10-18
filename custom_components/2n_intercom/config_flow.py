@@ -1142,7 +1142,7 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
         detected or the entry isn't loaded, relay configuration is skipped.
         """
         if not self._detected_relays:
-            self._data[CONF_RELAYS] = []
+            self._data[CONF_RELAYS] = list(self._current_option(CONF_RELAYS, []) or [])
             return await self._async_create_entry()
 
         return await self.async_step_relay(relay_index=0)
@@ -1175,11 +1175,15 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
             if index + 1 < len(self._detected_relays):
                 return await self.async_step_relay(relay_index=index + 1)
 
-            self._data[CONF_RELAYS] = [
-                self._relay_inputs[cap["switch"]]
-                for cap in self._detected_relays
-                if cap["switch"] in self._relay_inputs
-            ]
+            # Keep saved overrides for relays not shown in this flow.
+            relays = {
+                relay[CONF_RELAY_NUMBER]: relay
+                for relay in self._current_option(CONF_RELAYS, []) or []
+                if isinstance(relay, dict)
+                and isinstance(relay.get(CONF_RELAY_NUMBER), int)
+            }
+            relays.update(self._relay_inputs)
+            self._data[CONF_RELAYS] = list(relays.values())
             return await self._async_create_entry()
 
         index = self._relay_index

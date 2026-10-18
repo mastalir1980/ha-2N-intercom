@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from copy import deepcopy
 import json
 import logging
 import sys
@@ -251,6 +252,9 @@ def load_config_flow_module():
     ensure_package("custom_components.2n_intercom")
     load_module("custom_components.2n_intercom.const", CONST_PATH)
     load_module("custom_components.2n_intercom.api", API_PATH)
+    coordinator_module = types.ModuleType("custom_components.2n_intercom.coordinator")
+    coordinator_module.TwoNIntercomRuntimeData = object
+    sys.modules["custom_components.2n_intercom.coordinator"] = coordinator_module
     return load_module("custom_components.2n_intercom.config_flow", CONFIG_FLOW_PATH)
 
 
@@ -1539,6 +1543,203 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["type"], "create_entry")
         self.assertEqual(result["data"]["name"], "Updated")
         self.assertEqual(result["data"]["scan_interval"], 10)
+
+    async def test_options_without_detected_relays_preserve_saved_overrides(self) -> None:
+        for camera_enabled in (False, True):
+            for caps in (None, {}, {"switches": []}):
+                with self.subTest(camera=camera_enabled, caps=caps):
+                    saved_relays = [
+                        {
+                            "relay_number": 3,
+                            "relay_name": "Gate",
+                            "relay_device_type": "gate",
+                            "relay_pulse_duration": 15000,
+                        },
+                        {
+                            "relay_number": 1,
+                            "relay_name": "Door",
+                            "relay_device_type": "door",
+                            "relay_pulse_duration": 2500,
+                        },
+                    ]
+                    entry = FakeConfigEntry(
+                        "entry-1",
+                        {
+                            "host": "192.0.2.20", "port": 443,
+                            "username": "u", "password": "p",
+                        },
+                        options={"relays": deepcopy(saved_relays)},
+                    )
+                    original_data = dict(entry.data)
+                    if caps is not None:
+                        entry.runtime_data = types.SimpleNamespace(
+                            coordinator=types.SimpleNamespace(switch_caps=caps)
+                        )
+                    flow = self._make_options_flow(entry)
+                    form = await flow.async_step_init(None)
+                    self.assertEqual(form["step_id"], "device")
+                    device_input = {
+                        "name": "Updated",
+                        "enable_camera": camera_enabled,
+                        "enable_doorbell": True,
+                        "scan_interval": 42,
+                    }
+                    result = await flow.async_step_device(dict(device_input))
+                    expected = {
+                        **device_input,
+                        "relays": saved_relays,
+                        "allow_insecure": False,
+                    }
+                    if camera_enabled:
+                        self.assertEqual(result["step_id"], "camera")
+                        camera_input = {
+                            "live_view_mode": "mjpeg",
+                            "camera_source": "internal",
+                            "mjpeg_width": 640,
+                            "mjpeg_height": 480,
+                            "mjpeg_fps": 5,
+                        }
+                        result = await flow.async_step_camera(dict(camera_input))
+                        expected.update(camera_input)
+
+                    self.assertEqual(result["type"], "create_entry")
+                    self.assertEqual(result["data"], expected)
+                    self.assertEqual(entry.options, {"relays": saved_relays})
+                    self.assertEqual(entry.data, original_data)
+
+    async def test_options_merge_shown_relays_with_unshown_saved_overrides(self) -> None:
+        saved_relays = [
+            {
+                "relay_number": 1,
+                "relay_name": "Gate",
+                "relay_device_type": "gate",
+                "relay_pulse_duration": 15000,
+            },
+            {
+                "relay_number": 3,
+                "relay_name": "Door",
+                "relay_device_type": "door",
+                "relay_pulse_duration": 2500,
+            },
+            {
+                "relay_number": 5,
+                "relay_name": "Side Gate",
+                "relay_device_type": "gate",
+                "relay_pulse_duration": 10000,
+            },
+        ]
+        entry = FakeConfigEntry(
+            "entry-1",
+            {"host": "192.0.2.20", "port": 443, "username": "u", "password": "p"},
+            options={"relays": deepcopy(saved_relays)},
+        )
+        entry.runtime_data = _make_runtime([
+            {"switch": 3, "enabled": True, "switchOnDuration": 5},
+            {"switch": 5, "enabled": False},
+            {"switch": 7, "enabled": True, "switchOnDuration": 4},
+        ])
+        flow = self._make_options_flow(entry)
+        device_input = {
+            "name": "Updated", "enable_camera": False,
+            "enable_doorbell": True, "scan_interval": 42,
+        }
+        result = await flow.async_step_device(dict(device_input))
+        self.assertEqual(result["step_id"], "relay")
+        for key, value in saved_relays[1].items():
+            self.assertEqual(_form_default(result, key), value)
+        updated_relay = {
+            "relay_number": 3,
+            "relay_name": "Updated Gate",
+            "relay_device_type": "gate",
+            "relay_pulse_duration": 12000,
+        }
+        result = await flow.async_step_relay(dict(updated_relay))
+        self.assertEqual(result["step_id"], "relay")
+        new_relay = {
+            "relay_number": 7,
+            "relay_name": "Relay 7",
+            "relay_device_type": "door",
+            "relay_pulse_duration": 4000,
+        }
+        for key, value in new_relay.items():
+            self.assertEqual(_form_default(result, key), value)
+        self.assertEqual(entry.options, {"relays": saved_relays})
+        self.assertNotIn("relays", flow._data)
+
+        result = await flow.async_step_relay(dict(new_relay))
+
+        self.assertEqual(result["type"], "create_entry")
+        self.assertEqual(result["data"], {
+            **device_input,
+            "relays": [
+                saved_relays[0], updated_relay, saved_relays[2], new_relay,
+            ],
+            "allow_insecure": False,
+        })
+        self.assertEqual(entry.options, {"relays": saved_relays})
+
+    async def test_saved_gate_remains_cover_after_empty_caps_options_and_reload(self) -> None:
+        from test_cover import load_cover_module
+        from test_switch import (
+            FakeConfigEntry as PlatformConfigEntry,
+            FakeCoordinator,
+            load_switch_module,
+        )
+
+        cover_module = load_cover_module()
+        switch_module = load_switch_module()
+        gate = {
+            "relay_number": 2,
+            "relay_name": "Gate",
+            "relay_device_type": "gate",
+            "relay_pulse_duration": 15000,
+        }
+        entry = PlatformConfigEntry(
+            "entry-1",
+            {
+                "name": "Intercom", "host": "192.0.2.20", "port": 443,
+                "username": "u", "password": "p",
+            },
+            options={"relays": [gate]},
+        )
+        entry.runtime_data = types.SimpleNamespace(coordinator=FakeCoordinator())
+        hass = FakeHass([entry])
+        flow = self._make_options_flow(entry, hass)
+        result = await flow.async_step_device({
+            "name": "Intercom", "enable_camera": False,
+            "enable_doorbell": True, "scan_interval": 60,
+        })
+        self.assertEqual(result["type"], "create_entry")
+        hass.config_entries.async_update_entry(entry, options=result["data"])
+
+        coordinator = FakeCoordinator(switch_caps={
+            "switches": [
+                {"switch": 1, "enabled": True, "switchOnDuration": 5},
+                {"switch": 2, "enabled": True, "switchOnDuration": 15},
+            ],
+        })
+        entry.runtime_data = types.SimpleNamespace(coordinator=coordinator)
+        covers = []
+        switches = []
+        await cover_module.async_setup_entry(
+            hass, entry,
+            lambda entities, update_before_add=False: covers.extend(entities),
+        )
+        await switch_module.async_setup_entry(
+            hass, entry,
+            lambda entities, update_before_add=False: switches.extend(entities),
+        )
+
+        self.assertEqual([cover._attr_unique_id for cover in covers], [
+            "entry-1_cover_2",
+        ])
+        self.assertIsInstance(covers[0], cover_module.TwoNIntercomCover)
+        self.assertEqual(covers[0]._attr_device_class, "gate")
+        self.assertEqual(covers[0]._attr_name, gate["relay_name"])
+        self.assertEqual(covers[0]._pulse_duration, gate["relay_pulse_duration"])
+        self.assertEqual([switch._attr_unique_id for switch in switches], [
+            "entry-1_switch_1",
+        ])
 
     async def test_device_step_with_camera_advances_to_camera(self) -> None:
         entry = FakeConfigEntry(

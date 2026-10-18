@@ -263,6 +263,8 @@ The options flow has up to three steps:
 
 Intermediate steps show **Next**; the last step shows **Submit**. The flow only moves forward: to change values from an earlier step, close the dialog and start again. Values entered in this session — camera settings and each relay's override — stay in the draft and are saved only when you submit the last step. Closing the dialog discards the draft.
 
+Saved relay names, door/gate types, and pulse durations are preserved for relays not shown in the flow, including when no relays can be detected or the integration is not loaded. Only relays shown in the relay steps have their overrides updated.
+
 | Step | Parameter | Type | Default | Description |
 |---|---|---|---|---|
 | Device | `name` | string | *(from setup)* | Display name |
