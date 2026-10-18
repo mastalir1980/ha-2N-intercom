@@ -3,11 +3,11 @@ id: TASK-15
 title: >-
   Clarify credential fields in the options flow and point users to Reconfigure
   for API credentials
-status: To Test
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-11 18:43'
-updated_date: '2026-10-15 12:12'
+updated_date: '2026-10-18 13:23'
 labels:
   - config-flow
   - ux

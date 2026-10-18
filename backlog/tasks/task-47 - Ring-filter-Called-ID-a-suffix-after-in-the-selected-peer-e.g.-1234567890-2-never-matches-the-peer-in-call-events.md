@@ -3,11 +3,11 @@ id: TASK-47
 title: >-
   Ring filter (Called ID): a suffix after "/" in the selected peer (e.g.
   "1234567890/2") never matches the peer in call events
-status: To Test
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-16 14:40'
-updated_date: '2026-10-16 15:37'
+updated_date: '2026-10-18 13:23'
 labels:
   - bug
   - coordinator
