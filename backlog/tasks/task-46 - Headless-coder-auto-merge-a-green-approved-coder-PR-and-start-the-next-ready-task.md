@@ -7,7 +7,7 @@ status: To Test
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-15 19:32'
-updated_date: '2026-10-16 09:29'
+updated_date: '2026-10-18 16:05'
 labels:
   - agent
   - infra
@@ -46,7 +46,7 @@ Approach (for the implementer to confirm in the plan): after the green/approve s
 - [x] #3 Never auto-merged: PRs of tasks labelled release or manual-path, PRs whose diff touches a protected path (.github/, e2e/ci/, e2e/scripts/, tools/coder/, CLAUDE.md, .github/copilot-instructions.md, backlog/config.yml), and PRs not opened by this run
 - [ ] #4 After a successful merge the run records the new end state merged (visible in ha2n-task-status --list) and starts --next once; --next keeps the TASK-35 kill switch, daily limit and readiness rules
 - [x] #5 A rejected merge (conflict, protection, changed head) leaves the state green with the reason and a PR comment; no retry loop
-- [ ] #6 Tasks with label manual-close are merged like others; the coder still does not set them Done (they wait for Jan in To Test once TASK-36 lands)
+- [x] #6 Tasks with label manual-close are merged like others; the coder still does not set them Done (they wait for Jan in To Test once TASK-36 lands)
 - [ ] #7 Hermes instructions in tools/coder/README.md report the merged end state to Jan exactly once, with the PR link and the next task started (if any)
 - [x] #8 Stub simulation covers: switch off; green+approve merges and starts next; review changes-requested or missing does not merge; release/manual-path/protected-path never merge; changed head refused; merge refusal keeps green; bash -n clean
 - [x] #9 Rules and docs in sync: CLAUDE.md and .github/copilot-instructions.md ("the coder never merges" replaced by the auto-merge rule and its exceptions), tools/coder/README.md (Czech), docs/OVERVIEW.md pipeline section
@@ -82,4 +82,6 @@ Rebased (uncommitted work) onto TASK-35 d421faa: no conflicts; auto_merge reads 
 Jan's decisions (2026-10-16): (1) keep waiting for the re-run of all checks incl. e2e-pi on the close commit; (2) delete the remote branch on merge: gh pr merge --merge --match-head-commit <sha> --delete-branch (local cleanup unchanged; stub deletes the ref, tests assert it is gone after a merge and kept when not merged; README/CLAUDE.md/copilot-instructions/OVERVIEW updated); (3) any run that merges starts --next once, the autostart file stays the master switch. TASK-35 review findings were already fixed in d421faa (deps_done via --json with fallbacks, stopped runs without branch do not block, backlog version in install-vm.sh); TASK-46 sits on it. Validation: coder suite 57/57, unit tests OK, validate.py OK, bash -n, git diff --check.
 
 2026-10-16 (Claude review): merged via PR #59 (fa6ed9f). Verified: coder stub suite 57/57 OK incl. the auto-merge cases; rules identical in CLAUDE.md and .github/copilot-instructions.md. Decisions from Jan: wait for checks again on the close commit, delete the remote branch on merge, any merging run starts --next once. Open until verified on the VM: AC #2 (real gh pr merge --match-head-commit after the second e2e-pi run), AC #4 (merged state and --next via systemd/sudo), AC #6 (manual-close merge), AC #7 (Hermes reports the merge once).
+
+AC evidence (tester review 2026-10-18): stub simulation tests in tools/coder/tests; rules in CLAUDE.md + copilot-instructions. #2, #4, #7 wait for the first real auto-merge on the VM.
 <!-- SECTION:NOTES:END -->

@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-13 19:54'
-updated_date: '2026-10-18 13:23'
+updated_date: '2026-10-18 16:09'
 labels:
   - bug
   - coordinator
@@ -52,15 +52,15 @@ Label manual-close: a ring needs a physical button press, so Jan verifies on the
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 CallStateChanged ringing + direction=outgoing sets the ring (ring_active True, last_ring_time set, ring snapshot captured once) - unit test
-- [ ] #2 CallStateChanged ringing + direction=incoming does NOT ring - unit test (replaces test_outgoing_ring_does_not_trigger)
-- [ ] #3 CallSessionStateChanged ringing + originator=button rings; originator=incoming does not; missing originator does not - unit tests
-- [ ] #4 Replay of the full captured sequences from TASK-29 notes: button-press sequence rings exactly once (one snapshot), the incoming-call sequence never rings - unit tests
-- [ ] #5 called_id filter still blocks a non-matching peer and allows a matching peer on an outgoing ring - existing tests updated to direction=outgoing and green
-- [ ] #6 "incoming" is no longer in _RING_STATES; call_state sensor and active_session_id tracking behave as before for both sequences - unit test
-- [ ] #7 docs/ARCHITECTURE.md ring-detection section describes the new rule (direction/originator from the intercom's point of view)
-- [ ] #8 Full unit suite, validate.py and py_compile green on Python 3.12+; PR check e2e-pi green (no new E2E test: ring needs a physical press)
-- [ ] #9 Manual (Jan, E2E intercom on staging): button press -> doorbell on; call into the intercom from My2N -> doorbell stays off
+- [x] #1 CallStateChanged ringing + direction=outgoing sets the ring (ring_active True, last_ring_time set, ring snapshot captured once) - unit test
+- [x] #2 CallStateChanged ringing + direction=incoming does NOT ring - unit test (replaces test_outgoing_ring_does_not_trigger)
+- [x] #3 CallSessionStateChanged ringing + originator=button rings; originator=incoming does not; missing originator does not - unit tests
+- [x] #4 Replay of the full captured sequences from TASK-29 notes: button-press sequence rings exactly once (one snapshot), the incoming-call sequence never rings - unit tests
+- [x] #5 called_id filter still blocks a non-matching peer and allows a matching peer on an outgoing ring - existing tests updated to direction=outgoing and green
+- [x] #6 "incoming" is no longer in _RING_STATES; call_state sensor and active_session_id tracking behave as before for both sequences - unit test
+- [x] #7 docs/ARCHITECTURE.md ring-detection section describes the new rule (direction/originator from the intercom's point of view)
+- [x] #8 Full unit suite, validate.py and py_compile green on Python 3.12+; PR check e2e-pi green (no new E2E test: ring needs a physical press)
+- [x] #9 Manual (Jan, E2E intercom on staging): button press -> doorbell on; call into the intercom from My2N -> doorbell stays off
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -85,6 +85,10 @@ Added regressions for direction/originator normalization and missing/malformed o
 Updated docs/ARCHITECTURE.md and the directly related README doorbell behavior/obsolete false-ring limitation. No KeyPressed handling, options, polling-based detection, version bump, or protected-path changes.
 Local gates passed on Python 3.12.15: targeted coordinator/snapshot/setup tests (238 tests), full unittest discovery (594 tests), validate.py, py_compile, and git diff --check. Full discovery emitted RuntimeWarnings from existing test_api.py coroutine mocks outside the changed code; no failures.
 No E2E or device access was attempted. The e2e-pi PR check and Jan's physical-button/My2N staging verification remain pending. The task stays In Progress with every acceptance criterion unchecked, preserving manual-close.
+
+AC evidence (tester review 2026-10-18): #1-#6 unit tests in tests/ (outgoing/incoming/originator/replay); #7 docs/ARCHITECTURE.md; #8 unit suite 675 OK, e2e-pi green on PR #54. #9 manual (Jan).
+
+AC evidence (tester review 2026-10-18): #1-#6 unit tests in tests/ (outgoing/incoming/originator/replay); #7 docs/ARCHITECTURE.md; #8 unit suite 675 OK, e2e-pi green on PR #54; #9 verified manually by Jan on the E2E intercom.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

@@ -5,7 +5,7 @@ status: To Test
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-14 14:48'
-updated_date: '2026-10-16 09:29'
+updated_date: '2026-10-18 16:05'
 labels:
   - agent
   - infra
@@ -70,4 +70,6 @@ Review fixes (2026-10-16, round 2):
 - install-vm.sh self-check prints the installed backlog.md version; tools/coder/README.md documents the tested versions (1.48.0, 1.53.0).
 
 2026-10-16 (Claude review): merged via PR #58 (03ae2d9, d421faa). Verified: coder stub suite 57/57 OK and bash -n clean on Linux; deps_done checked against real backlog.md 1.53.0 output (TASK-42 blocked by TASK-41, TASK-37 blocked by 7 deps, TASK-41/TASK-45 ready); docs/rules in sync. Open until verified on the VM: AC #3 (systemd timer installed and active) and AC #4 (Hermes reports auto runs once). AC #2 extended (any finished run blocks a retry until the task file changes; ready-check stops do not block), agreed in review.
+
+AC evidence (tester review 2026-10-18): stub simulation tests in tools/coder/tests. #3 real install on the VM and #4 Hermes reporting wait for the first real auto-run.
 <!-- SECTION:NOTES:END -->
