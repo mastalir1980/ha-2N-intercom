@@ -3,11 +3,11 @@ id: TASK-53
 title: >-
   Doorbell event entity (EventDeviceClass.DOORBELL) so HomeKit links the
   doorbell to the camera without YAML
-status: In Progress
+status: To Test
 assignee:
   - '@copilot'
 created_date: '2026-10-18 08:41'
-updated_date: '2026-10-18 08:52'
+updated_date: '2026-10-18 09:54'
 labels:
   - doorbell
   - homekit
