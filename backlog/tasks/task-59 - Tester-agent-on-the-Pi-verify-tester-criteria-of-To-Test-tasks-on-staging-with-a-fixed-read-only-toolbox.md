@@ -7,6 +7,7 @@ status: To Do
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-18 15:50'
+updated_date: '2026-10-18 16:40'
 labels:
   - infra
   - agent
@@ -34,4 +35,5 @@ After the merge, criteria tagged [tester] are verified by the tester agent (Herm
 - [ ] #6 A failing criterion becomes a Backlog bug per e2e/agent/triage.md (type bug, label tester) instead of being ticked
 - [ ] #7 docs/TESTER.md (Czech) is the operating brief for the agent: trigger, steps, allowed commands, forbidden actions, report format
 - [ ] #8 Dry run on TASK-49: staging HA lists the discovered intercom flow; report posted with evidence
+- [ ] #9 The tester can read PR check results (e2e-pi, validate) and PR comments with a read-only GitHub token or the public REST API; the token is stored outside the repo and never printed
 <!-- AC:END -->

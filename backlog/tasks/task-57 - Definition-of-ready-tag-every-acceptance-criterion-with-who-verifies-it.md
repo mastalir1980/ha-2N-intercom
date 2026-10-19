@@ -1,10 +1,11 @@
 ---
 id: TASK-57
 title: 'Definition of ready: tag every acceptance criterion with who verifies it'
-status: To Do
+status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-18 15:47'
+updated_date: '2026-10-19 06:26'
 labels:
   - process
   - manual-path
@@ -22,6 +23,12 @@ The reviewer (TASK-36) and the tester agent need to know which criteria are thei
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 CLAUDE.md and .github/copilot-instructions.md: definition of ready point 3 requires the tag and explains the four values
-- [ ] #2 The grooming agent prompt writes the tag on every proposed criterion
-- [ ] #3 Open tasks assigned @copilot in To Do and the tasks in To Test are retagged via the backlog CLI
+- [x] #2 The grooming agent prompt writes the tag on every proposed criterion
+- [x] #3 Open tasks assigned @copilot in To Do and the tasks in To Test are retagged via the backlog CLI
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-18 (Claude): grooming scheduled task prompt now requires a verifier tag on every proposed criterion and manual-close for any [jan] criterion (AC #2). Retagged TASK-37 and TASK-51 (To Do, @copilot) and TASK-35, TASK-46 (To Test; checked criteria re-checked) (AC #3). CLAUDE.md DoR point 3 and .github/copilot-instructions.md on branch backlog-verifier-tags, waiting for PR (AC #1).
+<!-- SECTION:NOTES:END -->

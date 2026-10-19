@@ -1,5 +1,5 @@
 ---
-id: TASK-56
+id: TASK-60
 title: >-
   Relays only from enabled logical switches: hide relay IO outputs and remove
   the Relay 1 active sensor

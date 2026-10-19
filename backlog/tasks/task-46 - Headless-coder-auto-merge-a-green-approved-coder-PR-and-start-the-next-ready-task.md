@@ -7,7 +7,7 @@ status: To Test
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-15 19:32'
-updated_date: '2026-10-18 16:05'
+updated_date: '2026-10-18 16:38'
 labels:
   - agent
   - infra
@@ -41,15 +41,15 @@ Approach (for the implementer to confirm in the plan): after the green/approve s
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [x] #1 Opt-in: without the root-owned file /etc/ha2n-coder/automerge the coder behaves exactly as today (green, PR waits for Jan); install-vm.sh does not create the file
-- [ ] #2 A PR is merged only when all required checks incl. e2e-pi are green on the head commit, the second-model review verdict is approve, and the head commit is unchanged since the checks ran (gh pr merge --match-head-commit); a run without a configured review-model never auto-merges
-- [x] #3 Never auto-merged: PRs of tasks labelled release or manual-path, PRs whose diff touches a protected path (.github/, e2e/ci/, e2e/scripts/, tools/coder/, CLAUDE.md, .github/copilot-instructions.md, backlog/config.yml), and PRs not opened by this run
-- [ ] #4 After a successful merge the run records the new end state merged (visible in ha2n-task-status --list) and starts --next once; --next keeps the TASK-35 kill switch, daily limit and readiness rules
-- [x] #5 A rejected merge (conflict, protection, changed head) leaves the state green with the reason and a PR comment; no retry loop
-- [x] #6 Tasks with label manual-close are merged like others; the coder still does not set them Done (they wait for Jan in To Test once TASK-36 lands)
-- [ ] #7 Hermes instructions in tools/coder/README.md report the merged end state to Jan exactly once, with the PR link and the next task started (if any)
-- [x] #8 Stub simulation covers: switch off; green+approve merges and starts next; review changes-requested or missing does not merge; release/manual-path/protected-path never merge; changed head refused; merge refusal keeps green; bash -n clean
-- [x] #9 Rules and docs in sync: CLAUDE.md and .github/copilot-instructions.md ("the coder never merges" replaced by the auto-merge rule and its exceptions), tools/coder/README.md (Czech), docs/OVERVIEW.md pipeline section
+- [x] #1 Opt-in: without the root-owned file /etc/ha2n-coder/automerge the coder behaves exactly as today (green, PR waits for Jan); install-vm.sh does not create the file [unit]
+- [ ] #2 A PR is merged only when all required checks incl. e2e-pi are green on the head commit, the second-model review verdict is approve, and the head commit is unchanged since the checks ran (gh pr merge --match-head-commit); a run without a configured review-model never auto-merges [jan]
+- [x] #3 Never auto-merged: PRs of tasks labelled release or manual-path, PRs whose diff touches a protected path (.github/, e2e/ci/, e2e/scripts/, tools/coder/, CLAUDE.md, .github/copilot-instructions.md, backlog/config.yml), and PRs not opened by this run [unit]
+- [ ] #4 After a successful merge the run records the new end state merged (visible in ha2n-task-status --list) and starts --next once; --next keeps the TASK-35 kill switch, daily limit and readiness rules [jan]
+- [x] #5 A rejected merge (conflict, protection, changed head) leaves the state green with the reason and a PR comment; no retry loop [unit]
+- [x] #6 Tasks with label manual-close are merged like others; the coder still does not set them Done (they wait for Jan in To Test once TASK-36 lands) [unit]
+- [ ] #7 Hermes instructions in tools/coder/README.md report the merged end state to Jan exactly once, with the PR link and the next task started (if any) [jan]
+- [x] #8 Stub simulation covers: switch off; green+approve merges and starts next; review changes-requested or missing does not merge; release/manual-path/protected-path never merge; changed head refused; merge refusal keeps green; bash -n clean [unit]
+- [x] #9 Rules and docs in sync: CLAUDE.md and .github/copilot-instructions.md ("the coder never merges" replaced by the auto-merge rule and its exceptions), tools/coder/README.md (Czech), docs/OVERVIEW.md pipeline section [unit]
 <!-- AC:END -->
 
 ## Implementation Plan
