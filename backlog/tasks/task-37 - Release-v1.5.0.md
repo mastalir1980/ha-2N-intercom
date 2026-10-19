@@ -1,11 +1,11 @@
 ---
 id: TASK-37
 title: Release v1.5.0
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-15 12:13'
-updated_date: '2026-10-19 18:46'
+updated_date: '2026-10-19 18:49'
 labels:
   - release
 milestone: m-0
@@ -40,10 +40,10 @@ Release of milestone v1.5.0: everything user-facing merged to main since v1.4.0 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 custom_components/2n_intercom/manifest.json version is 1.5.0 [unit]
-- [ ] #2 CHANGELOG.md has a "## 1.5.0 - <date>" section written for users (what changed and what they may need to do), grouped by Features / Fixes / Docs, built from the tasks of milestone v1.5.0 and the commits since v1.4.0; no internal pipeline/tooling changes [unit]
-- [ ] #3 README and INSTALLATION.md mention every new user-visible option, entity and service from the milestone (check, fix gaps) [unit]
-- [ ] #4 Full unit suite, validate.py and py_compile green; PR check e2e-pi green [e2e]
+- [x] #1 custom_components/2n_intercom/manifest.json version is 1.5.0 [unit]
+- [x] #2 CHANGELOG.md has a "## 1.5.0 - <date>" section written for users (what changed and what they may need to do), grouped by Features / Fixes / Docs, built from the tasks of milestone v1.5.0 and the commits since v1.4.0; no internal pipeline/tooling changes [unit]
+- [x] #3 README and INSTALLATION.md mention every new user-visible option, entity and service from the milestone (check, fix gaps) [unit]
+- [x] #4 Full unit suite, validate.py and py_compile green; PR check e2e-pi green [e2e]
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -67,3 +67,13 @@ AC #4: Python 3.12.15 full unit suite passed (708 tests); python3 validate.py an
 
 Acceptance criteria remain unchecked and status remains In Progress for independent review and orchestrator finalization. No protected paths, tags, GitHub releases or milestone archive were changed.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented by the headless coder. Checks green on 7b4ed82ce after 0 fix round(s): e2e-pi=pass, validate=pass, validate=pass. PR: https://github.com/mastalir1980/ha-2N-intercom/pull/94. Done takes effect when the PR is merged.
+AC #1: manifest.json version changed 1.4.0 -&gt; 1.5.0 in the diff; tests/test_release.py::test_latest_changelog_version_matches_manifest asserts the newest changelog heading version equals the manifest version (passes). (proven)
+AC #2: CHANGELOG.md gains '## 1.5.0 - 2026-10-19' with Features / Fixes / Docs; content matches the integration commits v1.4.0..origin/main (doorbell event migration, SSDP, firmware entity, last-ring image, grant_access, access events, IO inputs/outputs, ring-filter fixes, snapshot resolution, options flow fixes). No pipeline/tooling entries. tests/test_release.py::test_1_5_0_changelog_groups_user_changes_and_explains_migration checks the group order and key topics; I verified claims such as the 6 h firmware interval and config_entry_id fields against the code. (proven)
+AC #3: INSTALLATION.md and README.md diffs add SSDP discovery, image/update/IO input/tamper/output entities, firmware_channel and grant_access_user options, grant_access service and privileges, and correct the service examples to data.config_entry_id (matches services.yaml and __init__.py). tests/test_release.py::test_new_entities_options_and_services_are_in_both_user_guides and test_both_user_guides_warn_about_migration_and_latching_outputs check both guides (pass). (proven)
+AC #4: I ran the full unit suite on this head: 708 tests OK. The orchestrator confirmed validate.py, py_compile and the PR check e2e-pi are green on this head. No runtime code changed beyond the manifest version. (proven)
+<!-- SECTION:FINAL_SUMMARY:END -->
