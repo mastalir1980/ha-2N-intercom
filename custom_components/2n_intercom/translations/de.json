@@ -93,6 +93,7 @@
           "enable_camera": "Kamera aktivieren",
           "enable_doorbell": "Klingel aktivieren",
           "scan_interval": "Backup-Abfrageintervall (Sekunden)",
+          "firmware_channel": "Firmware-Kanal",
           "called_id": "Rufkonto (Peer)",
           "grant_access_user": "Standardbenutzer für Zutrittsfreigabe"
         },
@@ -101,6 +102,7 @@
           "enable_camera": "Kamera-Entität anlegen",
           "enable_doorbell": "Klingel-Entität anlegen",
           "scan_interval": "Backup-Abfrageintervall (2-600 s). Ereignisse liefern Echtzeit-Updates; die Abfrage dient nur als Sicherheitsnetz. Standard 60 s reicht für die meisten Installationen.",
+          "firmware_channel": "Alle sechs Stunden den öffentlichen 2N-Update-Server prüfen. Die AutoUpdate-Einstellungen des Geräts bleiben unverändert; Updates werden in der Weboberfläche des Geräts installiert.",
           "called_id": "Wählen Sie das Konto, das klingeln soll. Alle Anrufe = Klingeln bei jeder Taste.",
           "grant_access_user": "Verzeichnisbenutzer (UUID), in dessen Namen der Dienst grant_access die Tür öffnet, wenn der Aufruf keinen Benutzer angibt. Das Gerät wendet dessen Zutrittsrechte an und protokolliert den Zutritt. Leer lassen, um den Benutzer bei jedem Aufruf zu verlangen."
         }
@@ -149,6 +151,13 @@
     }
   },
   "selector": {
+    "firmware_channel": {
+      "options": {
+        "active_track": "Aktueller Zweig (Active Track)",
+        "lts": "Langzeitunterstützung (LTS)",
+        "beta": "Beta"
+      }
+    },
     "live_view_mode": {
       "options": {
         "auto": "Auto (RTSP > MJPEG > Schnappschüsse)",
@@ -183,6 +192,11 @@
     }
   },
   "entity": {
+    "update": {
+      "firmware": {
+        "name": "Firmware"
+      }
+    },
     "switch": {
       "io_output": {
         "name": "Ausgang {port}"

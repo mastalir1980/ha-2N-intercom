@@ -3,11 +3,11 @@ id: TASK-51
 title: >-
   Add a firmware update entity that shows when new 2N firmware is available and
   links to the device web UI
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-17 09:27'
-updated_date: '2026-10-19 14:56'
+updated_date: '2026-10-19 18:36'
 labels:
   - firmware
   - update-entity
@@ -58,11 +58,32 @@ Expected: one HA update entity per intercom with installed and latest version an
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-Files: new custom_components/2n_intercom/update.py (UpdateEntity, features RELEASE_NOTES only); new small module firmware.py with the update server check only: check(session, package, track, current_ver, lang) -> parsed result or None on 204, using homeassistant.helpers.aiohttp_client.async_get_clientsession(hass), never the device session with the Digest middleware; coordinator.py get_device_info(): add configuration_url (shared helper that builds the web UI URL from entry.data, also used by update.py); keep firmwarePackage from /api/system/info; const.py: CONF_FIRMWARE_CHANNEL, default, track map, FIRMWARE_CHECK_INTERVAL (6 h), FIRMWARE_UPDATE_SERVER_URL; config_flow.py options field; strings.json, translations/{en,de,cs}.json, icons.json; diagnostics.py; __init__.py PLATFORMS; tests/test_update.py, stubs for UpdateEntity/UpdateEntityFeature in tests/_stubs.py; e2e/tests/test_firmware.py read-only using e2elib/twon.py and a direct update server call (independent of api.py). No upload, apply, reject or autoupdate calls anywhere (that is the v1.6.0 task). Must not change: dual Basic/Digest auth in api.py; event-driven state and ring detection; entry.data vs entry.options split; no secrets in logs/diagnostics; broad except only for logged degradation.
+1. Add the read-only firmware response parser and shared credential-free device web UI URL helper; retain firmwarePackage and expose safe firmware diagnostics.
+2. Add the update platform with RELEASE_NOTES only, installed version from the device coordinator, independent six-hour checks via the HA shared session, forced refresh, track filtering, cached results and failure-streak logging.
+3. Wire firmware_channel options, platform registration, strings, all translations and icons without changing device authentication or event handling.
+4. Add unit coverage for every unit criterion and an independent read-only E2E comparison; update README and API reference.
+5. Run the required local Python gates, record implementation evidence without checking criteria or finalizing status, and commit locally on the current task branch.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-19: rescoped by Jan - v1.5.0 only informs (versions, release notes, link to the device web UI). Install moved to the v1.6.0 task that uses the device's built-in updater (GET /api/autoupdate/updatefw, 2N OS >= 3.3).
+
+Implemented the informational firmware update platform and public catalog parser. The entity supports RELEASE_NOTES only, uses the HA shared client session, checks before initial add and on its independent six-hour timer/manual refresh, and cancels its timer on removal. Failed checks retain the previous version and notes and log once per failure streak. No device firmware endpoints or downloads were added; device authentication and log-event handling are unchanged.
+System info is retained from initial setup without a duplicate startup request and refreshed on subsequent coordinator polls so installed firmware changes are visible without reloading. The shared web UI helper supplies credential-free release_url and configuration_url with protocol-default ports omitted. Firmware channel is an options-only preference; device AutoUpdate settings remain untouched.
+Evidence for review (criteria intentionally left unchecked):
+AC #1: tests/test_update.py setup/metadata and missing-package debug-log cases.
+AC #2: test_installed_version_follows_real_coordinator_refresh and test_device_info_failure_preserves_installed_version.
+AC #3: public GET parameter/session assertions, 204 handling, malformed/network failures, cached-result recovery and failure-streak logging tests; ring events and device refresh continue after a catalog failure.
+AC #4: exact-boolean track matching and mismatch-as-current tests for newest/lts/early.
+AC #5: newest-first full markdown and 255-character summary tests.
+AC #6: shared device/release URL assertions for HTTP/HTTPS defaults, nondefault ports and IPv6, independent of options and without credentials.
+AC #7: options flow tests cover active_track default and saving all three channels; all translated selectors are checked.
+AC #8: lifecycle test covers initial update-before-add, independent six-hour registration, no checks during coordinator polls, scheduled/manual checks, timezone-aware timestamps and timer removal; concurrent checks are serialized.
+AC #9: setup includes update once; translation/icon wiring and firmware diagnostics tests cover versions/channel only.
+AC #10: AST regression guard checks all integration Python string literals for prohibited device firmware/autoupdate endpoints.
+AC #11: added e2e/tests/test_firmware.py comparing HA installed/latest versions with the independent device client/public catalog, forced update_entity, release host and device configuration link. Execution is pending the orchestrated e2e-pi check; no E2E commands or device/HA connections were run on this VM.
+AC #12: README, API reference and architecture docs updated; documentation contract test covers the read-only update behavior and catalog endpoint.
+Local gates on Python 3.12: all 704 unit tests passed; validate.py passed; integration modules and the new E2E module compile; git diff --check passed. Existing unrelated API-test coroutine warnings were not modified. Task remains In Progress for the independent review and Pi E2E gate.
 <!-- SECTION:NOTES:END -->

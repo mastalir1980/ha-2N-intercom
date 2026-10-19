@@ -50,6 +50,8 @@ SWITCH_PATH = INTEGRATION_DIR / "switch.py"
 IMAGE_PATH = INTEGRATION_DIR / "image.py"
 EVENT_PATH = INTEGRATION_DIR / "event.py"
 DIAGNOSTICS_PATH = INTEGRATION_DIR / "diagnostics.py"
+UPDATE_PATH = INTEGRATION_DIR / "update.py"
+FIRMWARE_PATH = INTEGRATION_DIR / "firmware.py"
 
 
 def ensure_package(name: str) -> types.ModuleType:
@@ -58,7 +60,9 @@ def ensure_package(name: str) -> types.ModuleType:
     module = sys.modules.get(name)
     if module is None:
         module = types.ModuleType(name)
-        module.__path__ = []  # type: ignore[attr-defined]
+        module.__path__ = (  # type: ignore[attr-defined]
+            [str(INTEGRATION_DIR)] if name == "custom_components.2n_intercom" else []
+        )
         sys.modules[name] = module
     return module
 
@@ -208,3 +212,43 @@ def install_event_stubs() -> types.ModuleType:
     event_module.EventEntity = EventEntity
     sys.modules["homeassistant.components.event"] = event_module
     return event_module
+
+
+def install_update_stubs() -> types.ModuleType:
+    """Register the informational update entity API without Home Assistant."""
+    from enum import IntFlag
+
+    ensure_package("homeassistant")
+    ensure_package("homeassistant.components")
+    update_module = types.ModuleType("homeassistant.components.update")
+
+    class UpdateDeviceClass:
+        FIRMWARE = "firmware"
+
+    class UpdateEntityFeature(IntFlag):
+        INSTALL = 1
+        SPECIFIC_VERSION = 2
+        PROGRESS = 4
+        BACKUP = 8
+        RELEASE_NOTES = 16
+
+    class UpdateEntity:
+        _attr_latest_version = None
+
+        @property
+        def latest_version(self):
+            return self._attr_latest_version
+
+        @property
+        def release_url(self):
+            return self._attr_release_url
+
+        @property
+        def should_poll(self):
+            return self._attr_should_poll
+
+    update_module.UpdateDeviceClass = UpdateDeviceClass
+    update_module.UpdateEntityFeature = UpdateEntityFeature
+    update_module.UpdateEntity = UpdateEntity
+    sys.modules["homeassistant.components.update"] = update_module
+    return update_module
