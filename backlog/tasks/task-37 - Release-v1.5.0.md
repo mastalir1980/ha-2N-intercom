@@ -5,7 +5,7 @@ status: To Do
 assignee:
   - '@copilot'
 created_date: '2026-10-15 12:13'
-updated_date: '2026-10-18 13:11'
+updated_date: '2026-10-18 16:38'
 labels:
   - release
 milestone: m-0
@@ -39,10 +39,10 @@ Release of milestone v1.5.0: everything user-facing merged to main since v1.4.0 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 custom_components/2n_intercom/manifest.json version is 1.5.0
-- [ ] #2 CHANGELOG.md has a "## 1.5.0 - <date>" section written for users (what changed and what they may need to do), grouped by Features / Fixes / Docs, built from the tasks of milestone v1.5.0 and the commits since v1.4.0; no internal pipeline/tooling changes
-- [ ] #3 README and INSTALLATION.md mention every new user-visible option, entity and service from the milestone (check, fix gaps)
-- [ ] #4 Full unit suite, validate.py and py_compile green; PR check e2e-pi green
+- [ ] #1 custom_components/2n_intercom/manifest.json version is 1.5.0 [unit]
+- [ ] #2 CHANGELOG.md has a "## 1.5.0 - <date>" section written for users (what changed and what they may need to do), grouped by Features / Fixes / Docs, built from the tasks of milestone v1.5.0 and the commits since v1.4.0; no internal pipeline/tooling changes [unit]
+- [ ] #3 README and INSTALLATION.md mention every new user-visible option, entity and service from the milestone (check, fix gaps) [unit]
+- [ ] #4 Full unit suite, validate.py and py_compile green; PR check e2e-pi green [e2e]
 <!-- AC:END -->
 
 ## Implementation Plan

@@ -5,7 +5,7 @@ status: To Test
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-14 14:48'
-updated_date: '2026-10-18 16:05'
+updated_date: '2026-10-18 16:38'
 labels:
   - agent
   - infra
@@ -31,13 +31,13 @@ Jan decided on 14 Oct 2026 that the coder on the VM starts by itself instead of 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [x] #1 Kill switch: without the root-owned file /etc/ha2n-coder/autostart, --next does nothing; a daily limit (/etc/ha2n-coder/max-runs-per-day, default 3) counts runs started by --next in the last 24 h
-- [x] #2 No retry loops: a task whose last run ended stopped or failed is not picked again until its task file on origin/main has changed after that run started
-- [ ] #3 install-vm.sh installs a systemd service + timer (every 10 min, user ha2n-coder) that runs --next; the timer is enabled but does nothing until /etc/ha2n-coder/autostart exists
-- [ ] #4 Jan is told about every run without asking: the "Pro Hermese" instructions in tools/coder/README.md let Hermes report each new end state (green, review, stopped, failed) from ha2n-task-status --list exactly once
-- [x] #5 Stub simulation: nothing ready; one ready task started; running run blocks a second start; on-hold and manual-path skipped; stopped task not retried until its file changes; kill switch and daily limit; bash -n clean
-- [x] #6 Rules and docs in sync: CLAUDE.md, .github/copilot-instructions.md (ready = picked automatically; label on-hold), tools/coder/README.md (Czech), docs/OVERVIEW.md pipeline section
-- [x] #7 ha2n-run-task --next fetches main, and when no run is in state running it starts the next ready task (To Do, assignee @copilot, all dependencies Done, no label on-hold or manual-path). Order (decided by Jan, 15 Oct 2026): tasks of the earliest open milestone first (open milestones sorted by version number, e.g. v1.5.0 before v1.6.0), then tasks of later milestones, tasks without a milestone last; inside each group priority high > medium > low, then lowest task id. With nothing ready it exits 0 without output noise
+- [x] #1 Kill switch: without the root-owned file /etc/ha2n-coder/autostart, --next does nothing; a daily limit (/etc/ha2n-coder/max-runs-per-day, default 3) counts runs started by --next in the last 24 h [unit]
+- [x] #2 No retry loops: a task whose last run ended stopped or failed is not picked again until its task file on origin/main has changed after that run started [unit]
+- [ ] #3 install-vm.sh installs a systemd service + timer (every 10 min, user ha2n-coder) that runs --next; the timer is enabled but does nothing until /etc/ha2n-coder/autostart exists [jan]
+- [ ] #4 Jan is told about every run without asking: the "Pro Hermese" instructions in tools/coder/README.md let Hermes report each new end state (green, review, stopped, failed) from ha2n-task-status --list exactly once [jan]
+- [x] #5 Stub simulation: nothing ready; one ready task started; running run blocks a second start; on-hold and manual-path skipped; stopped task not retried until its file changes; kill switch and daily limit; bash -n clean [unit]
+- [x] #6 Rules and docs in sync: CLAUDE.md, .github/copilot-instructions.md (ready = picked automatically; label on-hold), tools/coder/README.md (Czech), docs/OVERVIEW.md pipeline section [unit]
+- [x] #7 ha2n-run-task --next fetches main, and when no run is in state running it starts the next ready task (To Do, assignee @copilot, all dependencies Done, no label on-hold or manual-path). Order (decided by Jan, 15 Oct 2026): tasks of the earliest open milestone first (open milestones sorted by version number, e.g. v1.5.0 before v1.6.0), then tasks of later milestones, tasks without a milestone last; inside each group priority high > medium > low, then lowest task id. With nothing ready it exits 0 without output noise [unit]
 <!-- AC:END -->
 
 ## Implementation Plan
