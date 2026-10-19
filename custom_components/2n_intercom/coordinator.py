@@ -44,6 +44,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
+from .web import device_web_url
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -76,6 +77,7 @@ class TwoNIntercomRuntimeData:
     coordinator: TwoNIntercomCoordinator
     api: TwoNIntercomAPI
     loaded_platforms: list[str] = field(default_factory=list)
+    firmware_latest_version: str | None = None
 
 
 if TYPE_CHECKING:
@@ -1280,13 +1282,12 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
     async def _async_update_data(self) -> TwoNIntercomData:
         """Fetch data from API."""
         try:
-            if self._system_info is None:
-                # Fallback path for tests / first refresh that bypass setup_entry.
-                try:
-                    self._system_info = await self.api.async_get_system_info()
-                except Exception as err:  # pylint: disable=broad-except
-                    _LOGGER.debug("Failed to fetch system info: %s", err)
-                    self._system_info = {}
+            # Initial setup already populated this cache. Later polls pick up
+            # firmware installed through the device UI without reloading HA.
+            if self.data is not None or self._system_info is None:
+                self._system_info = await self._refresh_secondary_cache(
+                    "_system_info", "async_get_system_info", "system info"
+                )
 
             phone_status = await self._refresh_secondary_cache(
                 "_phone_status",
@@ -1583,6 +1584,8 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             model=model,
             sw_version=sw_version,
         )
+        if self.config_entry is not None:
+            info["configuration_url"] = device_web_url(self.config_entry.data)
         serial = system_info.get("serialNumber")
         if serial:
             info["serial_number"] = str(serial)

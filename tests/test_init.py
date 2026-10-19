@@ -506,7 +506,7 @@ class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):
             [
                 (
                     entry.entry_id,
-                    ("camera", "image", "binary_sensor", "event", "switch", "sensor"),
+                    ("camera", "image", "binary_sensor", "event", "switch", "sensor", "update"),
                 )
             ],
         )
@@ -1122,6 +1122,7 @@ class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("binary_sensor", platforms)
         self.assertIn("switch", platforms)
         self.assertIn("sensor", platforms)
+        self.assertEqual(platforms.count("update"), 1)
 
     async def test_get_platforms_always_includes_switch(self) -> None:
         """Switch platform is always included for auto-detection."""

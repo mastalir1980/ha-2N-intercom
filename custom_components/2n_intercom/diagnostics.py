@@ -12,7 +12,14 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_GRANT_ACCESS_USER, CONF_MAC, CONF_RTSP_PASSWORD, CONF_RTSP_USERNAME
+from .const import (
+    CONF_FIRMWARE_CHANNEL,
+    CONF_GRANT_ACCESS_USER,
+    CONF_MAC,
+    CONF_RTSP_PASSWORD,
+    CONF_RTSP_USERNAME,
+    DEFAULT_FIRMWARE_CHANNEL,
+)
 from .coordinator import TwoNIntercomRuntimeData
 
 if TYPE_CHECKING:
@@ -65,6 +72,11 @@ async def async_get_config_entry_diagnostics(
             "switch_status": coordinator.switch_status,
             "io_caps": coordinator.io_caps,
             "io_status": coordinator.io_status,
+        },
+        "firmware": {
+            "installed_version": coordinator.system_info.get("swVersion"),
+            "latest_version": runtime.firmware_latest_version,
+            "channel": entry.options.get(CONF_FIRMWARE_CHANNEL, DEFAULT_FIRMWARE_CHANNEL),
         },
         "call_state": {
             "active_session_id": coordinator.active_session_id,

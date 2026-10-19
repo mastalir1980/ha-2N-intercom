@@ -1,5 +1,7 @@
 """Constants for the 2N Intercom integration."""
 
+from datetime import timedelta
+
 DOMAIN = "2n_intercom"
 
 # Configuration keys
@@ -20,6 +22,7 @@ CONF_GRANT_ACCESS_USER = "grant_access_user"
 
 # General tuning keys
 CONF_SCAN_INTERVAL = "scan_interval"
+CONF_FIRMWARE_CHANNEL = "firmware_channel"
 
 # Camera configuration keys
 CONF_LIVE_VIEW_MODE = "live_view_mode"
@@ -57,6 +60,14 @@ DEFAULT_ALLOW_INSECURE = False
 DEFAULT_ENABLE_CAMERA = True
 DEFAULT_ENABLE_DOORBELL = True
 DEFAULT_SCAN_INTERVAL = 60  # seconds — events deliver real-time updates; polling is a safety net
+DEFAULT_FIRMWARE_CHANNEL = "active_track"
+FIRMWARE_CHANNEL_TRACKS = {
+    "active_track": "newest",
+    "lts": "lts",
+    "beta": "early",
+}
+FIRMWARE_CHECK_INTERVAL = timedelta(hours=6)
+FIRMWARE_UPDATE_SERVER_URL = "https://update.2n.cz/hip"
 SCAN_INTERVAL_MIN = 2  # seconds — below this we hammer the device for no benefit
 SCAN_INTERVAL_MAX = 600  # seconds — events handle real-time; polling only needs to catch missed updates
 DEFAULT_PULSE_DURATION = 2000  # milliseconds — door default

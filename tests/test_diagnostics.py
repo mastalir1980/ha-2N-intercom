@@ -249,6 +249,30 @@ class DiagnosticsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["call_state"]["call_state"], "ringing")
         self.assertTrue(result["call_state"]["ring_active"])
 
+    async def test_firmware_diagnostics_only_versions_and_selected_channel(self) -> None:
+        coordinator_module = sys.modules["custom_components.2n_intercom.coordinator"]
+        coordinator = FakeCoordinator()
+        coordinator.system_info["swVersion"] = "3.1.0"
+        entry = FakeConfigEntry()
+        entry.runtime_data = coordinator_module.TwoNIntercomRuntimeData(
+            coordinator=coordinator, api=types.SimpleNamespace(),
+            firmware_latest_version="3.10.0",
+        )
+        for options, channel in (
+            ({}, "active_track"), ({"firmware_channel": "lts"}, "lts"),
+            ({"firmware_channel": "beta"}, "beta"),
+        ):
+            with self.subTest(channel=channel):
+                entry.options = options
+                result = await self.diag_module.async_get_config_entry_diagnostics(None, entry)
+                self.assertEqual(result["firmware"], {
+                    "installed_version": "3.1.0",
+                    "latest_version": "3.10.0",
+                    "channel": channel,
+                })
+                self.assertNotIn("http", repr(result["firmware"]))
+                self.assertNotIn("super-secret", repr(result))
+
     async def test_diagnostics_includes_coordinator_metadata(self) -> None:
         diag_module = self.diag_module
         coordinator_module = sys.modules["custom_components.2n_intercom.coordinator"]

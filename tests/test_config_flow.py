@@ -1302,6 +1302,33 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["type"], "form")
         self.assertEqual(result["step_id"], "device")
 
+    async def test_firmware_channel_default_selector_and_saved_option(self) -> None:
+        for channel in ("active_track", "lts", "beta"):
+            with self.subTest(channel=channel):
+                entry = FakeConfigEntry(
+                    "entry-1",
+                    {"host": "example.invalid"},
+                    options={} if channel == "active_track" else {"firmware_channel": channel},
+                )
+                flow = self._make_options_flow(entry)
+                form = await flow.async_step_init()
+                marker, field = next(
+                    (marker, field)
+                    for marker, field in form["data_schema"].schema.items()
+                    if marker.key == "firmware_channel"
+                )
+                self.assertEqual(marker.default, channel)
+                self.assertEqual(field.config.options, ["active_track", "lts", "beta"])
+                self.assertEqual(field.config.translation_key, "firmware_channel")
+                self.assertFalse(field.config.custom_value)
+                result = await flow.async_step_device({
+                    "name": "Intercom", "enable_camera": False,
+                    "enable_doorbell": True, "firmware_channel": channel,
+                })
+                self.assertEqual(result["type"], "create_entry")
+                self.assertEqual(result["data"]["firmware_channel"], channel)
+                self.assertEqual(entry.data, {"host": "example.invalid"})
+
     def _grant_user_marker(self, form):
         for marker, field in form["data_schema"].schema.items():
             if marker.key == "grant_access_user":

@@ -97,6 +97,7 @@
           "enable_camera": "Enable Camera",
           "enable_doorbell": "Enable Doorbell",
           "scan_interval": "Backup polling interval (seconds)",
+          "firmware_channel": "Firmware channel",
           "called_id": "Ringing account (peer)",
           "grant_access_user": "Default user for grant access"
         },
@@ -105,6 +106,7 @@
           "enable_camera": "Create the camera entity",
           "enable_doorbell": "Create the doorbell entity",
           "scan_interval": "Backup polling interval (2-600 s). Events deliver real-time updates; polling only runs as a safety net. Default 60 s is fine for most setups.",
+          "firmware_channel": "Check the public 2N update server every six hours. This does not change the device's AutoUpdate settings; install updates in the device web UI.",
           "called_id": "Select which account should ring. Choose All calls to ring on every button.",
           "grant_access_user": "Directory user (UUID) on whose behalf the grant_access service opens the door when the call does not name one. The device applies this user's access rights and logs the access. Leave empty to require the user in every call."
         }
@@ -153,6 +155,13 @@
     }
   },
   "selector": {
+    "firmware_channel": {
+      "options": {
+        "active_track": "Active track",
+        "lts": "Long-term support (LTS)",
+        "beta": "Beta"
+      }
+    },
     "live_view_mode": {
       "options": {
         "auto": "Auto (RTSP > MJPEG > snapshots)",
@@ -187,6 +196,11 @@
     }
   },
   "entity": {
+    "update": {
+      "firmware": {
+        "name": "Firmware"
+      }
+    },
     "switch": {
       "io_output": {
         "name": "Output {port}"

@@ -58,6 +58,28 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 - **Options flow** — device features, polling interval, camera transport, and per-relay overrides (name, type, pulse duration). Relays are auto-detected from the device
 - Optional "Ringing account (peer)" filter for multi-button setups: matches any peer called in the current session, including parallel/group calls (`All calls` matches every button). Peer comparison ignores case, SIP/SIPS scheme, host, port and SIP parameters
 
+### Firmware updates
+
+The **Firmware** update entity shows the installed and latest firmware versions
+and release notes, newest version first. It is created only when `/api/system/info`
+reports `firmwarePackage` (available on firmware 3.x).
+
+Choose **Firmware channel** (`firmware_channel`) in Configure's Device step:
+**Active track** (`active_track`, the default), **LTS** (`lts`), or **Beta** (`beta`).
+This is an integration preference; the intercom's own AutoUpdate settings are
+never read or changed.
+
+Home Assistant checks the public 2N update server at setup and every **six hours**,
+independently of local status polling. You can also call
+`homeassistant.update_entity` on the firmware entity to check immediately.
+The request sends only the firmware package, installed version and release-note
+language (`en`); it never sends device credentials. A failed check keeps the last
+known result, not an incorrect "up to date" state.
+
+**Updating happens in the device web UI.** The entity's release link and the
+device page's configuration link open that interface. There is no Install button;
+the integration does not download, upload, apply or trigger device firmware.
+
 ## Capability Matrix
 
 | Category | Status | Notes |
@@ -130,7 +152,7 @@ The integration provides optional **RTSP username** and **RTSP password** fields
 - **MJPEG-first camera** built on `homeassistant.components.mjpeg.MjpegCamera`
 - **Event-driven + backup polling** — real-time state via log subscriptions; low-frequency polling (default 60 s) as a safety net
 - **`TwoNIntercomEntity`** base class shared by all platforms — single source for `device_info`, `available`, and `_attr_has_entity_name`
-- Platform-based: `camera`, `image`, `event`, `binary_sensor`, `switch`, `cover`, `sensor`
+- Platform-based: `camera`, `image`, `event`, `binary_sensor`, `switch`, `cover`, `sensor`, `update`
 
 ## Manual
 
@@ -266,7 +288,7 @@ After initial setup, open the integration's **Options** (Settings → Devices & 
 
 The options flow has up to three steps:
 
-1. **Device** — name, feature toggles, backup polling interval, ringing account, default grant-access user
+1. **Device** — name, feature toggles, backup polling interval, firmware channel, ringing account, default grant-access user
 2. **Camera** *(only when camera is enabled)* — live view mode, RTSP credentials, MJPEG resolution/fps, camera source
 3. **Relay** *(one per auto-detected relay)* — name, device type (door/gate), pulse duration
 
@@ -280,6 +302,7 @@ Saved relay names, door/gate types, and pulse durations are preserved for relays
 | Device | `enable_camera` | bool | `true` | Toggle camera entity |
 | Device | `enable_doorbell` | bool | `true` | Toggle doorbell event entity |
 | Device | `scan_interval` | 2-600 (s) | 60 | Backup polling interval. Events deliver real-time updates; polling only runs as a safety net |
+| Device | `firmware_channel` | `active_track` \| `lts` \| `beta` | `active_track` | Firmware availability channel; maps to the public update server's `newest` / `lts` / `early` tracks. Does not change device AutoUpdate settings |
 | Device | `called_id` | string | `All calls` | Ringing account / peer filter |
 | Device | `grant_access_user` | directory user (UUID) | *(empty)* | Default user for `2n_intercom.grant_access` when the call does not pass `user`. Picked from the device directory; clear the selection to remove the default |
 | Camera | `live_view_mode` | `auto` \| `rtsp` \| `mjpeg` \| `jpeg_only` | `auto` | Camera live view transport. `auto` picks RTSP if licensed and RTSP credentials are set, then MJPEG, then snapshots |
@@ -449,7 +472,7 @@ The integration negotiates Basic vs Digest per request — see the **Authenticat
 
 | Endpoint | Purpose |
 |---|---|
-| `/api/system/info` | Device identity |
+| `/api/system/info` | Device identity, installed firmware version and firmware package |
 | `/api/call/status` | Baseline call state (safety-net poll) |
 | `/api/call/answer`, `/api/call/hangup` | Service backends |
 | `/api/log/caps` | Which log events the device supports (access-control subscription) |
@@ -463,14 +486,19 @@ The integration negotiates Basic vs Digest per request — see the **Authenticat
 | `/api/camera/caps` | Discover MJPEG capability + resolutions |
 | `/api/camera/snapshot` (with/without `fps`) | JPEG snapshot + MJPEG live view |
 | RTSP stream | Optional, only when the device licence exposes it |
+| `https://update.2n.cz/hip/<firmwarePackage>/<track>/?current_ver=<swVersion>&ui_lang=en` | Public firmware availability and release notes (GET, no device credentials; 204 = up to date) |
+
+No device firmware endpoints (`/api/firmware`, apply/reject, `/api/autoupdate/*`)
+are called. Firmware installation is performed by the user in the device web UI.
 
 ## Data Updates
 
 The integration uses two data channels:
 
 - **Event subscriptions (primary)** — `/api/log/subscribe` + `/api/log/pull` long-poll loop. Subscribes to `CallStateChanged`, `CallSessionStateChanged`, `SwitchStateChanged`, `InputChanged`, `OutputChanged`, `RegistrationStateChanged`, `ConfigurationChanged`, `CapabilitiesChanged`, `DeviceState`, (when available) `MotionDetected`, and the access-control events plus `DirectoryChanged` that the device lists in `/api/log/caps`. State changes arrive within ~1 second. The listener auto-resubscribes with exponential backoff on failures and forces a full baseline refresh after each reconnect
-- **Backup polling (safety net)** — the coordinator polls status endpoints (`switch/status`, `io/status`, `phone/status`, `call/status`, `switch/caps`) at the configured interval (default 60 seconds). This catches any events missed during subscription gaps but does not perform ring detection — ring detection is exclusively event-driven
+- **Backup polling (safety net)** — the coordinator polls status endpoints (`switch/status`, `io/status`, `phone/status`, `call/status`, `switch/caps`, `system/info`) at the configured interval (default 60 seconds). This catches any events missed during subscription gaps, including installed firmware changes, but does not perform ring detection — ring detection is exclusively event-driven
 - **Static caps** — `switch/caps`, `io/caps`, and camera transport info are fetched once at setup and cached. Switch caps are also refreshed on `ConfigurationChanged` / `CapabilitiesChanged` events and on every poll cycle as a safety net
+- **Firmware catalog** — the update entity uses a separate six-hour timer and HA's shared HTTP session, never the device's authenticated session. Catalog failures do not affect the coordinator or log subscription
 
 ## Use Cases
 
@@ -536,6 +564,9 @@ custom_components/2n_intercom/
 ├── binary_sensor.py         # Input + relay-active + motion sensors
 ├── event.py                 # Doorbell ring events + HomeKit camera auto-linking
 ├── sensor.py                # SIP registration + call state diagnostic sensors
+├── update.py                # Informational firmware update entity + six-hour timer
+├── firmware.py              # Unauthenticated public firmware catalog checks
+├── web.py                   # Shared credential-free device web UI URL
 ├── switch.py                # Door relay platform
 ├── cover.py                 # Gate relay platform
 ├── manifest.json

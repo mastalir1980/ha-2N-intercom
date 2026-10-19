@@ -1,5 +1,10 @@
 {
   "entity": {
+    "update": {
+      "firmware": {
+        "default": "mdi:chip"
+      }
+    },
     "switch": {
       "io_output": {
         "default": "mdi:electric-switch",

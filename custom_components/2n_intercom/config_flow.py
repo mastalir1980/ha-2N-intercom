@@ -35,6 +35,7 @@ from .const import (
     CONF_CAMERA_SOURCE,
     CONF_ENABLE_CAMERA,
     CONF_ENABLE_DOORBELL,
+    CONF_FIRMWARE_CHANNEL,
     CONF_GRANT_ACCESS_USER,
     CONF_LIVE_VIEW_MODE,
     CONF_MAC,
@@ -59,6 +60,7 @@ from .const import (
     DEFAULT_CAMERA_SOURCE,
     DEFAULT_ENABLE_CAMERA,
     DEFAULT_ENABLE_DOORBELL,
+    DEFAULT_FIRMWARE_CHANNEL,
     DEFAULT_LIVE_VIEW_MODE,
     DEFAULT_PORT_HTTP,
     DEFAULT_PORT_HTTPS,
@@ -69,6 +71,7 @@ from .const import (
     DEVICE_TYPE_DOOR,
     DEVICE_TYPE_GATE,
     DOMAIN,
+    FIRMWARE_CHANNEL_TRACKS,
     LIVE_VIEW_MODES,
     PROTOCOL_HTTP,
     PROTOCOL_HTTPS,
@@ -951,6 +954,18 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
                         CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
                     ),
                 ): scan_interval_field,
+                vol.Required(
+                    CONF_FIRMWARE_CHANNEL,
+                    default=self._session_option(
+                        CONF_FIRMWARE_CHANNEL, DEFAULT_FIRMWARE_CHANNEL
+                    ),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=list(FIRMWARE_CHANNEL_TRACKS),
+                        translation_key=CONF_FIRMWARE_CHANNEL,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
                 vol.Optional(
                     CONF_CALLED_ID,
                     default=default_called,

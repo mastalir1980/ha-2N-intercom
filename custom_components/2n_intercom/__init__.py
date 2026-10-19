@@ -99,6 +99,7 @@ def _get_platforms(entry: TwoNIntercomConfigEntry | ConfigEntry) -> list[str]:
         platforms.append("cover")
 
     platforms.append("sensor")
+    platforms.append("update")
 
     return platforms
 

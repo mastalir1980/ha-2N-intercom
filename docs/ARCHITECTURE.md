@@ -29,6 +29,8 @@ Diagramy (otevři v [excalidraw.com](https://excalidraw.com) nebo VS Code rozš�
 | `switch.py` | Door relé – dynamicky objevené z `/api/switch/caps`. |
 | `cover.py` | Gate relé (garážová vrata) – jen pro relé typu `gate`. |
 | `sensor.py` | Diagnostika: SIP registrace, stav hovoru. |
+| `update.py` / `firmware.py` | Informational firmware entity and public catalog checks; independent six-hour timer, no device firmware writes. |
+| `web.py` | Credential-free device web UI URL shared by device info and the firmware entity. |
 | `diagnostics.py` | Redigovaný dump pro bug reporty. |
 | `const.py` | Konstanty, klíče konfigurace, defaulty. |
 
@@ -41,7 +43,7 @@ HA Core
        ├─ TwoNIntercomAPI                (HTTP/RTSP klient – bez stavu HA)
        ├─ TwoNIntercomCoordinator        (cache + události + polling)
        │     └─ background log listener   (subscribe → pull → apply)
-       └─ forward_entry_setups(platforms) (camera/image/binary_sensor/event/switch/cover/sensor)
+       └─ forward_entry_setups(platforms) (camera/image/binary_sensor/event/switch/cover/sensor/update)
 ```
 
 `api.py` nezávisí na ničem z HA (jen `aiohttp`), takže je testovatelný samostatně
@@ -60,6 +62,7 @@ class TwoNIntercomRuntimeData:
     coordinator: TwoNIntercomCoordinator
     api: TwoNIntercomAPI
     loaded_platforms: list[str]
+    firmware_latest_version: str | None
 ```
 
 Koordinátor předává entitám snímek `TwoNIntercomData` (call status, phone/switch/io
@@ -67,13 +70,21 @@ status a caps, active session id, last ring time…). Entity jsou **čistí konz
 cache** – při `async_update` nesahají na zařízení (proto `PARALLEL_UPDATES = 0`
 u read-only platforem a `1` u switch/cover, které spouští relé).
 
+The informational update entity is also a cache consumer for device data, but
+checks the public 2N firmware catalog through HA's shared, unauthenticated
+session. It uses its own six-hour timer (removed when the entity unloads) and
+also checks before its initial state is added and on `homeassistant.update_entity`.
+It never uses the device session, downloads firmware, or calls device firmware
+endpoints. Failures keep cached versions/notes and log once per failure streak,
+without changing coordinator availability or the log listener.
+
 ### Rozdělení `entry.data` vs `entry.options`
 
 - **`entry.data`** = connection identity (host, port, protocol, username,
   password, verify_ssl, serial_number, mac_address). Reauth and reconfigure
   preserve the stored MAC. SSDP discovery can also update the host.
 - **`entry.options`** = chování (scan_interval, kamera transport, RTSP creds,
-  relé overrides, called_id). Mění se přes **options flow**.
+  relé overrides, called_id, firmware_channel). Mění se přes **options flow**.
 
 Toto oddělení zajišťuje, že options flow nikdy nepřepíše úspěšný reauth.
 
@@ -123,6 +134,11 @@ Background task `_async_log_listener_loop`:
 `_async_update_data` každých `scan_interval` (default 60 s) načte
 `phone/status`, `switch/caps`, `switch/status`, `io/status`, `call/status` a
 obnoví baseline, kdyby nějaká push událost vypadla.
+
+`system/info` is reused for the first refresh and fetched again on subsequent
+polls so the installed firmware version follows updates performed in the device
+web UI. A failed metadata refresh retains the cached version. This local refresh
+does not trigger a public firmware catalog check.
 
 Detaily endpointů: [`API_REFERENCE.md`](API_REFERENCE.md).
 

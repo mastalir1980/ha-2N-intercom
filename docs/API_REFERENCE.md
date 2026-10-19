@@ -38,7 +38,9 @@ Basic**, pokud zařízení vrátí `401` s `WWW-Authenticate: Basic`.
 | `/api/log/pull` | GET | `async_pull_log` | `id`, `timeout` (long-poll, server blokuje) |
 | `/api/log/unsubscribe` | GET | `async_unsubscribe_log` | `id` |
 
-Firmware endpointy (`/api/firmware`, `/api/firmware/apply`, `/api/firmware/reject`) integrace zatím nevolá – viz sekce *Firmware update* níže (TASK-50, plán v TASK-51).
+The integration does not call device firmware endpoints (`/api/firmware`,
+`/api/firmware/apply`, `/api/firmware/reject`, `/api/autoupdate/*`).
+The read-only update entity uses the public catalog described in *Firmware update*.
 
 ### IO input ports
 
@@ -112,8 +114,34 @@ z koordinátoru se chovají jako dřív (best effort).
 Zjištěno v TASK-50 (spike) na fw 3.x: z JavaScriptu obou webových rozhraní
 zařízení (nové UI `/new/`, legacy UI `/`), čtením přes HTTP API účet a voláním
 veřejného 2N update serveru. **Žádný firmware se při zjišťování neinstaloval**;
-kroky upload/apply níže jsou z kódu UI a z dokumentace 2N, na zařízení je
-ověří až E2E install test ve feature tasku (TASK-51).
+kroky upload/apply níže jsou z kódu UI a z dokumentace 2N. They describe the
+device web UI, not integration behavior; TASK-51 never installs firmware.
+
+### Home Assistant update entity (TASK-51)
+
+`update.py` creates one firmware/config update entity per entry when
+`system/info` supplies `firmwarePackage`. Its only supported feature is
+`RELEASE_NOTES`; there is no install or progress feature.
+`installed_version` follows `swVersion`, refreshed by the local coordinator.
+
+The integration option `firmware_channel` selects `active_track` (default,
+server track `newest`), `lts` (`lts`), or `beta` (`early`). Device AutoUpdate
+settings are not read or written. The public GET uses HA's shared client
+session, without the device Digest middleware or Basic credentials, with
+`current_ver=<swVersion>&ui_lang=en`. Checks run once at setup, on a separate
+six-hour timer, and on `homeassistant.update_entity`.
+
+A 204 response or a 200 response whose type does not match the selected track
+sets the latest version to the installed version. Failed or malformed responses
+preserve the last known version and notes and log one warning per failure streak.
+Catalog failures never interrupt local status polling or the log subscription.
+The server's ascending `changelog.md` array is reversed for full markdown release
+notes and the 255-character release summary. Download URLs are not retained.
+Firmware diagnostics contain only installed/latest versions and the channel.
+
+Both `release_url` and device `configuration_url` link to the device web UI,
+built from entry connection data with no credentials and no default port.
+The user performs the update there; no firmware is downloaded or installed by HA.
 
 ### Kdo co dělá
 
@@ -253,8 +281,8 @@ Zařízení má vlastní plánovač aktualizací. Konfigurace (cesty z UI a ze z
   a nahrává přes `PUT /api/firmware`; `firmwarePackage` čte z
   `State.Product.FirmwarePackage`. Na fw 2.50 neověřeno na zařízení –
   hypotéza: stejný mechanismus. `firmwarePackage` v `/api/system/info`
-  ověřen jen na fw 3.x; když chybí, update entita se nevytvoří (nebo hlásí
-  nedostupnou kontrolu).
+  ověřen jen na fw 3.x. When missing, no update entity is created; a debug
+  message explains why.
 - Na update serveru `lts` pro starou `current_ver` 2.50 vrací `204`
   (LTS větev 3.x z 2.x nenabízí).
 
