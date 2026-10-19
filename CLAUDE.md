@@ -83,6 +83,12 @@ Work on this repo is split between two agents:
    (E2E report path, log excerpt without secrets, 2N API response).
 3. **Acceptance criteria:** testable, one behaviour each; include the expected unit test(s) and,
    for features, the E2E check ("HA says X ⇄ 2N API says X"). Mark relay-switching checks as such.
+   Every criterion ends with exactly one verifier tag that says who proves it:
+   `[unit]` = a unit test or an objective check of the changed files in the PR diff;
+   `[e2e]` = a test in `e2e/tests/` that runs in the PR check `e2e-pi`;
+   `[tester]` = the tester agent on the Pi after the merge (read-only on staging: no relays, no calls; TASK-59);
+   `[jan]` = only Jan can verify it (physical button, calls, relays, Control4, a real network change).
+   The reviewer must prove `[unit]`/`[e2e]` before the merge; `[tester]`/`[jan]` keep the task in *To Test*.
 4. **Implementation plan:** files and functions to touch, the approach, and what must not change
    (pointers to the architecture rules below that apply). Small enough for one branch / one PR.
 5. `references` list the relevant code and docs; `dependencies` set; labels and `type` filled; priority set.

@@ -78,7 +78,10 @@ Every coder PR is then reviewed independently by a second model (TASK-33) agains
 the orchestrator feeds its `blocking` findings back to you as one extra fix round and finalizes the task only after
 `approve` (Claude reviews on request in addition). The reviewer returns `proven|manual|unproven` and evidence for
 every criterion, including checked ones. Trailing `[unit]`/`[e2e]` tags require automated proof; missing proof blocks
-the review. `[tester]`/`[jan]` tags are always manual. Invalid or incomplete review output fails the review and
+the review. `[tester]`/`[jan]` tags are always manual. The four tags: `[unit]` = a unit test or an objective check of
+the changed files; `[e2e]` = a test in `e2e/tests/` run by `e2e-pi`; `[tester]` = the tester agent on the Pi after the
+merge; `[jan]` = only Jan (physical button, calls, relays, Control4). Write the test that proves each `[unit]`/`[e2e]`
+criterion; do not try to prove `[tester]`/`[jan]` criteria. Invalid or incomplete review output fails the review and
 leaves the task In Progress. Never weaken, skip or delete a test to satisfy a finding or a red check.
 Auto-merge (TASK-46) is opt-in with the root-owned file `/etc/ha2n-coder/automerge` (`install-vm.sh` never creates it):
 when all PR checks incl. `e2e-pi` are green on the head commit and the second-model review verdict is `approve`, the coder
