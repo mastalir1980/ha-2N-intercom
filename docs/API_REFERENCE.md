@@ -130,8 +130,25 @@ veřejné HTTP API:
    (případně `/api/firmware/reject?fileid=<fileId>` pro zrušení)
 
 Integrace tedy může udělat totéž co prohlížeč: kontrolu z HA proti update
-serveru a instalaci přes `PUT /api/firmware` + `apply`. Žádný skrytý příkaz
-„stáhni a nainstaluj sám" přes HTTP API účet neexistuje (viz níže).
+serveru a instalaci přes `PUT /api/firmware` + `apply`. Do 2N OS 3.2 žádný
+příkaz „stáhni a nainstaluj sám" přes HTTP API účet neexistuje (viz níže);
+od 3.3 viz „Vestavěná aktualizace" dál.
+
+### Vestavěná aktualizace (2N OS 3.3 a novější)
+
+- Od 2N OS 3.3 má zařízení `GET /api/autoupdate/updatefw`, který spustí
+  aktualizaci firmwaru přímo v zařízení. Funguje od 3.3 a potřebuje
+  oprávnění **System – Control** (potvrzeno firmware týmem 2N, 19. 10. 2026).
+  Ve veřejném HTTP API manuálu 3.3 není.
+- Neověřeno: odkud a na jakou verzi aktualizuje (nastavená větev a zdroj
+  v `AutoUpdate.*`, nebo vždy nejnovější z update serveru), tvar odpovědi,
+  chybové kódy a jestli existuje endpoint na stav.
+  Otázky jsou v úkolu pro v1.6.0 (TASK-65).
+- **Nikdy ho nevolat při zjišťování ani v testech** – spustí skutečnou
+  aktualizaci a restart zařízení.
+- Integrace v1.5.0 (TASK-51) firmware jen hlásí (verze z update serveru,
+  release notes, odkaz na webové rozhraní) a žádný firmwarový endpoint
+  zařízení nevolá.
 
 ### Update server
 
