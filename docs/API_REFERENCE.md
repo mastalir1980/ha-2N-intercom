@@ -168,12 +168,24 @@ od 3.3 viz „Vestavěná aktualizace" dál.
   aktualizaci firmwaru přímo v zařízení. Funguje od 3.3 a potřebuje
   oprávnění **System – Control** (potvrzeno firmware týmem 2N, 19. 10. 2026).
   Ve veřejném HTTP API manuálu 3.3 není.
-- Neověřeno: odkud a na jakou verzi aktualizuje (nastavená větev a zdroj
-  v `AutoUpdate.*`, nebo vždy nejnovější z update serveru), tvar odpovědi,
-  chybové kódy a jestli existuje endpoint na stav.
-  Otázky jsou v úkolu pro v1.6.0 (TASK-65).
-- **Nikdy ho nevolat při zjišťování ani v testech** – spustí skutečnou
-  aktualizaci a restart zařízení.
+- **Ověřeno 19. 10. 2026 na E2E interkomu (fw 3.x ≥ 3.3, API účet integrace,
+  Digest), když update server pro všechny tři větve vracel `204`:**
+  - odpověď `200`, `application/json`, `{"success": true}` za ~70 ms;
+  - zařízení se nerestartovalo, `upTime` dál rostl a `swVersion` se
+    během 60 s nezměnila.
+  - Z toho plyne: `success: true` znamená jen „příkaz přijat", **ne** „aktualizace
+    běží". Odpověď se nedá použít k rozlišení „není co instalovat" od
+    „instalace začala". Úspěch pozná integrace jen podle změny `swVersion`
+    po restartu (nebo podle timeoutu).
+- Endpoint na stav nebo průběh není: `/api/autoupdate`, `/api/autoupdate/status`
+  i `/api/autoupdate/caps` vrací `{"success": false, "error": {"code": 2,
+  "description": "invalid request path"}}`. `/api/log/caps` nemá žádnou událost
+  o aktualizaci, firmwaru ani restartu.
+- Stále neověřeno: odkud a na jakou verzi aktualizuje, když nová verze existuje
+  (nastavená větev a zdroj v `AutoUpdate.*`, nebo vždy nejnovější z update
+  serveru). Ověří to skutečná aktualizace s Janovým souhlasem (TASK-66).
+- **Nevolat v testech ani při zjišťování, pokud update server pro kteroukoli
+  větev nabízí novější verzi** – spustí skutečnou aktualizaci a restart zařízení.
 - Integrace v1.5.0 (TASK-51) firmware jen hlásí (verze z update serveru,
   release notes, odkaz na webové rozhraní) a žádný firmwarový endpoint
   zařízení nevolá.
