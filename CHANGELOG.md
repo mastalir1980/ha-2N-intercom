@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.5.0 - 2026-10-19
+
+### Features
+- **Breaking change: migrate doorbell automations.** The new `event.<intercom>_doorbell` entity emits one `ring` event per intercom-started ring and replaces the doorbell binary sensor, whose registry entry is removed automatically without a deprecation period. Update automations, blueprint inputs and explicit HomeKit `linked_doorbell_sensor` references to the event entity. Trigger on a new timestamp with `event_type: ring`, not an `on` state, and ignore startup, restore and unavailable transitions; see the README examples.
+- **UI-only HomeKit video doorbell:** HomeKit automatically links the doorbell event to the camera on the same device. Include only the camera in an Accessory-mode HomeKit Bridge. If it was already paired as an ordinary camera, remove the old pairing and recreate the accessory.
+- **Automatic SSDP discovery** of 2N intercoms and Control4 DS2 / DS2 Mini units, with a prefilled host and friendly name. Configured entries follow IP address changes automatically without changing their unique ID. Discovery trusts the local network; prefer verified HTTPS and keep untrusted devices off that network.
+- **Firmware update entity** with installed/latest versions and release notes on devices reporting `firmwarePackage` (firmware 3.x). Choose **Firmware channel** in Configure: Active track (default), LTS or Beta. Availability is checked against the public 2N update server at setup and every six hours, without device credentials. Updates must still be installed in the device web UI; there is no Install button.
+- **Last-ring image** (`image.<intercom>_last_ring`) captures a JPEG when the doorbell rings. It is created when the camera is enabled; a failed capture keeps the previous image.
+- **`2n_intercom.grant_access` service** opens an entry/exit access point on behalf of a directory user, applying that user's access rights and recording the access in the device log. Pass a user UUID or choose a default **grant-access user** in Configure. Missing users, insufficient privileges and denied access surface as errors rather than success.
+- **Access-control events** from supported card, PIN, mobile-key, fingerprint and access-decision log events are now available in diagnostics, including the latest event and directory-resolved user name. Card numbers, PIN codes and mobile-key IDs are not stored.
+- **All IO input ports** are exposed as binary sensors, including extension modules and tamper ports. The existing `input1` entity keeps its identity; tamper ports use the tamper device class.
+- **Direct IO output switches**, including extension-module outputs, are available but disabled by default; the status LED is excluded. **These outputs latch until explicitly turned off and bypass logical relay pulse timing, so direct relay control can leave a door unlocked.** Prefer logical relay switch/cover entities for normal timed opening.
+
+### Fixes
+- Calls into the intercom from My2N, Control4 or a SIP phone no longer trigger the doorbell. Called ID filtering now matches any peer called in the session, including parallel/group calls, and ignores the suffix after `/` as well as SIP formatting.
+- JPEG snapshots select a resolution supported by the device instead of repeatedly failing and falling back to 640x480. Recovery from a rejected resolution is bounded to one retry.
+- Saved relay names, door/gate types and pulse durations survive submitting options when no relays are detected or the integration is not loaded.
+- The default grant-access user selector shows directory names instead of raw UUIDs, including the saved selection. If the directory is unavailable, a warning is shown and the stored user is kept.
+- Setup and Configure use forward-only **Next** / **Submit** navigation without the confusing back checkbox. Close and reopen the dialog to change an earlier step; unsaved drafts are discarded.
+- Transient authentication failures recover the Digest session before requesting reauthentication; persistent failures during startup still open the reauth flow. Session recovery no longer disrupts Home Assistant's shared HTTP connector.
+- Fixed rapid empty log polling that could waste CPU and overload the device, and made event timestamps timezone-aware.
+
+### Docs
+- README and installation guidance cover the new entities, firmware channel, default grant-access user, service usage and doorbell migration.
+- Documented HTTP API account privileges, including **System - Control** for directory lookups and its broader configuration permissions; clarified that HTTP API credentials belong in **Reconfigure**, while RTSP uses a separate streaming account.
+- Added Control4 DS2 / DS2 Mini compatibility and credential guidance, and explained that logical relays must first be enabled in the intercom settings before their entities appear.
+
 ## 1.4.0 - 2026-10-11
 
 ### Security — secure-by-default connection

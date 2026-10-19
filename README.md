@@ -25,6 +25,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 
 ### Camera
 - **JPEG snapshot** via `/api/camera/snapshot`
+- Snapshot sizes requested by Home Assistant are mapped to a supported JPEG resolution from `camera/caps`: the smallest size covering both requested dimensions, or the largest available size if none covers them. A rejected resolution gets at most one recovery retry at 640x480
 - **Native MJPEG live view** via `/api/camera/snapshot?...&fps=<n>` — served through Home Assistant's `MjpegCamera`, no ffmpeg/HLS round-trip
 - **RTSP stream source** when the device exposes it — requires separate RTSP credentials configured in the options flow (the 2N RTSP server has its own user database independent of the HTTP API accounts)
 - **Credentials are passed to `MjpegCamera` separately** — they never appear in the URL exposed to logs, diagnostics, or dashboards
@@ -349,6 +350,7 @@ Resulting entities:
 - `binary_sensor.home_intercom_relay_1_active` *(real cached relay state)*
 - `sensor.home_intercom_sip_registration`
 - `sensor.home_intercom_call_state` *(attribute: `active_session_id`)*
+- `update.home_intercom_firmware` *(installed/latest firmware and release notes; only when the device reports `firmwarePackage`)*
 - `switch.home_intercom_front_door`
 - `switch.home_intercom_output_relay1`, `switch.home_intercom_output_output1` *(physical outputs, disabled by default; actual ports depend on the device and extension modules)*
 - `cover.home_intercom_driveway_gate`
@@ -400,13 +402,14 @@ the device rejection is also logged with its code and description.
 | `2n_intercom.hangup_call` | Hang up the active call session (or a specific `session_id`) with optional `reason` (`normal` / `rejected` / `busy`) |
 | `2n_intercom.grant_access` | Open an access point (`access_point`: `0` = entry, default; `1` = exit) on behalf of a directory `user` (UUID) |
 
-All services target a config entry. From the UI use the **Target → Integration** picker; from YAML use `data.config_entry_id`. Pair `hangup_call` with `sensor.<intercom>_call_state`'s `active_session_id` attribute to terminate the exact session that triggered an automation.
+All services act on a loaded config entry. With one intercom loaded, the target is selected automatically; with multiple intercoms, pass `config_entry_id` in the service data (also available as a field in the UI). Pair `hangup_call` with `sensor.<intercom>_call_state`'s `active_session_id` attribute to terminate the exact session that triggered an automation.
 
 Example actionable-notification snippet:
 
 ```yaml
 - service: 2n_intercom.hangup_call
   data:
+    config_entry_id: <entry_id>
     session_id: "{{ state_attr('sensor.home_intercom_call_state', 'active_session_id') }}"
     reason: normal
 ```
@@ -426,6 +429,7 @@ The service never reports success when the door did not open: a denial (`accessG
 ```yaml
 - service: 2n_intercom.grant_access
   data:
+    config_entry_id: <entry_id>
     access_point: 0
     user: "01234567-89AB-CDEF-0123-456789ABCDEF"
 ```
