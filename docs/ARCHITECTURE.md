@@ -111,7 +111,14 @@ candidate host per entry lifetime. The warning cache is shared by discovery flow
 in `hass.data`, not the reloadable runtime data. API error details are not logged
 for these probes. One INFO line records successful moves without credentials or
 the MAC. HTTPS with certificate verification is still recommended.
-Entry diagnostics redact `mac_address`.
+Diagnostics apply recursive redaction to credentials, serial/MAC fields, call
+peers (including the configured `called_id`) and access-event identities.
+Known device serial/MAC values are also masked inside free text such as entry
+titles, saved names and `deviceName`. Phone status retains only account indexes,
+account types and registration telemetry; additional account/registrar identity
+fields are redacted even when nested. Caller details are not exported.
+Firmware/hardware versions, variant, capabilities and connection host/port stay
+readable. Redaction does not mutate config entry data or coordinator caches.
 
 ---
 

@@ -549,6 +549,16 @@ The integration uses two data channels:
 - If a specific Called ID does not ring, enable debug logging for `custom_components.2n_intercom`. Every call event records its state, direction/originator, session, canonical peers, configured canonical filter (`all` for All calls) and decision (`rang`, `filtered by peer` or `not a ring`). Only intercom-started calls ring, even with `All calls`
 - If the subscription is down, the listener retries with exponential backoff (up to ~60 s). Ring events during a subscription gap are lost
 
+### Sharing diagnostics
+
+Download diagnostics from the integration's menu in **Settings > Devices & services**
+when reporting a problem. Credentials, serial numbers, MAC addresses, SIP identities,
+call peers and access-event user identities are redacted; caller details are not
+included. Device identifiers embedded in entry titles or saved device names are
+masked too. Firmware/hardware versions, model variant, capabilities, registration
+state and connection host/port remain readable for troubleshooting. Review the
+remaining connection details and custom names before posting the file publicly.
+
 ### Reauth notification keeps appearing
 - Credentials really are wrong, or the device locked the account. Check the 2N web UI under **Services → HTTP API → Account** and re-enter the password through the reauth flow
 
