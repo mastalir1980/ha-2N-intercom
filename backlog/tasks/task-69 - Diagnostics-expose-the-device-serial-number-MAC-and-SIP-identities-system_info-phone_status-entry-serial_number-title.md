@@ -3,11 +3,11 @@ id: TASK-69
 title: >-
   Diagnostics expose the device serial number, MAC and SIP identities
   (system_info, phone_status, entry serial_number, title)
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-21T09:44:00Z'
-updated_date: '2026-10-21 14:58'
+updated_date: '2026-10-21 15:01'
 labels:
   - security
   - bug
@@ -40,13 +40,13 @@ Found by the security review before v1.5.0 (docs/SECURITY-REVIEW-v1.5.0.md, find
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 entry.data.serial_number is redacted, and entry.title is redacted when it contains the serial number [unit]
-- [ ] #2 device.system_info serialNumber and macAddr are redacted; variant, swVersion, hwVersion and firmwarePackage stay readable [unit]
-- [ ] #3 device.phone_status SIP identities (sipNumber and any account/registrar identity field present in the payload) are redacted; registration state fields stay [unit]
-- [ ] #4 call_state.called_peer and caller details are redacted [unit]
-- [ ] #5 The diagnostics test fixture uses realistic /api/system/info and /api/phone/status payloads so redaction is proven on the real field names [unit]
-- [ ] #6 The E2E check that reads the deployed entry diagnostics (test_60_discovery) still passes and additionally asserts the serial number is absent from the dump [e2e]
-- [ ] #7 Full unit suite, validate.py and py_compile green; PR check e2e-pi green [e2e]
+- [x] #1 entry.data.serial_number is redacted, and entry.title is redacted when it contains the serial number [unit]
+- [x] #2 device.system_info serialNumber and macAddr are redacted; variant, swVersion, hwVersion and firmwarePackage stay readable [unit]
+- [x] #3 device.phone_status SIP identities (sipNumber and any account/registrar identity field present in the payload) are redacted; registration state fields stay [unit]
+- [x] #4 call_state.called_peer and caller details are redacted [unit]
+- [x] #5 The diagnostics test fixture uses realistic /api/system/info and /api/phone/status payloads so redaction is proven on the real field names [unit]
+- [x] #6 The E2E check that reads the deployed entry diagnostics (test_60_discovery) still passes and additionally asserts the serial number is absent from the dump [e2e]
+- [x] #7 Full unit suite, validate.py and py_compile green; PR check e2e-pi green [e2e]
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -74,3 +74,16 @@ AC #7: On Python 3.12.15, python3 -m unittest discover -s tests -t tests passed 
 
 Headless handoff: keep In Progress and all acceptance criteria unchecked for the independent review/orchestrator. No protected paths changed; no push or live E2E run.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented by the headless coder. Checks green on 10c3b2732 after 0 fix round(s): e2e-pi=pass, validate=pass, validate=pass. PR: https://github.com/mastalir1980/ha-2N-intercom/pull/101. Done takes effect when the PR is merged.
+AC #1: tests/test_diagnostics.py::test_diagnostics_redacts_serial_in_entry_and_free_text (subtests entry/system_info/both/neither) asserts entry.data.serial_number is redacted and the title containing the serial is masked, while a custom title stays. diagnostics.py adds CONF_SERIAL_NUMBER to TO_REDACT_ENTRY and regex masking of free text. Test run: 13 diagnostics tests OK. (proven)
+AC #2: test_diagnostics_redacts_system_identifiers_without_mutating_cache asserts system_info serialNumber/macAddr are redacted while variant, swVersion, hwVersion, firmwarePackage, buildType stay equal to the originals; the cache is not mutated. (proven)
+AC #3: test_diagnostics_redacts_phone_identities_preserving_registration and test_diagnostics_redacts_textual_account_and_registrar_identities: sipNumber plus extra username/accountName/registrar/additionalIdentities fields are redacted via the _redact_phone_status allowlist; account, accountType, enabled, registered, registerTime, registrationState and state stay. (proven)
+AC #4: test_diagnostics_redacts_call_peers_and_omits_caller_details asserts call_state.called_peer is redacted, the peer string is absent from the whole dump, and caller details are not present anywhere in it; the caller keys are also in TO_REDACT. (proven)
+AC #5: FakeCoordinator in tests/test_diagnostics.py now uses realistic /api/system/info fields (variant, serialNumber, macAddr, swVersion, hwVersion, firmwarePackage, buildType, deviceName) and /api/phone/status accounts (account, accountType, enabled, sipNumber, registrationEnabled, registered, registerTime). The async_redact_data stub became recursive like HA's helper; no assertion was weakened (the old system_info equality assertion became a variant check because the fixture changed). (proven)
+AC #6: e2e/tests/test_60_discovery.py::test_entry_diagnostics_contains_redacted_mac keeps the MAC assertions and now also asserts entry.data.serial_number is redacted and the real twon.system_info serialNumber is absent (case-insensitive) from the whole diagnostics JSON; it fails if the device serial is empty. Offline tests/test_e2e_discovery.py::DiagnosticsPrivacyCheckTests exercise pass/fail paths. The orchestrator reports e2e-pi green on this head. (proven)
+AC #7: The orchestrator confirmed the full unit suite, validate.py, py_compile and the PR checks including e2e-pi green on this head. The diagnostics unit tests were rerun in the review: 13 OK. (proven)
+<!-- SECTION:FINAL_SUMMARY:END -->
