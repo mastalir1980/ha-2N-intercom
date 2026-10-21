@@ -4,8 +4,10 @@ title: >-
   Nightly E2E fails in the deploy stage since 2026-10-16 (permissions in the
   staging config)
 status: To Do
-assignee: []
+assignee:
+  - '@copilot-mac'
 created_date: '2026-10-18 16:40'
+updated_date: '2026-10-21 08:16'
 labels:
   - e2e
   - infra
@@ -45,4 +47,6 @@ Get the failing deploy log from the Pi (e2e/reports/<timestamp>/ of a nightly af
 
 <!-- SECTION:NOTES:BEGIN -->
 Not ready yet: needs the deploy log of a failed nightly run (ask the tester agent on the Pi to attach the excerpt).
+
+Root cause confirmed on the Pi (2026-10-21). git archive puts a custom_components/ directory entry owned by root/root (uid 0) into the tar. The e2e-pi helper (e2e/ci/ha2n-staging) extracts that archive as root inside a throwaway container, so tar resets the owner of the existing <staging>/config/custom_components to root:root. The next nightly (deploy.sh, run as the staging user) removes the old 2n_intercom through its docker rm fallback, then 'tar -x' fails with Permission denied because custom_components is root-owned. Seen on the Pi: custom_components is root:root, mtime matches the nightly at 03:31 on 2026-10-20, and 2n_intercom is missing, so staging has no integration until the next e2e-pi deploy. A one-off chown of custom_components only lasts until the next PR deploy. Fix as planned: the nightly deploys through the same helper (sudo -u <staging-user> ha2n-staging deploy). Alternative: deploy.sh extracts inside a container like the helper. AC #1 is satisfied by this note.
 <!-- SECTION:NOTES:END -->
