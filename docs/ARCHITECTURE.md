@@ -98,11 +98,20 @@ data is the discovery cross-reference, while the config entry's serial-based
 unique ID remains unchanged. Older entries backfill `mac_address` from the
 coordinator's cached `macAddr` during setup, without an extra API request.
 
-A matching announcement on a new host updates the entry in place and schedules
-a reload; an unchanged host does neither. One INFO line records the entry title
-and old/new hosts without credentials or the MAC. This trusts the local network:
-an announcement reusing the MAC can redirect the connection. HTTPS with
-certificate verification is recommended. Entry diagnostics redact `mac_address`.
+A matching announcement on a new host first queries `/api/system/info` using
+the saved credentials, protocol, port and TLS verification setting. The normalized
+API MAC must match the stored MAC; serial-based unique IDs also require the API
+serial to match. Only then is the host updated in place and a reload scheduled;
+an unchanged host does neither and makes no verification request.
+
+The temporary client permits Basic fallback only over verified HTTPS, independently
+of `allow_insecure`; Digest remains available on all saved transports. Verification
+failures leave the entry unchanged and produce one credential-free WARNING per
+candidate host per entry lifetime. The warning cache is shared by discovery flows
+in `hass.data`, not the reloadable runtime data. API error details are not logged
+for these probes. One INFO line records successful moves without credentials or
+the MAC. HTTPS with certificate verification is still recommended.
+Entry diagnostics redact `mac_address`.
 
 ---
 

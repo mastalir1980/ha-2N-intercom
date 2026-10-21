@@ -282,6 +282,7 @@ class FakeAPI:
         protocol,
         verify_ssl,
         allow_insecure=False,
+        allow_basic_fallback=True,
     ) -> None:
         self.host = host
         self.port = port
@@ -290,13 +291,14 @@ class FakeAPI:
         self.protocol = protocol
         self.verify_ssl = verify_ssl
         self.allow_insecure = allow_insecure
+        self.allow_basic_fallback = allow_basic_fallback
         self.closed = False
         FakeAPI.instances.append(self)
 
     async def async_test_connection(self) -> bool:
         return FakeAPI.connection_result
 
-    async def async_get_system_info(self) -> dict:
+    async def async_get_system_info(self, *, log_errors=True) -> dict:
         return FakeAPI.system_info
 
     async def async_get_directory(self, *, raise_on_device_error=False):
@@ -317,6 +319,7 @@ class FakeConfigEntry:
         self.options = options or {}
         self.domain = domain
         self.title = data.get("name", "Front door")
+        self.unique_id = None
 
 
 class FakeConfigEntries:
@@ -349,6 +352,7 @@ class FakeHass:
     def __init__(self, entries) -> None:
         self.config_entries = FakeConfigEntries(entries)
         self.config = types.SimpleNamespace(language="en")
+        self.data = {}
 
     async def async_add_executor_job(self, func, *args):
         return func(*args)
@@ -394,6 +398,7 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
         cls.config_flow_module = load_config_flow_module()
         # Patch the loaded module's TwoNIntercomAPI symbol so the flow uses
         # our fake instead of the real (network-touching) implementation.
+        cls.discovery_api_type = cls.config_flow_module.TwoNIntercomAPI
         cls.config_flow_module.TwoNIntercomAPI = FakeAPI
 
     def setUp(self) -> None:
@@ -1213,7 +1218,9 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
         old_data = dict(entry.data)
         hass = FakeHass([entry])
         flow = self._make_flow(hass)
-        with self.assertLogs(self.config_flow_module._LOGGER, level="INFO") as logs:
+        with patch.object(FakeAPI, "system_info", {
+            "macAddr": "7c:1e:b3:00:00:00", "serialNumber": " SN-123456 ",
+        }), self.assertLogs(self.config_flow_module._LOGGER, level="INFO") as logs:
             result = await flow.async_step_ssdp(
                 self._make_ssdp_info(mac="7c-1e-b3-00-00-00", host="192.0.2.60")
             )
@@ -1227,6 +1234,13 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
         ])
         self.assertEqual(entry.options, {"scan_interval": 120})
         self.assertEqual(entry.unique_id, "SN-123456")
+        self.assertEqual(len(FakeAPI.instances), 1)
+        api = FakeAPI.instances[0]
+        self.assertEqual((api.host, api.port, api.protocol), ("192.0.2.60", 443, "https"))
+        self.assertEqual((api.username, api.password), ("root", "secret"))
+        self.assertTrue(api.verify_ssl)
+        self.assertTrue(api.allow_basic_fallback)
+        self.assertTrue(api.closed)
         self.assertEqual([record.getMessage() for record in logs.records], [
             "2N intercom Front door moved from 192.0.2.50 to 192.0.2.60 "
             "(SSDP); updating the entry",
@@ -1242,6 +1256,235 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(repeated["reason"], "already_configured")
         self.assertEqual(hass.config_entries.reload_calls, [entry.entry_id])
         self.assertEqual(len(hass.config_entries.update_calls), 1)
+        self.assertEqual(len(FakeAPI.instances), 1)
+
+    def _make_ssdp_entry(self, entry_id="entry-1"):
+        entry = FakeConfigEntry(
+            entry_id,
+            {
+                "host": "192.0.2.50",
+                "mac_address": "7c-1e-b3-00-00-00",
+                "serial_number": "SN-123456",
+                "username": "api-user",
+                "password": "test-secret",
+                "protocol": "https",
+                "port": 8443,
+                "verify_ssl": False,
+            },
+        )
+        entry.unique_id = "SN-123456"
+        return entry
+
+    async def test_ssdp_rejects_unverifiable_hosts_without_changing_entry(self) -> None:
+        module = self.config_flow_module
+        for reply in (
+            module.TwoNConnectionError("test-secret api-user unreachable"),
+            module.TwoNAuthenticationError("test-secret api-user rejected"),
+            module.TwoNAPIError("test-secret api-user invalid JSON"),
+            {"macAddr": "001122334455", "serialNumber": "SN-123456"},
+            {"macAddr": "7C1EB3000000", "serialNumber": "SN-OTHER"},
+            {"serialNumber": "SN-123456"},
+            {"macAddr": "7C1EB3000000"},
+            {},
+            None,
+            [],
+        ):
+            with self.subTest(reply=reply):
+                entry = self._make_ssdp_entry()
+                old_data = dict(entry.data)
+                hass = FakeHass([entry])
+                lookup = AsyncMock()
+                if isinstance(reply, Exception):
+                    lookup.side_effect = reply
+                else:
+                    lookup.return_value = reply
+                with patch.object(FakeAPI, "async_get_system_info", lookup), (
+                    self.assertLogs(module._LOGGER, level="WARNING")
+                ) as logs:
+                    result = await self._make_flow(hass).async_step_ssdp(
+                        self._make_ssdp_info()
+                    )
+                await asyncio.sleep(0)
+                self.assertEqual(result["reason"], "already_configured")
+                self.assertEqual(entry.data, old_data)
+                self.assertEqual(entry.unique_id, "SN-123456")
+                self.assertEqual(hass.config_entries.update_calls, [])
+                self.assertEqual(hass.config_entries.reload_calls, [])
+                lookup.assert_awaited_once_with(log_errors=False)
+                self.assertTrue(FakeAPI.instances[-1].closed)
+                self.assertEqual(len(logs.records), 1)
+                self.assertEqual(logs.records[0].levelno, logging.WARNING)
+                for value in ("api-user", "test-secret", "SN-123456", "7C1EB3000000"):
+                    self.assertNotIn(value, logs.records[0].getMessage())
+
+    async def test_ssdp_warning_is_once_per_host_per_entry_across_flows(self) -> None:
+        first = self._make_ssdp_entry()
+        second = self._make_ssdp_entry("entry-2")
+        hass = FakeHass([first])
+        lookup = AsyncMock(side_effect=self.config_flow_module.TwoNConnectionError())
+        with patch.object(FakeAPI, "async_get_system_info", lookup), (
+            self.assertLogs(self.config_flow_module._LOGGER, level="WARNING")
+        ) as logs:
+            for entry in (first, second):
+                hass.config_entries._entries = {entry.entry_id: entry}
+                for host in ("192.0.2.60", "192.0.2.61", "192.0.2.60", "192.0.2.61"):
+                    await self._make_flow(hass).async_step_ssdp(
+                        self._make_ssdp_info(host=host)
+                    )
+                    # Warning memory must not depend on reloadable runtime_data.
+                    entry.runtime_data = object()
+        self.assertEqual(len(logs.records), 4)
+        self.assertEqual(lookup.await_count, 8)
+        for host in ("192.0.2.60", "192.0.2.61"):
+            self.assertEqual(sum(host in record.getMessage() for record in logs.records), 2)
+        self.assertEqual(hass.config_entries.update_calls, [])
+        self.assertEqual(hass.config_entries.reload_calls, [])
+        self.assertTrue(all(api.closed for api in FakeAPI.instances))
+
+    async def test_ssdp_verification_preserves_saved_transport_and_auth_settings(self) -> None:
+        for protocol, verify_ssl, opt_in, legacy_opt_in in (
+            ("https", False, False, True),
+            ("https", False, True, False),
+            ("https", True, False, False),
+            ("http", False, True, False),
+            ("http", True, True, False),
+            ("http", False, None, True),
+        ):
+            with self.subTest(protocol=protocol, verify_ssl=verify_ssl, opt_in=opt_in):
+                entry = self._make_ssdp_entry()
+                entry.data.update(
+                    protocol=protocol, verify_ssl=verify_ssl, allow_insecure=legacy_opt_in
+                )
+                if opt_in is not None:
+                    entry.options["allow_insecure"] = opt_in
+                hass = FakeHass([entry])
+                lookup = AsyncMock(return_value={
+                    "macAddr": "7C1EB3000000", "serialNumber": "SN-123456",
+                })
+                with patch.object(FakeAPI, "async_get_system_info", lookup):
+                    await self._make_flow(hass).async_step_ssdp(self._make_ssdp_info())
+                await asyncio.sleep(0)
+                api = FakeAPI.instances[-1]
+                self.assertEqual((api.host, api.port), ("192.0.2.60", 8443))
+                self.assertEqual((api.username, api.password), ("api-user", "test-secret"))
+                self.assertEqual((api.protocol, api.verify_ssl), (protocol, verify_ssl))
+                self.assertEqual(
+                    api.allow_insecure, legacy_opt_in if opt_in is None else opt_in
+                )
+                self.assertEqual(
+                    api.allow_basic_fallback, protocol == "https" and verify_ssl
+                )
+                self.assertTrue(api.closed)
+                self.assertEqual(hass.config_entries.reload_calls, [entry.entry_id])
+
+    async def test_ssdp_accepts_matching_mac_for_legacy_unique_ids(self) -> None:
+        for unique_id in ("7c:1e:b3:00:00:00", "192.0.2.40", None):
+            with self.subTest(unique_id=unique_id):
+                entry = self._make_ssdp_entry()
+                entry.unique_id = unique_id
+                if unique_id != "7c:1e:b3:00:00:00":
+                    entry.data.pop("serial_number")
+                hass = FakeHass([entry])
+                with patch.object(FakeAPI, "system_info", {"macAddr": "7C1EB3000000"}):
+                    await self._make_flow(hass).async_step_ssdp(self._make_ssdp_info())
+                await asyncio.sleep(0)
+                self.assertEqual(entry.data["host"], "192.0.2.60")
+                self.assertEqual(entry.unique_id, unique_id)
+                self.assertEqual(hass.config_entries.reload_calls, [entry.entry_id])
+
+    async def test_ssdp_unverified_basic_challenge_never_receives_credentials(self) -> None:
+        for protocol in ("https", "http"):
+            for allow_insecure in (False, True):
+                with self.subTest(protocol=protocol, allow_insecure=allow_insecure):
+                    entry = self._make_ssdp_entry()
+                    entry.data["protocol"] = protocol
+                    entry.options["allow_insecure"] = allow_insecure
+                    hass = FakeHass([entry])
+                    calls = []
+                    clients = []
+
+                    @asynccontextmanager
+                    async def request(method, url, **kwargs):
+                        calls.append((method, url, kwargs))
+                        yield types.SimpleNamespace(
+                            status=401, headers={"WWW-Authenticate": "Basic realm=device"},
+                        )
+
+                    def create_api(**kwargs):
+                        api = self.discovery_api_type(**kwargs)
+                        api._session = types.SimpleNamespace(
+                            closed=False, request=request, close=AsyncMock(),
+                        )
+                        clients.append(api)
+                        return api
+
+                    api_logger = logging.getLogger(self.discovery_api_type.__module__)
+                    with patch.object(self.config_flow_module, "TwoNIntercomAPI", create_api), (
+                        self.assertNoLogs(api_logger)
+                    ), self.assertLogs(
+                        self.config_flow_module._LOGGER, level="WARNING"
+                    ) as logs:
+                        for _ in range(2):
+                            result = await self._make_flow(hass).async_step_ssdp(
+                                self._make_ssdp_info()
+                            )
+                            self.assertEqual(result["reason"], "already_configured")
+                    await asyncio.sleep(0)
+                    self.assertEqual(len(logs.records), 1)
+                    self.assertEqual(len(calls), 2)
+                    for method, url, kwargs in calls:
+                        self.assertEqual(method, "GET")
+                        self.assertEqual(url, f"{protocol}://192.0.2.60:8443/api/system/info")
+                        self.assertNotIn("auth", kwargs)
+                    self.assertTrue(all(api._session is None for api in clients))
+                    self.assertEqual(entry.data["host"], "192.0.2.50")
+                    self.assertEqual(hass.config_entries.update_calls, [])
+                    self.assertEqual(hass.config_entries.reload_calls, [])
+                    for private_value in ("api-user", "test-secret"):
+                        self.assertNotIn(private_value, logs.output[0])
+
+    async def test_ssdp_retries_previously_rejected_host(self) -> None:
+        entry = self._make_ssdp_entry()
+        hass = FakeHass([entry])
+        lookup = AsyncMock(side_effect=[
+            self.config_flow_module.TwoNConnectionError(),
+            {"macAddr": "7C1EB3000000", "serialNumber": "SN-123456"},
+        ])
+        with patch.object(FakeAPI, "async_get_system_info", lookup), (
+            self.assertLogs(self.config_flow_module._LOGGER, level="WARNING")
+        ) as logs:
+            for _ in range(2):
+                await self._make_flow(hass).async_step_ssdp(self._make_ssdp_info())
+        await asyncio.sleep(0)
+        self.assertEqual(len(logs.records), 1)
+        self.assertEqual(lookup.await_count, 2)
+        self.assertEqual(entry.data["host"], "192.0.2.60")
+        self.assertEqual(len(hass.config_entries.update_calls), 1)
+        self.assertEqual(hass.config_entries.reload_calls, [entry.entry_id])
+
+    async def test_ssdp_concurrent_matching_announcements_reload_once(self) -> None:
+        entry = self._make_ssdp_entry()
+        hass = FakeHass([entry])
+        both_started = asyncio.Event()
+        started = 0
+
+        async def lookup(*, log_errors):
+            nonlocal started
+            started += 1
+            if started == 2:
+                both_started.set()
+            await both_started.wait()
+            return {"macAddr": "7C1EB3000000", "serialNumber": "SN-123456"}
+
+        with patch.object(FakeAPI, "async_get_system_info", side_effect=lookup):
+            await asyncio.gather(*(
+                self._make_flow(hass).async_step_ssdp(self._make_ssdp_info())
+                for _ in range(2)
+            ))
+        await asyncio.sleep(0)
+        self.assertEqual(len(hass.config_entries.update_calls), 1)
+        self.assertEqual(hass.config_entries.reload_calls, [entry.entry_id])
+        self.assertTrue(all(api.closed for api in FakeAPI.instances))
 
     async def test_ssdp_no_op_when_host_unchanged(self) -> None:
         entry = FakeConfigEntry(
@@ -1263,6 +1506,7 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
         self.assertEqual(hass.config_entries.update_calls, [])
         self.assertEqual(hass.config_entries.reload_calls, [])
+        self.assertEqual(FakeAPI.instances, [])
 
 
 class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):

@@ -24,7 +24,13 @@ from homeassistant.helpers.service_info.ssdp import (
 )
 import homeassistant.helpers.config_validation as cv
 
-from .api import TwoNIntercomAPI, extract_directory_users
+from .api import (
+    TwoNAPIError,
+    TwoNAuthenticationError,
+    TwoNConnectionError,
+    TwoNIntercomAPI,
+    extract_directory_users,
+)
 from .const import (
     CALLED_ID_ALL,
     CAMERA_MJPEG_FPS_MAX,
@@ -82,6 +88,7 @@ from .const import (
 from .coordinator import TwoNIntercomRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
+_SSDP_WARNED_HOSTS = f"{DOMAIN}_ssdp_warned_hosts"
 
 
 def _all_calls_label(language: str) -> str:
@@ -365,6 +372,46 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
             last_step=False,
         )
 
+    async def _async_verify_ssdp_host(
+        self, entry: config_entries.ConfigEntry, host: str
+    ) -> bool:
+        """Confirm a candidate address against the saved device identity."""
+        protocol = entry.data.get(CONF_PROTOCOL, DEFAULT_PROTOCOL)
+        verify_ssl = entry.data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+        api = TwoNIntercomAPI(
+            host=host,
+            port=entry.data.get(CONF_PORT, DEFAULT_PORT_HTTPS),
+            username=entry.data[CONF_USERNAME],
+            password=entry.data[CONF_PASSWORD],
+            protocol=protocol,
+            verify_ssl=verify_ssl,
+            allow_insecure=entry.options.get(
+                CONF_ALLOW_INSECURE,
+                entry.data.get(CONF_ALLOW_INSECURE, DEFAULT_ALLOW_INSECURE),
+            ),
+            allow_basic_fallback=protocol == PROTOCOL_HTTPS and verify_ssl,
+        )
+        try:
+            info = await api.async_get_system_info(log_errors=False)
+            if not isinstance(info, dict):
+                return False
+            mac = _normalize_mac(str(entry.data[CONF_MAC]))
+            if _normalize_mac(str(info.get("macAddr") or "")) != mac:
+                return False
+            # Initial setup used serialNumber, then macAddr, then the host
+            # for the unique ID. Only the first scheme requires a serial.
+            if (
+                entry.unique_id
+                and entry.data.get(CONF_SERIAL_NUMBER)
+                and _normalize_mac(entry.unique_id) != mac
+            ):
+                return str(info.get("serialNumber") or "").strip() == entry.unique_id
+            return True
+        except (TwoNAuthenticationError, TwoNConnectionError, TwoNAPIError):
+            return False
+        finally:
+            await api.async_close()
+
     async def async_step_ssdp(
         self, discovery_info: SsdpServiceInfo
     ) -> ConfigFlowResult:
@@ -407,6 +454,25 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
             if _normalize_mac(str(entry.data.get(CONF_MAC, ""))) == mac:
                 old_host = entry.data.get(CONF_HOST)
                 if old_host != host:
+                    if not await self._async_verify_ssdp_host(entry, host):
+                        warned_hosts: dict[str, set[str]] = self.hass.data.setdefault(
+                            _SSDP_WARNED_HOSTS, {}
+                        )
+                        entry_hosts = warned_hosts.setdefault(entry.entry_id, set())
+                        if host not in entry_hosts:
+                            entry_hosts.add(host)
+                            _LOGGER.warning(
+                                "Ignoring SSDP address change for 2N intercom %s "
+                                "to %s: device identity could not be verified",
+                                entry.title,
+                                host,
+                            )
+                        return self.async_abort(reason="already_configured")
+                    # Another discovery flow may have verified the same host
+                    # while this request was in flight.
+                    old_host = entry.data.get(CONF_HOST)
+                    if old_host == host:
+                        return self.async_abort(reason="already_configured")
                     _LOGGER.info(
                         "2N intercom %s moved from %s to %s (SSDP); updating the entry",
                         entry.title,

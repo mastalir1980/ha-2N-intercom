@@ -211,15 +211,20 @@ You still need to enter the intercom's HTTP API credentials.
 
 Once configured, the entry follows the device when its IP address changes.
 The integration matches the announcement against a separately stored MAC address,
-updates the host, and reloads the entry automatically. An INFO log records the
-entry title and the old and new hosts. Existing entries learn their MAC address
-from the device on their next setup; their unique ID remains unchanged.
+then confirms the device identity at the new address with the stored API
+credentials and TLS settings before updating the host and reloading the entry.
+The API-reported MAC must match, as must the serial number for a serial-based
+unique ID. Failed verification leaves the entry unchanged and logs one WARNING
+per candidate host per entry lifetime. An INFO log records successful moves.
+Existing entries learn their MAC address from the device on their next setup;
+their unique ID remains unchanged.
 
-**This trusts devices on the local network.** Another device announcing the same
-MAC address could redirect the connection to itself. Use HTTPS, preferably with
-certificate verification enabled through **Reconfigure**, and keep untrusted
-devices off the intercom's network. Manual setup remains available if SSDP
-announcements cannot reach Home Assistant.
+Discovery verification never sends HTTP Basic credentials over HTTP or
+unverified HTTPS, even with **Allow insecure connection** enabled. Such devices
+must support Digest authentication for automatic address updates. Use HTTPS,
+preferably with certificate verification enabled through **Reconfigure**, and
+keep untrusted devices off the intercom's network. Manual setup and Reconfigure
+remain available if discovery or identity verification cannot complete.
 
 ### HTTP API account privileges
 
