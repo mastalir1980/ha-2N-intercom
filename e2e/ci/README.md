@@ -41,6 +41,19 @@ stavíme jinde:
 
 **Pravidlo:** změny v `.github/` a `e2e/ci/` vždy reviewuje člověk (nikdy auto-merge).
 
+### Staging deployment ownership
+
+The helper `ha2n-staging` and `e2e/scripts/deploy.sh` (Mac `wip`/`run` and nightly)
+share one ownership rule: `custom_components/2n_intercom` is written only as root
+inside a throwaway container of the staging HA image, never directly on the Pi
+host. Both stop staging first, then remove the old integration, create
+`custom_components`, extract the archive and write `.e2e_deployed.json` in one
+container with `--network none` and only the staging config mounted at `/config`.
+Root ownership of `custom_components` is expected, including after `git archive`
+extraction; no host-side `chown` is needed. Both `--ref` and `--worktree` in
+`deploy.sh` use this path before recreating staging and waiting for readiness
+(unless `--no-restart` leaves staging stopped).
+
 ## Instalace (jednorázově)
 
 ### 0. Dostat to na `main`

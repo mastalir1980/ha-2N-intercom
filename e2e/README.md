@@ -50,6 +50,19 @@ a výsledek dá k PR jako check `e2e-pi`. Instalace, bezpečnostní model a prvn
 jsou v [`ci/README.md`](ci/README.md). Mac, noční běh i CI sdílejí jeden zámek stagingu,
 takže když staging zrovna testuje něco jiného, běh počká.
 
+### Staging deployment ownership
+
+Both `scripts/deploy.sh` (Mac `wip`/`run` and nightly) and the CI helper
+`ci/ha2n-staging` write `custom_components/2n_intercom` only as root inside a
+throwaway container of the staging HA image, never directly on the Pi host.
+After stopping staging, one container with `--network none` and only the staging
+config mounted at `/config` removes the old integration, creates
+`custom_components`, extracts the archive and writes `.e2e_deployed.json`.
+Root ownership of `custom_components` is expected; do not work around it with
+host-side `chown`. Both committed-ref and working-tree archives use this path.
+Staging is then recreated and checked for readiness. With `deploy.sh --no-restart`,
+staging is still stopped before extraction but is not started again.
+
 ## Denní použití
 
 | Příkaz | Kdy |
