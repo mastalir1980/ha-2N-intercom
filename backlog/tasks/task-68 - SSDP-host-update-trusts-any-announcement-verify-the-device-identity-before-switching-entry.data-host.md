@@ -3,11 +3,11 @@ id: TASK-68
 title: >-
   SSDP host update trusts any announcement: verify the device identity before
   switching entry.data host
-status: In Progress
+status: To Test
 assignee:
   - '@copilot'
 created_date: '2026-10-21T09:44:00Z'
-updated_date: '2026-10-21 14:44'
+updated_date: '2026-10-21 14:47'
 labels:
   - security
   - bug
@@ -43,13 +43,13 @@ Found by the security review before v1.5.0 (docs/SECURITY-REVIEW-v1.5.0.md, find
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 An SSDP announcement for a configured MAC with a new host whose /api/system/info reports the same MAC (and serial) updates entry.data host and reloads the entry once, as today [unit]
-- [ ] #2 An announcement whose new host is unreachable, rejects the credentials, or reports a different MAC/serial leaves entry.data unchanged, does not reload and logs one WARNING without credentials [unit]
-- [ ] #3 Repeated announcements for the same rogue host do not flood the log: one WARNING per host per entry lifetime [unit]
-- [ ] #4 The verification request never falls back to HTTP Basic auth when the certificate is not verified, regardless of allow_insecure [unit]
-- [ ] #5 README "Automatic discovery" states that the address follows the device only after the device identity has been confirmed with the stored credentials [unit]
-- [ ] #6 e2e/tests/test_60_discovery.py (read-only) keeps passing [e2e]
-- [ ] #7 Full unit suite, validate.py and py_compile green; PR check e2e-pi green [e2e]
+- [x] #1 An SSDP announcement for a configured MAC with a new host whose /api/system/info reports the same MAC (and serial) updates entry.data host and reloads the entry once, as today [unit]
+- [x] #2 An announcement whose new host is unreachable, rejects the credentials, or reports a different MAC/serial leaves entry.data unchanged, does not reload and logs one WARNING without credentials [unit]
+- [x] #3 Repeated announcements for the same rogue host do not flood the log: one WARNING per host per entry lifetime [unit]
+- [x] #4 The verification request never falls back to HTTP Basic auth when the certificate is not verified, regardless of allow_insecure [unit]
+- [x] #5 README "Automatic discovery" states that the address follows the device only after the device identity has been confirmed with the stored credentials [unit]
+- [x] #6 e2e/tests/test_60_discovery.py (read-only) keeps passing [e2e]
+- [x] #7 Full unit suite, validate.py and py_compile green; PR check e2e-pi green [e2e]
 - [ ] #8 Jan verifies on the real device that an IP change is still followed after the fix (manual-close) [jan]
 <!-- AC:END -->
 
@@ -78,3 +78,17 @@ AC #6: pending the orchestrator-run e2e-pi check; discovery E2E file retained un
 AC #7: all three required local gates passed; e2e-pi is pending. No HA/intercom or E2E commands were run on this VM.
 AC #8: manual verification by Jan remains outstanding. Task intentionally remains In Progress with all acceptance criteria unchecked for orchestrator review/finalization.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented by the headless coder. Checks green on 7b6dc6c05 after 0 fix round(s): e2e-pi=pass, validate=pass, validate=pass. PR: https://github.com/mastalir1980/ha-2N-intercom/pull/100. To Test takes effect when the PR is merged.
+AC #1: test_ssdp_updates_host_for_already_configured_device now patches /api/system/info with a matching normalised MAC and serial and asserts the probe used the saved host/port/credentials/TLS, the entry host updates once and reloads once, and the probe client is closed. test_ssdp_concurrent_matching_announcements_reload_once covers concurrent announcements, and test_ssdp_accepts_matching_mac_for_legacy_unique_ids covers non-serial unique IDs. Full suite (713 tests) re-run locally: OK. (proven)
+AC #2: test_ssdp_rejects_unverifiable_hosts_without_changing_entry covers connection, auth and API errors, a different MAC, a different serial, missing fields and malformed replies. Each subtest asserts entry.data is unchanged, there are no update or reload calls, the client is closed, and exactly one WARNING is logged that contains no username, password, serial or MAC. (proven)
+AC #3: test_ssdp_warning_is_once_per_host_per_entry_across_flows sends repeated announcements for two rogue hosts across new flow instances and across entries. It asserts one WARNING per host per entry (4 in total) while all 8 probes still run, and the cache lives in hass.data rather than runtime_data. test_ssdp_retries_previously_rejected_host shows a rejected host can still be verified later. (proven)
+AC #4: api.py adds allow_basic_fallback, which makes _async_request yield the 401 without a Basic retry. config_flow sets it only for verified HTTPS. test_basic_fallback_can_be_disabled_independently_of_transport_opt_in covers every protocol, verify_ssl and allow_insecure combination and asserts a single request without auth. test_ssdp_unverified_basic_challenge_never_receives_credentials drives the real API request path from SSDP over HTTP and unverified HTTPS with allow_insecure both False and True, and asserts no auth kwarg is sent and no entry change occurs. The default dual-auth behaviour is unchanged (default True). (proven)
+AC #5: The README 'Automatic discovery' diff states that the integration confirms the device identity at the new address with the stored API credentials and TLS settings before updating the host. It also documents the MAC/serial match, the one WARNING per host, and that Basic is never sent over HTTP or unverified HTTPS. docs/ARCHITECTURE.md is updated consistently. This is an objective check of the changed file; the old 'trusts devices on the local network' warning is removed accordingly. (proven)
+AC #6: e2e/tests/test_60_discovery.py is untouched in the diff. The orchestrator reports the PR check e2e-pi is green on this head. (proven)
+AC #7: Re-ran locally: python3 -m unittest discover -s tests -t tests gives 713 tests OK, and python3 validate.py passes. The orchestrator confirms py_compile and the e2e-pi PR check are green on this head. (proven)
+AC #8: Needs Jan to change the real device's IP (or trigger a genuine SSDP announcement) and confirm that the entry follows the new address with the stored credentials, including the device's actual auth mode and TLS setting (HTTP or unverified HTTPS now needs Digest for verification). Not provable in CI. (manual)
+<!-- SECTION:FINAL_SUMMARY:END -->
