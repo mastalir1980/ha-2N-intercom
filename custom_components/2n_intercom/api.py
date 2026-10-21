@@ -444,6 +444,7 @@ class TwoNIntercomAPI:
         rtsp_password: str | None = None,
         allow_insecure: bool = False,
         session_factory: Callable[[], aiohttp.ClientSession] | None = None,
+        allow_basic_fallback: bool = True,
     ) -> None:
         """Initialize the API client."""
         self.host = host
@@ -457,6 +458,7 @@ class TwoNIntercomAPI:
         # When False (default), the HTTP Basic-auth fallback is refused over a
         # plaintext-HTTP transport so credentials are never sent in cleartext.
         self.allow_insecure = allow_insecure
+        self.allow_basic_fallback = allow_basic_fallback
         self._session: aiohttp.ClientSession | None = session
         self._owns_session: bool = session is None
         self._session_factory = session_factory
@@ -666,6 +668,9 @@ class TwoNIntercomAPI:
 
         async with session.request(method, url, **request_kwargs) as response:
             if not self._requires_basic_auth(response):
+                yield response
+                return
+            if not self.allow_basic_fallback:
                 yield response
                 return
             if not self._basic_auth_permitted():
@@ -1385,8 +1390,10 @@ class TwoNIntercomAPI:
             _LOGGER.error("2N log unsubscribe unexpected error: %s", err)
             return False
 
-    async def async_get_system_info(self) -> dict[str, Any]:
-        """Get system info from /api/system/info."""
+    async def async_get_system_info(
+        self, *, log_errors: bool = True
+    ) -> dict[str, Any]:
+        """Get system info; discovery can provide its own rate-limited logging."""
         try:
             async with async_timeout.timeout(API_TIMEOUT):
                 async with self._async_request(
@@ -1406,7 +1413,7 @@ class TwoNIntercomAPI:
                     sys_result: dict[str, Any] = data.get("result", {})
                     return sys_result
                 error = parse_device_error(data)
-                if error is not None:
+                if error is not None and log_errors:
                     log_device_error(
                         logging.WARNING,
                         "system info",
@@ -1419,13 +1426,16 @@ class TwoNIntercomAPI:
         except TwoNAuthenticationError:
             raise
         except asyncio.TimeoutError as err:
-            _LOGGER.error("Timeout getting system info: %s", err)
+            if log_errors:
+                _LOGGER.error("Timeout getting system info: %s", err)
             raise TwoNConnectionError(f"Timeout: {err}") from err
         except aiohttp.ClientError as err:
-            _LOGGER.error("Error getting system info: %s", err)
+            if log_errors:
+                _LOGGER.error("Error getting system info: %s", err)
             raise TwoNConnectionError(f"Connection error: {err}") from err
         except Exception as err:
-            _LOGGER.error("Unexpected error getting system info: %s", err)
+            if log_errors:
+                _LOGGER.error("Unexpected error getting system info: %s", err)
             raise TwoNAPIError(f"API error: {err}") from err
 
     async def async_get_system_caps(self) -> dict[str, str]:

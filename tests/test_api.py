@@ -7,7 +7,7 @@ import json
 import logging
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from _stubs import (
     API_PATH,
@@ -1158,6 +1158,73 @@ class AuthenticationRequestTests(unittest.IsolatedAsyncioTestCase):
                 if retry:
                     self.assertEqual(calls[1][2]["auth"].login, "api-user")
                     self.assertEqual(calls[1][2]["auth"].password, "test-secret")
+
+    async def test_basic_fallback_can_be_disabled_independently_of_transport_opt_in(self) -> None:
+        for protocol in ("http", "https"):
+            for verify_ssl in (False, True):
+                for allow_insecure in (False, True):
+                    with self.subTest(
+                        protocol=protocol, verify_ssl=verify_ssl,
+                        allow_insecure=allow_insecure,
+                    ):
+                        calls = []
+                        response = SimpleNamespace(
+                            status=401,
+                            headers={"WWW-Authenticate": "Basic realm=device"},
+                        )
+
+                        @asynccontextmanager
+                        async def request(method, url, **kwargs):
+                            calls.append(kwargs)
+                            yield response
+
+                        api = self.api_module.TwoNIntercomAPI(
+                            host="intercom.local", username="api-user",
+                            password="test-secret", protocol=protocol,
+                            verify_ssl=verify_ssl, allow_insecure=allow_insecure,
+                            allow_basic_fallback=False,
+                            session=SimpleNamespace(closed=False, request=request),
+                        )
+                        with self.assertNoLogs(self.api_module._LOGGER):
+                            with self.assertRaises(self.api_module.TwoNAuthenticationError):
+                                await api.async_get_system_info(log_errors=False)
+                        self.assertEqual(calls, [{}])
+
+    async def test_system_info_discovery_probe_does_not_log_untrusted_errors(self) -> None:
+        module = self.api_module
+        for error in (
+            TimeoutError("test-secret api-user"),
+            module.aiohttp.ClientError("test-secret api-user"),
+            ValueError("test-secret api-user"),
+            {"success": False, "error": {
+                "code": 9, "description": "test-secret api-user",
+            }},
+        ):
+            with self.subTest(error=error):
+                api = module.TwoNIntercomAPI(
+                    host="intercom.local", username="api-user", password="test-secret",
+                )
+
+                @asynccontextmanager
+                async def request(*args, **kwargs):
+                    if isinstance(error, Exception):
+                        raise error
+                    yield SimpleNamespace(
+                        status=200, raise_for_status=lambda: None,
+                        json=AsyncMock(return_value=error),
+                    )
+
+                api._async_request = request
+                with self.assertNoLogs(module._LOGGER):
+                    if isinstance(error, Exception):
+                        with self.assertRaises((
+                            module.TwoNConnectionError, module.TwoNAPIError,
+                        )):
+                            await api.async_get_system_info(log_errors=False)
+                    else:
+                        self.assertEqual(
+                            await api.async_get_system_info(log_errors=False), {}
+                        )
 
 
 class SessionOwnershipTests(unittest.IsolatedAsyncioTestCase):
