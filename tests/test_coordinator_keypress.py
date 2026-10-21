@@ -141,6 +141,21 @@ class KeyPressedRingTests(_CoordinatorTestCase):
                 self.assertFalse(coordinator.ring_active)
                 self.assertEqual(coordinator.ring_count, 1)
 
+    async def test_press_ring_does_not_report_an_earlier_calls_peer(self) -> None:
+        coordinator, hass, _api = self._make_ring()
+        coordinator._process_log_event(_call(
+            "CallStateChanged", "ringing", direction="outgoing",
+            peer="sip:200@example.com",
+        ))
+        coordinator._process_log_event(_call("CallStateChanged", "terminated"))
+        self.assertEqual(coordinator.called_peer, "200")
+
+        coordinator._process_log_event(_key("%1"))
+        await hass.drain()
+
+        self.assertEqual(coordinator.ring_count, 2)
+        self.assertIsNone(coordinator.called_peer)
+
     async def test_called_id_filter_does_not_apply_to_presses(self) -> None:
         coordinator, hass, _api = self._make_ring(called_id="sip:200@example.com")
 

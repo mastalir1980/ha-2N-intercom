@@ -444,6 +444,9 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             # The call events of this press rang already.
             _LOGGER.debug("KeyPressed %s: ring already active, not counted", key)
             return False
+        # A press has no peer; don't let the ring event report the peer of
+        # an earlier call.
+        self._last_called_peer = None
         self._ring_count += 1
         if self._ring_snapshot_enabled:
             self.hass.async_create_task(self._async_capture_ring_snapshot())
