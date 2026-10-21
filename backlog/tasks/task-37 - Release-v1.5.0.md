@@ -4,8 +4,8 @@ title: Release v1.5.0
 status: To Do
 assignee:
   - '@copilot'
-created_date: '2026-10-15 12:13'
-updated_date: '2026-10-21T10:49:00Z'
+created_date: 2026-10-15 12:13
+updated_date: '2026-10-21T19:31:00Z'
 labels:
   - release
 milestone: m-0
@@ -26,6 +26,7 @@ dependencies:
   - TASK-67
   - TASK-68
   - TASK-69
+  - TASK-71
 references:
   - CHANGELOG.md
   - custom_components/2n_intercom/manifest.json
