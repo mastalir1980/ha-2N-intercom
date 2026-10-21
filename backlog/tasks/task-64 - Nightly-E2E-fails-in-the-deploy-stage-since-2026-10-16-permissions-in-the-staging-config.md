@@ -7,7 +7,7 @@ status: To Test
 assignee:
   - '@copilot-mac'
 created_date: '2026-10-18 16:40'
-updated_date: '2026-10-21 08:28'
+updated_date: '2026-10-21 09:40'
 labels:
   - e2e
   - infra
@@ -32,10 +32,10 @@ Reported by the tester agent on 2026-10-18: every nightly E2E run (e2e/nightly.s
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Root cause confirmed and recorded in the task notes [jan]
+- [x] #1 Root cause confirmed and recorded in the task notes [jan]
 - [x] #2 e2e/scripts/deploy.sh never writes custom_components on the Pi host: removing the old version, creating custom_components, extracting the archive and writing .e2e_deployed.json all happen inside one throwaway container of the staging HA image that mounts only <staging>/config, with --network none, after the staging container is stopped (same steps as the deploy command in e2e/ci/ha2n-staging) [unit]
 - [x] #3 Both --ref and --worktree modes use that path; the old host-side rm/tar and the docker rm fallback are gone [unit]
-- [ ] #4 `bash e2e/e2e.sh wip` from the Mac deploys and is green while custom_components on staging is owned by root [e2e]
+- [x] #4 `bash e2e/e2e.sh wip` from the Mac deploys and is green while custom_components on staging is owned by root [e2e]
 - [ ] #5 The next nightly run on the Pi deploys main and finishes green; e2e/reports/latest on the Pi shows it [jan]
 - [x] #6 e2e/README.md and e2e/ci/README.md state the ownership rule: on staging, custom_components/2n_intercom is written only by root inside a throwaway container, by both the helper and deploy.sh [unit]
 <!-- AC:END -->
@@ -63,6 +63,8 @@ Implemented the shared root-in-container deployment ownership rule in deploy.sh;
 Validation: Python 3.14.3, 704 unit tests passed; validate.py, py_compile, bash -n and git diff --check passed. Shellcheck is not installed. Offline SSH-mocked executions of --ref and --worktree verified archive contents, stop-before-extraction ordering, a single config mount, network isolation, the exact inline script and JSON arguments, propagation of extraction failure and both production guards. macOS bsdtar streams contain no AppleDouble files or Python caches. This does not prove compatibility with tar inside the HA image.
 
 Live E2E blocked: bash e2e/e2e.sh wip initially stopped before deployment because the isolated worktree had no E2E virtual environment. A local Python 3.14 virtual environment and test dependencies were subsequently restored, but e2e/.env is still absent. On 2026-10-21 Jan explicitly selected continuing without live E2E and recording the blocker. No staging or production deployment was attempted. Compatibility with the HA image tar and deployment over root-owned custom_components remain unverified. Do not mark AC #4 proven or report the E2E gate green. The next nightly on main also remains manual.
+
+AC #1: root cause confirmed by Jan on the Pi on 2026-10-21 (custom_components root:root, 2n_intercom missing after the 2026-10-20 nightly). AC #4: proven by Jan's 'bash e2e/e2e.sh wip' from the Mac on 2026-10-21 (report 20261021-113135): the working-tree archive deployed through the new container path, the tar in the HA image extracted the macOS bsdtar stream, staging came up, 20 passed and 4 skipped (relay and SIP tests, as expected). Note: AC #4 is tagged [e2e] but was proven by a Mac wip run, because the PR check e2e-pi deploys through the helper, not deploy.sh. AC #5 (next nightly on main) stays manual, so the task stays To Test.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
