@@ -3,10 +3,11 @@ id: TASK-69
 title: >-
   Diagnostics expose the device serial number, MAC and SIP identities
   (system_info, phone_status, entry serial_number, title)
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-21T09:44:00Z'
+updated_date: '2026-10-21 14:58'
 labels:
   - security
   - bug
@@ -47,3 +48,29 @@ Found by the security review before v1.5.0 (docs/SECURITY-REVIEW-v1.5.0.md, find
 - [ ] #6 The E2E check that reads the deployed entry diagnostics (test_60_discovery) still passes and additionally asserts the serial number is absent from the dump [e2e]
 - [ ] #7 Full unit suite, validate.py and py_compile green; PR check e2e-pi green [e2e]
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Apply one recursive diagnostics key-redaction policy to entry credentials, serial/MAC identifiers, access identities and call peers; mask known device serial/MAC values in free-text fields including entry title/name without mutating cached data.
+2. Redact phone/status identities recursively using an explicit allowlist of documented account indexes/types and registration-state fields so additional account/registrar identity fields cannot leak. Preserve firmware/hardware versions, variant, capabilities, host and port.
+3. Replace minimal diagnostics fixtures with realistic system/info and phone/status result payloads; cover nested identities, title/name leaks, idle/empty payloads and source-data immutability.
+4. Extend the read-only test_60_discovery diagnostics check to compare against the actual device serial and require its absence from the dump, retaining the MAC assertions. Update directly related README and architecture documentation.
+5. Run the required local Python gates, record evidence in implementation notes without checking criteria or changing the final status, and commit TASK-69 locally. Leave live E2E to the orchestrator e2e-pi check.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented a single recursive diagnostics key-redaction policy plus case-insensitive masking of known device serial/MAC values in free text (including entry title, saved name and deviceName). Added called_id to the same peer policy so the configured filter cannot reveal the redacted call peer elsewhere. Caller details remain unexported. Phone status uses a non-identifying telemetry allowlist, preserving documented numeric account indexes, account types and registration state/time while masking unknown and nested account/registrar identity fields. Config entry data/options and coordinator caches are not mutated. Updated README and architecture documentation.
+
+AC #1: test_diagnostics_redacts_serial_in_entry_and_free_text covers entry serial, title/data/options names, serial available from either entry or cached system_info, and custom titles without identifiers.
+AC #2: test_diagnostics_redacts_system_identifiers_without_mutating_cache asserts real serialNumber/macAddr fields and nested entry aliases are redacted while variant, swVersion, hwVersion, firmwarePackage, buildType and capabilities remain readable. Existing credentials test preserves host/port.
+AC #3: test_diagnostics_redacts_phone_identities_preserving_registration and test_diagnostics_redacts_textual_account_and_registrar_identities cover real sipNumber, additional/nested account and registrar identities, registration telemetry and numeric indexes.
+AC #4: test_diagnostics_redacts_call_peers_and_omits_caller_details covers called_peer, configured called_id and absence of caller names/numbers; idle peers remain None.
+AC #5: FakeCoordinator now supplies realistic system/info result fields and phone/status accounts with documented account/accountType/enabled/sipNumber/registrationEnabled/registered/registerTime fields, including local accounts with serial-bearing SIP identities.
+AC #6: test_60_discovery retains its existing MAC checks and now requires the deployed entry serial to be redacted and the real API serial to be absent from the complete diagnostics JSON (case-insensitive). Offline unit checks exercise success, serial leaks in title/device data, an exposed entry serial and missing API serial, with identifier-free failure messages. Live proof remains pending e2e-pi; no HA/intercom access was attempted.
+AC #7: On Python 3.12.15, python3 -m unittest discover -s tests -t tests passed all 723 tests; python3 validate.py, python3 -m py_compile custom_components/2n_intercom/*.py and git diff --check passed. The suite still emits warnings from existing API failure-path test doubles; these do not fail the suite. PR e2e-pi remains pending the orchestrator push.
+
+Headless handoff: keep In Progress and all acceptance criteria unchecked for the independent review/orchestrator. No protected paths changed; no push or live E2E run.
+<!-- SECTION:NOTES:END -->

@@ -1,4 +1,4 @@
-"""Read-only SSDP identity and HA MAC-backfill checks."""
+"""Read-only SSDP identity, HA MAC-backfill and diagnostics privacy checks."""
 
 from __future__ import annotations
 
@@ -26,10 +26,17 @@ def test_ssdp_identity_matches_manifest_and_device(twon):
     assert identities_match, "SSDP identity does not match the device API MAC"
 
 
-def test_entry_diagnostics_contains_redacted_mac(ha, entry):
+def test_entry_diagnostics_contains_redacted_mac(ha, entry, twon):
     diagnostics = ha.get_json(f"/api/diagnostics/config_entry/{entry['entry_id']}")
     entry_data = diagnostics["data"]["entry"]["data"]
     mac_present = "mac_address" in entry_data
     assert mac_present, "HA entry has no MAC address after setup/backfill"
     mac_redacted = entry_data["mac_address"] == "**REDACTED**"
     assert mac_redacted, "HA entry diagnostics expose the MAC address"
+    serial = str(twon.system_info().get("serialNumber") or "").strip()
+    serial_available = bool(serial)
+    assert serial_available, "device API returned no serial number for the privacy check"
+    serial_redacted = entry_data.get("serial_number") == "**REDACTED**"
+    assert serial_redacted, "HA entry diagnostics expose or omit the serial number"
+    serial_absent = serial.casefold() not in json.dumps(diagnostics).casefold()
+    assert serial_absent, "HA diagnostics expose the device serial number"

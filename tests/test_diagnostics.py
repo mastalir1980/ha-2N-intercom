@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import types
 import unittest
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 
 from _stubs import (
@@ -87,14 +88,20 @@ def _install_homeassistant_stubs() -> None:
     diagnostics_module = types.ModuleType("homeassistant.components.diagnostics")
 
     def async_redact_data(data, to_redact):
-        """Simple stub: replace redacted keys with '**REDACTED**'."""
+        """Recursively redact dictionaries and lists, like the HA helper."""
         if isinstance(data, dict):
             return {
-                k: ("**REDACTED**" if k in to_redact else v)
+                k: (
+                    "**REDACTED**" if k in to_redact and v is not None and v != ""
+                    else async_redact_data(v, to_redact)
+                )
                 for k, v in data.items()
             }
+        if isinstance(data, list):
+            return [async_redact_data(value, to_redact) for value in data]
         return data
 
+    diagnostics_module.REDACTED = "**REDACTED**"
     diagnostics_module.async_redact_data = async_redact_data
     sys.modules["homeassistant.components.diagnostics"] = diagnostics_module
     ensure_package("homeassistant.components")
@@ -124,8 +131,43 @@ class FakeCoordinator:
     def __init__(self) -> None:
         self.last_update_success = True
         self.update_interval = timedelta(seconds=5)
-        self.system_info = {"model": "2N IP Verso"}
-        self.phone_status = {"accounts": []}
+        self.system_info = {
+            "variant": "2N IP Intercom",
+            "serialNumber": "SN-TEST-123456",
+            "macAddr": "00:11:22:AA:BB:CC",
+            "swVersion": "3.1.0",
+            "hwVersion": "test-hw",
+            "firmwarePackage": "hip-test",
+            "buildType": "release",
+            "deviceName": "2N IP Intercom",
+        }
+        self.phone_status = {
+            "accounts": [
+                {
+                    "account": 1,
+                    "accountType": "general",
+                    "enabled": True,
+                    "sipNumber": "sip:test-account@example.invalid",
+                    "registrationEnabled": True,
+                    "registered": True,
+                    "registerTime": 1721138562,
+                },
+                {
+                    "account": 2,
+                    "accountType": "general",
+                    "enabled": False,
+                    "sipNumber": "",
+                    "registrationEnabled": False,
+                    "registered": False,
+                },
+                {
+                    "account": 3,
+                    "accountType": "local",
+                    "enabled": True,
+                    "sipNumber": "2NIPIntercom-SN-TEST-123456",
+                },
+            ],
+        }
         self.switch_caps = {}
         self.switch_status = {}
         self.io_caps = {}
@@ -133,7 +175,8 @@ class FakeCoordinator:
         self.active_session_id = "session-abc"
         self.call_state = "ringing"
         self.ring_active = True
-        self.called_peer = "100"
+        self.called_peer = "sip:test-peer@example.invalid"
+        self.caller_info = {"name": "Test Caller", "number": "test-caller-number"}
         self.system_caps = {"motionDetection": "inactive,licensed"}
         self.motion_detection_available = False
         self.motion_detected = False
@@ -161,6 +204,7 @@ class FakeConfigEntry:
             "port": 443,
             "username": "admin",
             "password": "super-secret",
+            "serial_number": "SN-TEST-123456",
         }
         self.options = {"scan_interval": 5}
         self.runtime_data = None
@@ -230,6 +274,187 @@ class DiagnosticsTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("001122AABBCC", repr(result))
         self.assertEqual(entry.data["mac_address"], "001122AABBCC")
 
+    async def test_diagnostics_redacts_serial_in_entry_and_free_text(self) -> None:
+        coordinator_module = sys.modules["custom_components.2n_intercom.coordinator"]
+        for serial_source in ("entry", "system_info", "both", "neither"):
+            with self.subTest(serial_source=serial_source):
+                coordinator = FakeCoordinator()
+                entry = FakeConfigEntry()
+                serial = entry.data["serial_number"]
+                entry.title = f"2N IP Intercom {serial} (v1.5.0)"
+                entry.data["name"] = entry.title
+                entry.options["name"] = entry.title
+                if serial_source in {"system_info", "neither"}:
+                    entry.data.pop("serial_number")
+                if serial_source in {"entry", "neither"}:
+                    coordinator.system_info.pop("serialNumber")
+                if serial_source == "neither":
+                    entry.title = "Front Door Intercom"
+                    entry.data["name"] = entry.title
+                    entry.options["name"] = entry.title
+                    coordinator.phone_status = {}
+                else:
+                    coordinator.system_info["deviceName"] = entry.title
+                original_data = deepcopy(entry.data)
+                entry.runtime_data = coordinator_module.TwoNIntercomRuntimeData(
+                    coordinator=coordinator, api=types.SimpleNamespace(),
+                )
+
+                result = await self.diag_module.async_get_config_entry_diagnostics(None, entry)
+
+                expected_title = (
+                    "Front Door Intercom" if serial_source == "neither"
+                    else "2N IP Intercom **REDACTED** (v1.5.0)"
+                )
+                self.assertEqual(result["entry"]["title"], expected_title)
+                self.assertEqual(result["entry"]["data"]["name"], expected_title)
+                self.assertEqual(result["entry"]["options"]["name"], expected_title)
+                self.assertNotIn(serial, repr(result))
+                if "serial_number" in entry.data:
+                    self.assertEqual(result["entry"]["data"]["serial_number"], "**REDACTED**")
+                self.assertEqual(entry.data, original_data)
+
+    async def test_diagnostics_redacts_system_identifiers_without_mutating_cache(self) -> None:
+        coordinator_module = sys.modules["custom_components.2n_intercom.coordinator"]
+        coordinator = FakeCoordinator()
+        coordinator.system_info["deviceName"] = "2N SN-TEST-123456 00:11:22:aa:bb:cc"
+        entry = FakeConfigEntry()
+        entry.options["nested"] = [{
+            "serialNumber": "SN-NESTED",
+            "macAddr": "00:11:22:33:44:55",
+            "serial_number": "SN-OPTION",
+            "mac_address": "001122334455",
+            "name": "SN-TEST-123456 00:11:22:aa:bb:cc",
+        }]
+        original_system_info = deepcopy(coordinator.system_info)
+        original_options = deepcopy(entry.options)
+        entry.runtime_data = coordinator_module.TwoNIntercomRuntimeData(
+            coordinator=coordinator, api=types.SimpleNamespace(),
+        )
+
+        result = await self.diag_module.async_get_config_entry_diagnostics(None, entry)
+
+        info = result["device"]["system_info"]
+        for key in ("serialNumber", "macAddr"):
+            self.assertEqual(info[key], "**REDACTED**")
+            self.assertNotIn(original_system_info[key], repr(result))
+        for key in ("variant", "swVersion", "hwVersion", "firmwarePackage", "buildType"):
+            self.assertEqual(info[key], original_system_info[key])
+        self.assertEqual(info["deviceName"], "2N **REDACTED** **REDACTED**")
+        nested = result["entry"]["options"]["nested"][0]
+        for key in ("serialNumber", "macAddr", "serial_number", "mac_address"):
+            self.assertEqual(nested[key], "**REDACTED**")
+        self.assertEqual(nested["name"], "**REDACTED** **REDACTED**")
+        self.assertEqual(result["device"]["system_caps"], coordinator.system_caps)
+        self.assertEqual(coordinator.system_info, original_system_info)
+        self.assertEqual(entry.options, original_options)
+
+    async def test_diagnostics_redacts_phone_identities_preserving_registration(self) -> None:
+        coordinator_module = sys.modules["custom_components.2n_intercom.coordinator"]
+        coordinator = FakeCoordinator()
+        account = coordinator.phone_status["accounts"][0]
+        account.update({
+            "username": "test-sip-user",
+            "accountName": "Test Account",
+            "registrar": {
+                "address": "registrar.example.invalid",
+                "identity": "test-registrar-identity",
+                "state": "registered",
+            },
+            "additionalIdentities": ["test-alias", {"uri": "sip:alias@example.invalid"}],
+        })
+        coordinator.phone_status["accounts"][1]["state"] = "unregistered"
+        original_status = deepcopy(coordinator.phone_status)
+        entry = FakeConfigEntry()
+        entry.runtime_data = coordinator_module.TwoNIntercomRuntimeData(
+            coordinator=coordinator, api=types.SimpleNamespace(),
+        )
+
+        result = await self.diag_module.async_get_config_entry_diagnostics(None, entry)
+
+        accounts = result["device"]["phone_status"]["accounts"]
+        for redacted, original in zip(accounts, original_status["accounts"], strict=True):
+            self.assertEqual(redacted["sipNumber"], "**REDACTED**")
+            for key in (
+                "account", "accountType", "enabled", "registrationEnabled",
+                "registered", "registerTime", "state",
+            ):
+                if key in original:
+                    self.assertEqual(redacted[key], original[key])
+        first = accounts[0]
+        self.assertEqual(first["username"], "**REDACTED**")
+        self.assertEqual(first["accountName"], "**REDACTED**")
+        self.assertEqual(first["registrar"], {
+            "address": "**REDACTED**",
+            "identity": "**REDACTED**",
+            "state": "registered",
+        })
+        self.assertEqual(first["additionalIdentities"], [
+            "**REDACTED**", {"uri": "**REDACTED**"},
+        ])
+        self.assertEqual(coordinator.phone_status, original_status)
+
+    async def test_diagnostics_redacts_textual_account_and_registrar_identities(self) -> None:
+        coordinator_module = sys.modules["custom_components.2n_intercom.coordinator"]
+        coordinator = FakeCoordinator()
+        coordinator.phone_status = {"accounts": [{
+            "account": "account-identity",
+            "sipAccount": 2,
+            "registrar": "sip:registrar@example.invalid",
+            "registrationState": "registered",
+        }]}
+        entry = FakeConfigEntry()
+        entry.runtime_data = coordinator_module.TwoNIntercomRuntimeData(
+            coordinator=coordinator, api=types.SimpleNamespace(),
+        )
+
+        result = await self.diag_module.async_get_config_entry_diagnostics(None, entry)
+
+        self.assertEqual(result["device"]["phone_status"], {"accounts": [{
+            "account": "**REDACTED**",
+            "sipAccount": 2,
+            "registrar": "**REDACTED**",
+            "registrationState": "registered",
+        }]})
+
+    async def test_diagnostics_redacts_call_peers_and_omits_caller_details(self) -> None:
+        coordinator_module = sys.modules["custom_components.2n_intercom.coordinator"]
+        coordinator = FakeCoordinator()
+        entry = FakeConfigEntry()
+        entry.options["called_id"] = coordinator.called_peer
+        entry.runtime_data = coordinator_module.TwoNIntercomRuntimeData(
+            coordinator=coordinator, api=types.SimpleNamespace(),
+        )
+
+        result = await self.diag_module.async_get_config_entry_diagnostics(None, entry)
+
+        self.assertEqual(result["call_state"]["called_peer"], "**REDACTED**")
+        self.assertEqual(result["entry"]["options"]["called_id"], "**REDACTED**")
+        self.assertNotIn(coordinator.called_peer, repr(result))
+        self.assertNotIn("caller_info", result["call_state"])
+        self.assertNotIn("caller", result["call_state"])
+        for value in coordinator.caller_info.values():
+            self.assertNotIn(value, repr(result))
+
+    async def test_diagnostics_keeps_empty_state_and_custom_title(self) -> None:
+        coordinator_module = sys.modules["custom_components.2n_intercom.coordinator"]
+        for phone_status in ({}, {"accounts": []}):
+            with self.subTest(phone_status=phone_status):
+                coordinator = FakeCoordinator()
+                coordinator.phone_status = phone_status
+                coordinator.called_peer = None
+                coordinator.caller_info = {}
+                entry = FakeConfigEntry()
+                entry.runtime_data = coordinator_module.TwoNIntercomRuntimeData(
+                    coordinator=coordinator, api=types.SimpleNamespace(),
+                )
+
+                result = await self.diag_module.async_get_config_entry_diagnostics(None, entry)
+
+                self.assertEqual(result["entry"]["title"], "Front Door Intercom")
+                self.assertIsNone(result["call_state"]["called_peer"])
+                self.assertEqual(result["device"]["phone_status"], phone_status)
+
     async def test_diagnostics_includes_device_state(self) -> None:
         diag_module = self.diag_module
         coordinator_module = sys.modules["custom_components.2n_intercom.coordinator"]
@@ -244,7 +469,7 @@ class DiagnosticsTests(unittest.IsolatedAsyncioTestCase):
 
         result = await diag_module.async_get_config_entry_diagnostics(None, entry)
 
-        self.assertEqual(result["device"]["system_info"], {"model": "2N IP Verso"})
+        self.assertEqual(result["device"]["system_info"]["variant"], "2N IP Intercom")
         self.assertEqual(result["call_state"]["active_session_id"], "session-abc")
         self.assertEqual(result["call_state"]["call_state"], "ringing")
         self.assertTrue(result["call_state"]["ring_active"])
