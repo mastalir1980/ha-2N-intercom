@@ -15,6 +15,7 @@ from _stubs import (
     ensure_package,
     install_api_stubs,
     install_dt_util_stub,
+    install_issue_registry_stub,
     load_module,
 )
 
@@ -76,6 +77,7 @@ def load_coordinator_module():
     install_api_stubs()
     install_dt_util_stub()
     _install_homeassistant_stubs()
+    install_issue_registry_stub()
     ensure_package("custom_components")
     ensure_package("custom_components.2n_intercom")
     load_module("custom_components.2n_intercom.const", CONST_PATH)
@@ -1890,6 +1892,71 @@ class AsyncUpdateDataErrorTests(unittest.IsolatedAsyncioTestCase):
                 FullAPI.reset_session_calls += 1
 
         return FullAPI()
+
+    async def test_insecure_auth_repair_lifecycle_and_three_strike_reauth(self) -> None:
+        api = self._base_api()
+        refusal = self.coordinator_module.TwoNInsecureAuthRefusedError("Basic refused")
+        api.async_get_call_status = AsyncMock(side_effect=refusal)
+        entry = types.SimpleNamespace(entry_id="entry-1", title="Front door", options={})
+        hass = types.SimpleNamespace()
+        c = self.coordinator_module.TwoNIntercomCoordinator(
+            hass, api, config_entry=entry
+        )
+        key = ("2n_intercom", "basic_auth_refused_entry-1")
+        for attempt in range(self.coordinator_module.NUM_AUTH_ERRORS):
+            expected = (
+                self.UpdateFailed if attempt < self.coordinator_module.NUM_AUTH_ERRORS - 1
+                else self.coordinator_module.ConfigEntryAuthFailed
+            )
+            with self.assertRaises(expected):
+                await c._async_update_data()
+            self.assertEqual(set(hass._test_issues), {key})
+            self.assertEqual(hass._test_issues[key], {
+                "is_fixable": False,
+                "severity": "warning",
+                "translation_key": "basic_auth_refused",
+                "translation_placeholders": {"name": "Front door"},
+            })
+        self.assertEqual(c._auth_error_count, self.coordinator_module.NUM_AUTH_ERRORS)
+
+        api.async_get_call_status = AsyncMock(return_value={"state": "idle"})
+        await c._async_update_data()
+        self.assertEqual(hass._test_issues, {})
+        self.assertEqual(c._auth_error_count, 0)
+
+        api.async_get_call_status = AsyncMock(side_effect=refusal)
+        with self.assertRaises(self.UpdateFailed):
+            await c._async_update_data()
+        self.assertEqual(set(hass._test_issues), {key})
+
+    async def test_secondary_basic_refusal_is_not_hidden_by_cached_data(self) -> None:
+        api = self._base_api()
+        api.async_get_switch_status = AsyncMock(
+            side_effect=self.coordinator_module.TwoNInsecureAuthRefusedError("refused")
+        )
+        hass = types.SimpleNamespace()
+        entry = types.SimpleNamespace(entry_id="entry-1", title="Front door", options={})
+        c = self.coordinator_module.TwoNIntercomCoordinator(
+            hass, api, config_entry=entry
+        )
+        with self.assertRaises(self.UpdateFailed):
+            await c._async_update_data()
+        self.assertIn(("2n_intercom", "basic_auth_refused_entry-1"), hass._test_issues)
+        self.assertEqual(c._auth_error_count, 1)
+
+    async def test_bad_credentials_do_not_create_insecure_auth_repair(self) -> None:
+        api = self._base_api()
+        api.async_get_call_status = AsyncMock(
+            side_effect=self.coordinator_module.TwoNAuthenticationError("bad credentials")
+        )
+        hass = types.SimpleNamespace()
+        entry = types.SimpleNamespace(entry_id="entry-1", title="Front door", options={})
+        c = self.coordinator_module.TwoNIntercomCoordinator(
+            hass, api, config_entry=entry
+        )
+        with self.assertRaises(self.UpdateFailed):
+            await c._async_update_data()
+        self.assertEqual(getattr(hass, "_test_issues", {}), {})
 
     async def test_single_auth_error_raises_update_failed(self) -> None:
         """A single transient 401 must NOT trip the reauth flow.

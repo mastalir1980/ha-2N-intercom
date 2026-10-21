@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from itertools import product
 import json
 import logging
 from types import SimpleNamespace
@@ -1119,17 +1120,15 @@ class AuthenticationRequestTests(unittest.IsolatedAsyncioTestCase):
     def setUpClass(cls) -> None:
         cls.api_module = load_api_module()
 
-    async def test_basic_retry_requires_https_or_explicit_opt_in(self) -> None:
-        for protocol, opt_in, challenge, retry in (
-            ("http", False, "Basic realm=device", False),
-            ("http", True, "Basic realm=device", True),
-            ("https", False, "Basic realm=device", True),
-            ("http", False, "Digest realm=device", False),
+    async def test_basic_retry_requires_verified_https_or_explicit_opt_in(self) -> None:
+        for protocol, verify_ssl, opt_in in product(
+            ("http", "https"), (False, True), (False, True)
         ):
-            with self.subTest(protocol=protocol, opt_in=opt_in, challenge=challenge):
+            retry = (protocol == "https" and verify_ssl) or opt_in
+            with self.subTest(protocol=protocol, verify_ssl=verify_ssl, opt_in=opt_in):
                 calls = []
                 rejected = SimpleNamespace(
-                    status=401, headers={"WWW-Authenticate": challenge}
+                    status=401, headers={"WWW-Authenticate": "Basic realm=device"}
                 )
                 accepted = SimpleNamespace(status=200, headers={})
 
@@ -1141,23 +1140,89 @@ class AuthenticationRequestTests(unittest.IsolatedAsyncioTestCase):
                 api = self.api_module.TwoNIntercomAPI(
                     host="intercom.local", username="api-user", password="test-secret",
                     port=443 if protocol == "https" else 80,
-                    protocol=protocol, allow_insecure=opt_in,
+                    protocol=protocol, verify_ssl=verify_ssl, allow_insecure=opt_in,
                     session=SimpleNamespace(closed=False, request=request),
                 )
-                if protocol == "http" and not opt_in and challenge.startswith("Basic"):
+                if not retry:
                     with self.assertLogs(self.api_module._LOGGER, level="WARNING") as logs:
-                        async with api._async_request("GET", "/api/system/info") as response:
-                            self.assertIs(response, rejected)
-                    self.assertIn("refusing", " ".join(logs.output))
-                    self.assertNotIn("test-secret", " ".join(logs.output))
+                        with self.assertRaises(
+                            self.api_module.TwoNInsecureAuthRefusedError
+                        ) as ctx:
+                            async with api._async_request("GET", "/api/system/info"):
+                                self.fail("A refused response must not be yielded")
+                    self.assertIsInstance(ctx.exception, self.api_module.TwoNAuthenticationError)
+                    self.assertEqual(len(logs.output), 1)
+                    message = logs.output[0]
+                    for expected in (
+                        "without verified HTTPS", "refusing", "intercom.local",
+                        f"protocol={protocol}", f"verify_ssl={verify_ssl}",
+                    ):
+                        self.assertIn(expected, message)
+                    for secret in ("api-user", "test-secret", "Authorization", "BasicAuth"):
+                        self.assertNotIn(secret, message)
                 else:
                     async with api._async_request("GET", "/api/system/info") as response:
-                        self.assertIs(response, accepted if retry else rejected)
+                        self.assertIs(response, accepted)
                 self.assertNotIn("auth", calls[0][2])
                 self.assertEqual(len(calls), 2 if retry else 1)
                 if retry:
                     self.assertEqual(calls[1][2]["auth"].login, "api-user")
                     self.assertEqual(calls[1][2]["auth"].password, "test-secret")
+
+    async def test_digest_path_is_unaffected_for_every_transport_combination(self) -> None:
+        for protocol, verify_ssl, opt_in, status in product(
+            ("http", "https"), (False, True), (False, True), (200, 401)
+        ):
+            with self.subTest(
+                protocol=protocol, verify_ssl=verify_ssl, opt_in=opt_in, status=status
+            ):
+                calls = []
+                response = SimpleNamespace(
+                    status=status, headers={"WWW-Authenticate": "Digest realm=device"}
+                )
+
+                @asynccontextmanager
+                async def request(method, url, **kwargs):
+                    calls.append(kwargs)
+                    yield response
+
+                api = self.api_module.TwoNIntercomAPI(
+                    host="intercom.local", username="api-user", password="test-secret",
+                    protocol=protocol, verify_ssl=verify_ssl, allow_insecure=opt_in,
+                )
+                with patch.object(self.api_module.aiohttp, "DigestAuthMiddleware") as digest:
+                    session = await api.async_get_session()
+                    digest.assert_called_once_with(
+                        "api-user", "test-secret", preemptive=False
+                    )
+                session.request = request
+                with patch.object(self.api_module._LOGGER, "warning") as warning:
+                    async with api._async_request("GET", "/api/call/status") as result:
+                        self.assertIs(result, response)
+                    warning.assert_not_called()
+                self.assertEqual(calls, [{}])
+                await api.async_close()
+
+    async def test_connection_test_propagates_insecure_auth_refusal(self) -> None:
+        calls = []
+
+        @asynccontextmanager
+        async def request(method, url, **kwargs):
+            calls.append(kwargs)
+            yield SimpleNamespace(
+                status=401, headers={"WWW-Authenticate": "Basic realm=device"}
+            )
+
+        api = self.api_module.TwoNIntercomAPI(
+            host="intercom.local", username="api-user", password="test-secret",
+            protocol="https", verify_ssl=False,
+            session=SimpleNamespace(closed=False, request=request),
+        )
+        with self.assertLogs(self.api_module._LOGGER, level="WARNING") as logs:
+            with self.assertRaises(self.api_module.TwoNInsecureAuthRefusedError):
+                await api.async_test_connection()
+        self.assertEqual(calls, [{}])
+        self.assertEqual(len(logs.output), 1)
 
 
 class SessionOwnershipTests(unittest.IsolatedAsyncioTestCase):
@@ -1534,11 +1599,19 @@ class PureHelperTests(unittest.TestCase):
         self.assertFalse(fn(ok_200))
 
     def test_basic_auth_permitted_over_https(self) -> None:
-        """Basic fallback is allowed over HTTPS (credential encrypted in transit)."""
+        """Basic fallback requires a verified HTTPS server."""
         api = self.api_module.TwoNIntercomAPI(
             host="x", username="u", password="p", port=443, protocol="https",
+            verify_ssl=True,
         )
         self.assertTrue(api._basic_auth_permitted())
+
+    def test_basic_auth_refused_over_unverified_https(self) -> None:
+        api = self.api_module.TwoNIntercomAPI(
+            host="x", username="u", password="p", port=443, protocol="https",
+            verify_ssl=False,
+        )
+        self.assertFalse(api._basic_auth_permitted())
 
     def test_basic_auth_refused_over_plaintext_http(self) -> None:
         """Basic fallback is refused over plain HTTP unless explicitly allowed."""

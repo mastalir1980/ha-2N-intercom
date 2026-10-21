@@ -46,7 +46,7 @@
         },
         "data_description": {
           "verify_ssl": "Ověřovat HTTPS certifikát zařízení. Vypněte jen pro tovární self-signed certifikát.",
-          "allow_insecure": "Povolit odeslání přihlašovacích údajů přes HTTP Basic po nešifrovaném HTTP. Zapněte pouze tehdy, pokud zařízení nezvládá HTTPS ani Digest.",
+          "allow_insecure": "Povolit odeslání obnovitelných přihlašovacích údajů HTTP Basic přes nešifrované HTTP nebo HTTPS s neověřeným certifikátem. Útočník by mohl získat heslo. Ponechte vypnuté; upřednostněte Digest nebo HTTPS s důvěryhodným certifikátem.",
           "username": "Uživatelské jméno HTTP API účtu interkomu — spravuje se ve webovém rozhraní zařízení pod Services > HTTP API > Accounts",
           "password": "Heslo HTTP API účtu interkomu"
         }
@@ -66,7 +66,8 @@
     },
     "error": {
       "cannot_connect": "Nepodařilo se připojit k zařízení. Zkontrolujte prosím IP adresu, port a přihlašovací údaje.",
-      "invalid_auth": "Přihlášení k HTTP API selhalo. Zkontrolujte přihlašovací údaje a oprávnění účtu v interkomu."
+      "invalid_auth": "Přihlášení k HTTP API selhalo. Zkontrolujte přihlašovací údaje a oprávnění účtu v interkomu.",
+      "basic_auth_refused": "Ověření HTTP Basic bylo zablokováno, protože připojení používá nešifrované HTTP nebo HTTPS bez ověření certifikátu. Přepněte služby HTTP API zařízení na ověřování Digest nebo nainstalujte certifikát, kterému Home Assistant důvěřuje. Pouze u existující položky můžete přijmout riziko přes Znovu nakonfigurovat > Povolit nezabezpečené připojení."
     },
     "abort": {
       "already_configured": "Toto zařízení 2N Intercom je již nakonfigurováno.",
@@ -74,6 +75,12 @@
       "no_mac": "Síťové oznámení zařízení neobsahovalo použitelný identifikátor.",
       "reauth_successful": "Přihlašovací údaje byly úspěšně aktualizovány.",
       "reconfigure_successful": "Nastavení zařízení bylo úspěšně aktualizováno."
+    }
+  },
+  "issues": {
+    "basic_auth_refused": {
+      "title": "Nezabezpečené ověření Basic pro {name} bylo zablokováno",
+      "description": "Zařízení {name} požadovalo ověření HTTP Basic přes nešifrované HTTP nebo HTTPS s neověřeným certifikátem. Home Assistant odmítl odeslat obnovitelné přihlašovací údaje. Přepněte služby HTTP API zařízení na ověřování Digest nebo nainstalujte certifikát, kterému Home Assistant důvěřuje, a zapněte ověřování certifikátu přes Znovu nakonfigurovat. Pokud přijímáte riziko prozrazení API hesla, otevřete Nastavení > Zařízení a služby > 2N Intercom > Znovu nakonfigurovat > Povolit nezabezpečené připojení. Upozornění zmizí po úspěšné aktualizaci."
     }
   },
   "options": {

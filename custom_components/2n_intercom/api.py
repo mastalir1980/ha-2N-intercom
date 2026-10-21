@@ -508,15 +508,13 @@ class TwoNIntercomAPI:
         """Return whether falling back to HTTP Basic auth is safe.
 
         Basic auth sends ``base64(user:pass)``, which is trivially reversible,
-        so over a plaintext-HTTP transport it is a cleartext credential on the
-        wire. We allow it over HTTPS (encrypted in transit) but refuse it over
-        plain HTTP unless the user has explicitly opted into insecure transport
-        via ``allow_insecure``. Digest — the primary auth path — is unaffected
-        because it never exposes the password.
+        so only HTTPS with certificate verification authenticates the recipient.
+        Plain HTTP and unverified HTTPS require the explicit ``allow_insecure``
+        opt-in. Digest — the primary auth path — is unaffected.
         """
-        if self.protocol == PROTOCOL_HTTPS:
-            return True
-        return self.allow_insecure
+        return (
+            self.protocol == PROTOCOL_HTTPS and self.verify_ssl is True
+        ) or self.allow_insecure
 
     @property
     def camera_capabilities(self) -> CameraCapabilities:
@@ -669,21 +667,21 @@ class TwoNIntercomAPI:
                 yield response
                 return
             if not self._basic_auth_permitted():
-                # Device wants Basic but the transport is plaintext HTTP and the
-                # user hasn't opted into insecure auth. Surface the 401 to the
-                # caller (which raises TwoNAuthenticationError) instead of
-                # leaking the password in cleartext.
                 _LOGGER.warning(
-                    "2N device at %s requested HTTP Basic auth over a plaintext "
-                    "transport (protocol=%s); refusing to send credentials in "
-                    "cleartext. Switch the device to HTTPS, or enable 'Allow "
-                    "insecure connection' in the reconfigure flow if you accept "
-                    "the risk.",
-                    url,
+                    "2N host=%s requested HTTP Basic auth without verified HTTPS "
+                    "(protocol=%s, verify_ssl=%s); refusing to send recoverable "
+                    "credentials without explicit opt-in. Switch the device HTTP "
+                    "API services to Digest or install a trusted certificate. "
+                    "Existing entries can enable 'Allow insecure connection' in "
+                    "Reconfigure if you accept the risk.",
+                    self.host,
                     self.protocol,
+                    self.verify_ssl,
                 )
-                yield response
-                return
+                raise TwoNInsecureAuthRefusedError(
+                    "HTTP Basic authentication requires verified HTTPS or "
+                    "the explicit allow_insecure opt-in"
+                )
 
         async with session.request(
             method,
@@ -786,6 +784,8 @@ class TwoNIntercomAPI:
         try:
             await self.async_get_call_status()
             return True
+        except TwoNInsecureAuthRefusedError:
+            raise
         except Exception as err:
             _LOGGER.error("Connection test failed: %s", err)
             return False
@@ -2105,6 +2105,10 @@ class TwoNIntercomAPI:
 
 class TwoNAuthenticationError(Exception):
     """Authentication failed."""
+
+
+class TwoNInsecureAuthRefusedError(TwoNAuthenticationError):
+    """Basic credentials were withheld because the transport is not verified."""
 
 
 class TwoNConnectionError(Exception):

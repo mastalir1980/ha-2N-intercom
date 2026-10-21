@@ -105,14 +105,14 @@ Helper: [`api.validate_mjpeg_fps`](custom_components/2n_intercom/api.py).
 
 The 2N HTTP API exposes a **per-service-group** authentication setting in the device web UI under **Services → HTTP API**. Each service group (Camera, Switch, I/O, Phone, Call, Log, …) can be set to **None / Basic / Digest** independently, so a single account can end up answering some endpoint families with Basic and others with Digest depending on how the operator has configured the device.
 
-The integration handles every combination transparently:
+The integration negotiates authentication per request, subject to transport security:
 
 - The HTTP client uses `aiohttp`'s `DigestAuthMiddleware` (with `preemptive=False`) so it answers Digest challenges automatically.
-- When the device answers a request with `401 + WWW-Authenticate: Basic`, the client retries with Basic auth over HTTPS. Basic over plaintext HTTP is refused unless **Allow insecure connection** (`allow_insecure`, default off) is enabled in **Reconfigure**. Digest authentication remains supported over both transports.
+- When the device answers a request with `401 + WWW-Authenticate: Basic`, the client retries with Basic auth only over **HTTPS with certificate verification enabled**. Plaintext HTTP and HTTPS with an unverified certificate both require **Allow insecure connection** (`allow_insecure`, default off) in **Reconfigure**. Digest authentication remains supported over all these transports without the opt-in.
 
-Prefer HTTPS with certificate verification. Factory self-signed certificates use encrypted HTTPS without identity verification; install a trusted certificate for protection against impersonation. The insecure opt-in permits sending recoverable credentials over plaintext HTTP and should be used only when HTTPS or Digest is unavailable.
+Prefer HTTPS with certificate verification. Factory self-signed certificates use encrypted HTTPS without identity verification: an impersonating server could obtain the Basic password. Switch the device's **Services → HTTP API** service groups to **Digest**, or install a certificate Home Assistant trusts. Initial setup deliberately has no insecure opt-in; a blocked Basic challenge shows a dedicated error explaining these device-side fixes.
 
-Upgrading does not change saved connection settings. Reconfigure existing HTTP entries to HTTPS where possible. HTTP Basic users must either switch to HTTPS/Digest or explicitly enable the insecure opt-in.
+**Upgrade notice (breaking security change):** existing entries using Basic with an unverified HTTPS certificate stop connecting, just like HTTP Basic entries without the opt-in. Saved connection settings are not changed automatically. A log warning, a Repair issue and the reauth error explain the fix: use Digest, or install a trusted certificate and enable certificate verification in **Reconfigure**. Only if you accept the risk of exposing the API password, open **Settings → Devices & services → 2N Intercom → ⋮ → Reconfigure → Allow insecure connection**. The Repair issue clears after a successful update or entry unload.
 
 An isolated authentication failure refreshes the Digest session without immediately
 asking for credentials again. Three consecutive failed poll updates trigger reauth;

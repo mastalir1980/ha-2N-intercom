@@ -22,6 +22,7 @@ from .api import (
     CameraTransportInfo,
     TwoNAuthenticationError,
     TwoNConnectionError,
+    TwoNInsecureAuthRefusedError,
     TwoNIntercomAPI,
     coerce_bool,
 )
@@ -62,6 +63,15 @@ except ImportError:  # pragma: no cover - test stub fallback
         """Fallback for HA stubs that lack ConfigEntryAuthFailed."""
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def async_delete_basic_auth_issue(hass: HomeAssistant, entry_id: str) -> None:
+    """Remove a resolved or unloaded entry's insecure-auth warning."""
+    try:
+        from homeassistant.helpers import issue_registry as ir
+    except ImportError:  # pragma: no cover - minimal HA test stubs
+        return
+    ir.async_delete_issue(hass, DOMAIN, f"basic_auth_refused_{entry_id}")
 
 
 @dataclass
@@ -1130,6 +1140,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         label: str,
         *,
         log_level: str = "debug",
+        raise_on_insecure_auth: bool = False,
     ) -> dict[str, Any]:
         """Refresh a cached secondary endpoint, returning the cached value on failure."""
         fetcher: Callable[[], Awaitable[dict[str, Any]]] | None = getattr(
@@ -1146,6 +1157,12 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
 
         try:
             value = await fetcher()
+        except TwoNInsecureAuthRefusedError:
+            self._async_create_basic_auth_issue()
+            if raise_on_insecure_auth:
+                raise
+            # Metadata/event refreshes defer auth retries to the polling update.
+            return getattr(self, cache_attr) or {}
         except Exception as err:  # pylint: disable=broad-except
             log_message = f"Failed to fetch {label}: %s"
             if log_level == "warning":
@@ -1286,13 +1303,15 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             # firmware installed through the device UI without reloading HA.
             if self.data is not None or self._system_info is None:
                 self._system_info = await self._refresh_secondary_cache(
-                    "_system_info", "async_get_system_info", "system info"
+                    "_system_info", "async_get_system_info", "system info",
+                    raise_on_insecure_auth=True,
                 )
 
             phone_status = await self._refresh_secondary_cache(
                 "_phone_status",
                 "async_get_phone_status",
                 "phone status",
+                raise_on_insecure_auth=True,
             )
             # switch_caps: fetched at startup, refreshed on
             # ConfigurationChanged/CapabilitiesChanged events, and
@@ -1301,11 +1320,13 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
                 "_switch_caps",
                 "async_get_switch_caps",
                 "switch caps",
+                raise_on_insecure_auth=True,
             )
             switch_status = await self._refresh_secondary_cache(
                 "_switch_status",
                 "async_get_switch_status",
                 "switch status",
+                raise_on_insecure_auth=True,
             )
             if self._io_caps is None:
                 await self._refresh_secondary_cache(
@@ -1313,12 +1334,14 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
                     "async_get_io_caps",
                     "io caps",
                     log_level="warning",
+                    raise_on_insecure_auth=True,
                 )
             io_caps = self._io_caps or {}
             io_status = await self._refresh_secondary_cache(
                 "_io_status",
                 "async_get_io_status",
                 "io status",
+                raise_on_insecure_auth=True,
             )
 
             # Get current call status
@@ -1327,6 +1350,8 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             # Reset retry / auth-failure counters on successful update
             self._retry_count = 0
             self._auth_error_count = 0
+            if self.config_entry is not None:
+                async_delete_basic_auth_issue(self.hass, self.config_entry.entry_id)
 
             # Baseline state capture — ring detection is event-driven via
             # CallStateChanged / CallSessionStateChanged subscriptions;
@@ -1360,6 +1385,8 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             )
             
         except TwoNAuthenticationError as err:
+            if isinstance(err, TwoNInsecureAuthRefusedError):
+                self._async_create_basic_auth_issue()
             await self.api.async_reset_session()
             self._auth_error_count += 1
             if self._auth_error_count < NUM_AUTH_ERRORS:
@@ -1407,6 +1434,24 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             # Generic API errors - mark entities unavailable but keep trying
             _LOGGER.warning("API error: %s", err)
             raise UpdateFailed(f"Error communicating with device: {err}") from err
+
+    def _async_create_basic_auth_issue(self) -> None:
+        """Warn existing installations about the blocked Basic fallback."""
+        if self.config_entry is None:
+            return
+        try:
+            from homeassistant.helpers import issue_registry as ir
+        except ImportError:  # pragma: no cover - minimal HA test stubs
+            return
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            f"basic_auth_refused_{self.config_entry.entry_id}",
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="basic_auth_refused",
+            translation_placeholders={"name": self.config_entry.title},
+        )
 
     @property
     def ring_active(self) -> bool:

@@ -46,7 +46,7 @@
         },
         "data_description": {
           "verify_ssl": "HTTPS-Zertifikat des Geräts prüfen. Nur für das werkseitige selbstsignierte Zertifikat deaktivieren.",
-          "allow_insecure": "Senden von Zugangsdaten per HTTP-Basic-Auth über unverschlüsseltes HTTP erlauben. Deaktiviert lassen, sofern das Gerät HTTPS oder Digest unterstützt.",
+          "allow_insecure": "Umkehrbar kodierte HTTP-Basic-Zugangsdaten über unverschlüsseltes HTTP oder HTTPS mit ungeprüftem Zertifikat senden. Ein Angreifer könnte das Passwort erhalten. Deaktiviert lassen; Digest oder HTTPS mit vertrauenswürdigem Zertifikat bevorzugen.",
           "username": "Benutzername des HTTP-API-Kontos des Geräts — verwaltet in der Geräte-Weboberfläche unter Services > HTTP API > Accounts",
           "password": "Passwort des HTTP-API-Kontos des Geräts"
         }
@@ -66,7 +66,8 @@
     },
     "error": {
       "cannot_connect": "Verbindung zum Gerät fehlgeschlagen. Bitte IP-Adresse, Port und Zugangsdaten prüfen.",
-      "invalid_auth": "HTTP-API-Anmeldung fehlgeschlagen. Prüfen Sie die Zugangsdaten und Kontoberechtigungen am Gerät."
+      "invalid_auth": "HTTP-API-Anmeldung fehlgeschlagen. Prüfen Sie die Zugangsdaten und Kontoberechtigungen am Gerät.",
+      "basic_auth_refused": "HTTP-Basic-Authentifizierung wurde blockiert, da die Verbindung unverschlüsseltes HTTP oder HTTPS ohne Zertifikatsprüfung verwendet. Stellen Sie die HTTP-API-Dienste des Geräts auf Digest um oder installieren Sie ein Zertifikat, dem Home Assistant vertraut. Nur bei einem bestehenden Eintrag können Sie das Risiko unter Neu konfigurieren > Unsichere Verbindung zulassen akzeptieren."
     },
     "abort": {
       "already_configured": "Diese 2N Gegensprechanlage ist bereits konfiguriert.",
@@ -74,6 +75,12 @@
       "no_mac": "Die Netzwerkankündigung des Geräts enthielt keine verwendbare Kennung.",
       "reauth_successful": "Zugangsdaten erfolgreich aktualisiert.",
       "reconfigure_successful": "Gerätekonfiguration erfolgreich aktualisiert."
+    }
+  },
+  "issues": {
+    "basic_auth_refused": {
+      "title": "Unsichere Basic-Authentifizierung für {name} blockiert",
+      "description": "Das Gerät für {name} hat HTTP-Basic-Authentifizierung über unverschlüsseltes HTTP oder HTTPS mit ungeprüftem Zertifikat angefordert. Home Assistant hat das Senden umkehrbar kodierter Zugangsdaten verweigert. Stellen Sie die HTTP-API-Dienste des Geräts auf Digest um oder installieren Sie ein Zertifikat, dem Home Assistant vertraut, und aktivieren Sie die Zertifikatsprüfung unter Neu konfigurieren. Wenn Sie das Risiko einer Offenlegung des API-Passworts akzeptieren, öffnen Sie Einstellungen > Geräte & Dienste > 2N Intercom > Neu konfigurieren > Unsichere Verbindung zulassen. Die Warnung verschwindet nach einer erfolgreichen Aktualisierung."
     }
   },
   "options": {

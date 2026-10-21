@@ -150,6 +150,27 @@ def install_api_stubs() -> None:
     sys.modules["async_timeout"] = async_timeout
 
 
+def install_issue_registry_stub() -> types.ModuleType:
+    """Register an entry-independent issue registry with stable issue IDs."""
+    helpers = ensure_package("homeassistant.helpers")
+    registry = types.ModuleType("homeassistant.helpers.issue_registry")
+    registry.IssueSeverity = types.SimpleNamespace(WARNING="warning")
+
+    def async_create_issue(hass, domain, issue_id, **kwargs):
+        if not hasattr(hass, "_test_issues"):
+            hass._test_issues = {}
+        hass._test_issues[(domain, issue_id)] = kwargs
+
+    def async_delete_issue(hass, domain, issue_id):
+        getattr(hass, "_test_issues", {}).pop((domain, issue_id), None)
+
+    registry.async_create_issue = async_create_issue
+    registry.async_delete_issue = async_delete_issue
+    helpers.issue_registry = registry
+    sys.modules["homeassistant.helpers.issue_registry"] = registry
+    return registry
+
+
 def install_dt_util_stub() -> types.ModuleType:
     """Register a minimal ``homeassistant.util.dt`` (tz-aware helpers)."""
 
