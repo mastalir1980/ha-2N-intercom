@@ -7,7 +7,7 @@
 #   --ref <ref>   deploy a committed git ref (default: HEAD) via `git archive`
 #   --worktree    deploy the current working tree incl. uncommitted changes
 #   --pull        pull the newest HA image for staging before restart
-#   --no-restart  copy files only
+#   --no-restart  stop staging and copy files without restarting
 set -euo pipefail
 
 E2E_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -53,16 +53,16 @@ DEST="$PI_STAGING_DIR/config"
 IMAGE="${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:stable}"
 # keep the staging compose file on the Pi in sync with the repo
 pi "cat > '$PI_STAGING_DIR/docker-compose.yml'" < "$E2E_DIR/staging/docker-compose.yml"
-# HA runs as root in the container and leaves root-owned __pycache__ behind,
-# so the old version is removed from inside a throwaway container, not by our user.
-STREAM | pi "set -e
-  mkdir -p '$DEST/custom_components'
-  if [ -e '$DEST/custom_components/2n_intercom' ]; then
-    rm -rf '$DEST/custom_components/2n_intercom' 2>/dev/null ||
-      docker run --rm --entrypoint /bin/rm -v '$DEST/custom_components:/cc' '$IMAGE' -rf /cc/2n_intercom
-  fi
-  tar -x -C '$DEST'
-  printf '{\"sha\": \"%s\", \"deployed_at\": \"%s\"}\n' '$SHA' \"\$(date -Is)\" > '$DEST/custom_components/2n_intercom/.e2e_deployed.json'"
+# Match the helper: stop staging and write root-owned integration files only inside
+# a throwaway container, so existing symlinks cannot resolve to paths on the host.
+pi "cd '$PI_STAGING_DIR' && docker compose stop -t 20 '$HA_CONTAINER'" >/dev/null 2>&1 || true
+STREAM | pi "docker run --rm -i --network none -v '$DEST:/config' --entrypoint /bin/sh '$IMAGE' -c '
+  set -e
+  rm -rf /config/custom_components/2n_intercom
+  mkdir -p /config/custom_components
+  tar -x -C /config
+  printf \"%s\n\" \"\$1\" > /config/custom_components/2n_intercom/.e2e_deployed.json' \
+  sh '{\"sha\": \"$SHA\", \"deployed_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}'"
 mkdir -p "$E2E_DIR/state"
 echo "$SHA" > "$E2E_DIR/state/last_deployed_sha"
 
