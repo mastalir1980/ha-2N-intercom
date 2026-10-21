@@ -41,6 +41,7 @@ from .const import (
     CONF_CAMERA_SOURCE,
     CONF_ENABLE_CAMERA,
     CONF_ENABLE_DOORBELL,
+    CONF_RING_ON_KEYPRESS,
     CONF_FIRMWARE_CHANNEL,
     CONF_GRANT_ACCESS_USER,
     CONF_LIVE_VIEW_MODE,
@@ -66,6 +67,7 @@ from .const import (
     DEFAULT_CAMERA_SOURCE,
     DEFAULT_ENABLE_CAMERA,
     DEFAULT_ENABLE_DOORBELL,
+    DEFAULT_RING_ON_KEYPRESS,
     DEFAULT_FIRMWARE_CHANNEL,
     DEFAULT_LIVE_VIEW_MODE,
     DEFAULT_PORT_HTTP,
@@ -1012,6 +1014,12 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
                     CONF_ENABLE_DOORBELL,
                     default=self._session_option(
                         CONF_ENABLE_DOORBELL, DEFAULT_ENABLE_DOORBELL
+                    ),
+                ): cv.boolean,
+                vol.Required(
+                    CONF_RING_ON_KEYPRESS,
+                    default=self._session_option(
+                        CONF_RING_ON_KEYPRESS, DEFAULT_RING_ON_KEYPRESS
                     ),
                 ): cv.boolean,
                 vol.Required(
