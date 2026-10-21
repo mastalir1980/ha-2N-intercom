@@ -100,11 +100,16 @@ stav dokonce fixují.
 
 **Doporučení.** Automatický Basic fallback jen při `verify_ssl=True`; při neověřeném certifikátu
 stejný explicitní opt-in jako u HTTP (`allow_insecure`) a jasná chyba pro uživatele. Digest
-nechat beze změny. **Otevřená otázka pro Jana** (task je proto nepřiřazený): user step nemá
-`allow_insecure`, takže zařízení nabízející jen Basic na self-signed certifikátu by při setupu
-skončilo na `cannot_connect`. Varianty: (a) přidat přepínač do user stepu po prvním selhání –
-*doporučeno*, (b) vlastní chyba odkazující na Reconfigure, (c) nechat a jen logovat
-WARNING – nedoporučeno, heslo stále uniká.
+nechat beze změny.
+
+**Rozhodnutí (Jan, 2026-10-21): varianta b.** Při prvním setupu žádný opt-in: pokud zařízení chce
+Basic přes neověřené spojení, user step skončí vlastní chybou `basic_auth_refused` s návodem, co
+udělat na zařízení (přepnout HTTP API služby na Digest, nebo nahrát certifikát, kterému HA věří).
+Přepínač `allow_insecure` zůstává jen v Reconfigure. Stávající instalace, které na Basic nad
+neověřeným HTTPS spoléhaly, po upgradu přestanou fungovat; dostanou WARNING, Repair issue a stejnou
+chybu v reauth formuláři s odkazem na Reconfigure → „Allow insecure connection“. Do changelogu 1.5.0
+jde jako breaking change v sekci Security. Zamítnuto: (a) přepínač v user stepu (svádí k zaškrtnutí
+bez porozumění), (c) nechat a jen logovat WARNING (heslo stále uniká). Task je přiřazený `@copilot`.
 
 ### S-2 — 🟠 Medium — TASK-68: tichý přepis hosta podle SSDP bez ověření identity zařízení
 
@@ -213,8 +218,9 @@ Oprava **TASK-68** zruší i DoS zvonku/dveří a podvržené události. Dohroma
 
 ## 7. Doporučení k vydání 1.5.0
 
-1. **TASK-67** – rozhodnout variantu UX (a/b), přiřadit a opravit **před vydáním**. Jediný nález,
-   který končí heslem účtu s právem otevírat dveře.
+1. **TASK-67** – rozhodnuto (varianta b, viz S-1), přiřazeno `@copilot`, opravit **před vydáním**.
+   Jediný nález, který končí heslem účtu s právem otevírat dveře. Release task TASK-37 má TASK-67,
+   TASK-68 a TASK-69 nově mezi závislostmi.
 2. **TASK-68** – opravit společně s TASK-67 (defense in depth; je přiřazený `@copilot`, headless
    kodér ho může vzít).
 3. **TASK-69** – malá změna + testy, doporučuji do 1.5.0 (je v milestone).
