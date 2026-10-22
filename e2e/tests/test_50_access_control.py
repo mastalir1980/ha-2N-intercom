@@ -13,6 +13,13 @@ import pytest
 
 from conftest import CFG, find_by_suffix
 
+# The relay roundtrip test (test_30) pulses relay 1 shortly before this
+# module runs and grant_access pulses the same relay again (access point 0
+# drives relay 1 on the gate setup). A second pulse while the gate drive is
+# moving reads as STOP, so the gate appears not to react at all. Give the
+# drive time to finish its full open->close cycle before the second pulse.
+GATE_CYCLE_COOLDOWN_S = float(CFG.get("E2E_GATE_COOLDOWN_S", "60"))
+
 # Kept independent of the integration's const.py on purpose (ground truth side).
 ACCESS_EVENTS = {
     "CardEntered",
@@ -77,6 +84,11 @@ def test_grant_access_is_logged_by_device(ha, entry, twon):
         pytest.skip("deployed integration has no grant_access service (TASK-8 not deployed)")
     if "ApiAccessRequested" not in twon.log_caps():
         pytest.skip("device does not report ApiAccessRequested in log/caps")
+
+    # Cooldown after the relay-roundtrip pulses: the gate drive needs time to
+    # finish its cycle, otherwise this second pulse acts as a STOP command.
+    print(f"gate cooldown {GATE_CYCLE_COOLDOWN_S:.0f}s (second relay pulse pending)")
+    time.sleep(GATE_CYCLE_COOLDOWN_S)
 
     sub_id = twon.log_subscribe(["ApiAccessRequested"])
     try:
