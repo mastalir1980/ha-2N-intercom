@@ -211,15 +211,20 @@ You still need to enter the intercom's HTTP API credentials.
 
 Once configured, the entry follows the device when its IP address changes.
 The integration matches the announcement against a separately stored MAC address,
-updates the host, and reloads the entry automatically. An INFO log records the
-entry title and the old and new hosts. Existing entries learn their MAC address
-from the device on their next setup; their unique ID remains unchanged.
+then confirms the device identity at the new address with the stored API
+credentials and TLS settings before updating the host and reloading the entry.
+The API-reported MAC must match, as must the serial number for a serial-based
+unique ID. Failed verification leaves the entry unchanged and logs one WARNING
+per candidate host per entry lifetime. An INFO log records successful moves.
+Existing entries learn their MAC address from the device on their next setup;
+their unique ID remains unchanged.
 
-**This trusts devices on the local network.** Another device announcing the same
-MAC address could redirect the connection to itself. Use HTTPS, preferably with
-certificate verification enabled through **Reconfigure**, and keep untrusted
-devices off the intercom's network. Manual setup remains available if SSDP
-announcements cannot reach Home Assistant.
+Discovery verification never sends HTTP Basic credentials over HTTP or
+unverified HTTPS, even with **Allow insecure connection** enabled. Such devices
+must support Digest authentication for automatic address updates. Use HTTPS,
+preferably with certificate verification enabled through **Reconfigure**, and
+keep untrusted devices off the intercom's network. Manual setup and Reconfigure
+remain available if discovery or identity verification cannot complete.
 
 ### HTTP API account privileges
 
@@ -543,6 +548,16 @@ The integration uses two data channels:
 - Press the button and watch HA logs — the event path should flip the binary sensor within ~1 s
 - If a specific Called ID does not ring, enable debug logging for `custom_components.2n_intercom`. Every call event records its state, direction/originator, session, canonical peers, configured canonical filter (`all` for All calls) and decision (`rang`, `filtered by peer` or `not a ring`). Only intercom-started calls ring, even with `All calls`
 - If the subscription is down, the listener retries with exponential backoff (up to ~60 s). Ring events during a subscription gap are lost
+
+### Sharing diagnostics
+
+Download diagnostics from the integration's menu in **Settings > Devices & services**
+when reporting a problem. Credentials, serial numbers, MAC addresses, SIP identities,
+call peers and access-event user identities are redacted; caller details are not
+included. Device identifiers embedded in entry titles or saved device names are
+masked too. Firmware/hardware versions, model variant, capabilities, registration
+state and connection host/port remain readable for troubleshooting. Review the
+remaining connection details and custom names before posting the file publicly.
 
 ### Reauth notification keeps appearing
 - Credentials really are wrong, or the device locked the account. Check the 2N web UI under **Services → HTTP API → Account** and re-enter the password through the reauth flow
