@@ -5,7 +5,7 @@ status: To Do
 assignee:
   - '@copilot'
 created_date: '2026-10-15 12:13'
-updated_date: '2026-10-21T10:49:00Z'
+updated_date: '2026-10-22 09:49'
 labels:
   - release
 milestone: m-0
@@ -47,6 +47,7 @@ Release of milestone v1.5.0: everything user-facing merged to main since v1.4.0 
 - [ ] #2 CHANGELOG.md has a "## 1.5.0 - <date>" section written for users (what changed and what they may need to do), grouped by Features / Fixes / Docs, built from the tasks of milestone v1.5.0 and the commits since v1.4.0; no internal pipeline/tooling changes [unit]
 - [ ] #3 README and INSTALLATION.md mention every new user-visible option, entity and service from the milestone (check, fix gaps) [unit]
 - [ ] #4 Full unit suite, validate.py and py_compile green; PR check e2e-pi green [e2e]
+- [ ] #5 CHANGELOG 1.5.0 has a Security section marked as a breaking change built from the release note in the TASK-67 final summary (Basic only over verified HTTPS, unverified HTTPS counts as insecure, upgrade path via Reconfigure > Allow insecure connection or Digest/trusted certificate), and it states that the 1.4.0 rule "Basic stays enabled over HTTPS" no longer applies [unit]
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -57,3 +58,9 @@ Release of milestone v1.5.0: everything user-facing merged to main since v1.4.0 
 3. Check README/INSTALLATION for each new option/entity/service; add what is missing.
 4. Run the local gates. Do not create tags or releases (Jan does that after the merge).
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+TASK-67 (merged in PR #99) changed the Basic-auth rule from 1.4.0: Basic is no longer sent over HTTPS with an unverified certificate. The 1.4.0 CHANGELOG line saying the fallback stays enabled over HTTPS is now outdated; the 1.5.0 section must carry the copy-ready release note from the TASK-67 final summary and say that the 1.4.0 rule is superseded. Do not rewrite the published 1.4.0 section.
+<!-- SECTION:NOTES:END -->
