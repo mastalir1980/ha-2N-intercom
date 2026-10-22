@@ -3,11 +3,11 @@ id: TASK-67
 title: >-
   Basic-auth fallback sends the API password to any HTTPS host when the
   certificate is not verified (verify_ssl=False)
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-21T09:44:00Z'
-updated_date: '2026-10-21 14:16'
+updated_date: '2026-10-22 09:49'
 labels:
   - security
   - bug
@@ -47,18 +47,18 @@ Found by the security review before v1.5.0 (docs/SECURITY-REVIEW-v1.5.0.md, find
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 With protocol https, verify_ssl False and allow_insecure False, a 401 Basic challenge is not answered with Basic credentials: _async_request raises a dedicated TwoNInsecureAuthRefusedError (subclass of TwoNAuthenticationError) and logs one WARNING naming the reason, with no credential in the log [unit]
-- [ ] #2 With protocol https and verify_ssl True the Basic fallback keeps working exactly as today [unit]
-- [ ] #3 With verify_ssl False (or protocol http) and allow_insecure True, Basic is sent: one explicit opt-in rule for both insecure transports [unit]
-- [ ] #4 Digest authentication is unaffected in every protocol/verify_ssl/allow_insecure combination [unit]
-- [ ] #5 Initial setup (user step) against a device that demands Basic over an unverified connection ends with the dedicated error basic_auth_refused, not cannot_connect; its text tells the user to switch the device HTTP API services to Digest or to install a trusted certificate; no allow_insecure field is added to the user step [unit]
-- [ ] #6 Reauth against such a device shows the same dedicated error (not invalid_auth) and its text also points existing entries to Reconfigure > Allow insecure connection [unit]
-- [ ] #7 At runtime a refused Basic fallback creates one Repair issue (issue_registry, severity warning, not fixable, translated, placeholder = entry title) pointing to Reconfigure > Allow insecure connection or to fixing the device; the issue is removed when a request succeeds again or the entry is unloaded [unit]
-- [ ] #8 strings.json and en/cs/de translations contain the new config error, the Repair issue texts and an allow_insecure description that covers both plaintext HTTP and HTTPS with an unverified certificate; test_translations stays green [unit]
-- [ ] #9 README and INSTALLATION explain the rule (Basic only over verified HTTPS, otherwise the opt-in in Reconfigure), the device-side fix (Digest or trusted certificate) and the upgrade step for existing installations; docs/IMPROVEMENTS.md S3 gets a note that unverified HTTPS counts as insecure [unit]
-- [ ] #10 The final summary contains the user-facing release note (Security, breaking change) for TASK-37 to copy into CHANGELOG 1.5.0 [unit]
-- [ ] #11 Full unit suite, validate.py and py_compile green; PR check e2e-pi green [e2e]
-- [ ] #12 Jan verifies on the E2E intercom (HTTPS, self-signed certificate, Digest accounts) that setup, reauth and runtime work without the opt-in, and that a device temporarily switched to Basic shows the new error and the Repair issue [jan]
+- [x] #1 With protocol https, verify_ssl False and allow_insecure False, a 401 Basic challenge is not answered with Basic credentials: _async_request raises a dedicated TwoNInsecureAuthRefusedError (subclass of TwoNAuthenticationError) and logs one WARNING naming the reason, with no credential in the log [unit]
+- [x] #2 With protocol https and verify_ssl True the Basic fallback keeps working exactly as today [unit]
+- [x] #3 With verify_ssl False (or protocol http) and allow_insecure True, Basic is sent: one explicit opt-in rule for both insecure transports [unit]
+- [x] #4 Digest authentication is unaffected in every protocol/verify_ssl/allow_insecure combination [unit]
+- [x] #5 Initial setup (user step) against a device that demands Basic over an unverified connection ends with the dedicated error basic_auth_refused, not cannot_connect; its text tells the user to switch the device HTTP API services to Digest or to install a trusted certificate; no allow_insecure field is added to the user step [unit]
+- [x] #6 Reauth against such a device shows the same dedicated error (not invalid_auth) and its text also points existing entries to Reconfigure > Allow insecure connection [unit]
+- [x] #7 At runtime a refused Basic fallback creates one Repair issue (issue_registry, severity warning, not fixable, translated, placeholder = entry title) pointing to Reconfigure > Allow insecure connection or to fixing the device; the issue is removed when a request succeeds again or the entry is unloaded [unit]
+- [x] #8 strings.json and en/cs/de translations contain the new config error, the Repair issue texts and an allow_insecure description that covers both plaintext HTTP and HTTPS with an unverified certificate; test_translations stays green [unit]
+- [x] #9 README and INSTALLATION explain the rule (Basic only over verified HTTPS, otherwise the opt-in in Reconfigure), the device-side fix (Digest or trusted certificate) and the upgrade step for existing installations; docs/IMPROVEMENTS.md S3 gets a note that unverified HTTPS counts as insecure [unit]
+- [x] #10 The final summary contains the user-facing release note (Security, breaking change) for TASK-37 to copy into CHANGELOG 1.5.0 [unit]
+- [x] #11 Full unit suite, validate.py and py_compile green; PR check e2e-pi green [e2e]
+- [x] #12 Jan verifies on the E2E intercom (HTTPS, self-signed certificate, Digest accounts) that setup, reauth and runtime work without the opt-in, and that a device temporarily switched to Basic shows the new error and the Repair issue [jan]
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -102,4 +102,6 @@ AC #12: Manual verification by Jan remains pending: self-signed HTTPS with Diges
 ### Security - Breaking change
 
 HTTP Basic authentication now requires HTTPS with certificate verification enabled. HTTPS with an unverified or factory self-signed certificate is treated as insecure, just like plaintext HTTP: Basic credentials are not sent unless Allow insecure connection is explicitly enabled in Reconfigure. Existing installations using Basic over unverified HTTPS will stop connecting until corrected. Prefer switching the device HTTP API services to Digest, or installing a certificate Home Assistant trusts and enabling certificate verification in Reconfigure. Initial setup has no insecure opt-in. Existing entries show a warning, a Repair issue and a dedicated reauthentication error; users who explicitly accept the password-exposure risk can enable Reconfigure > Allow insecure connection. Digest authentication is unchanged.
+
+Verification update (2026-10-22): AC #11 proven - PR #99 checks e2e-pi and validate green on the merged head. AC #12 verified by Jan on the E2E intercom: self-signed HTTPS with Digest works through setup, reauth and runtime without the opt-in; with the device temporarily switched to Basic, the dedicated basic_auth_refused error and the Repair issue appeared. The runtime log showed one WARNING per refused request (31 in about 13 minutes across the polled endpoints), which matches AC #1; Jan decided no log rate-limiting follow-up is needed.
 <!-- SECTION:FINAL_SUMMARY:END -->
