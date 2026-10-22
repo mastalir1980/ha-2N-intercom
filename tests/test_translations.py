@@ -35,6 +35,34 @@ class TranslationConsistencyTests(unittest.TestCase):
         strings["config"].pop("progress", None)
         self.assertEqual(self.languages["en"], strings)
 
+    def test_insecure_basic_error_repair_and_opt_in_are_translated(self) -> None:
+        for lang, data in {"strings": self.strings, **self.languages}.items():
+            with self.subTest(lang=lang):
+                self.assertIn("basic_auth_refused", data["config"]["error"])
+                error = data["config"]["error"]["basic_auth_refused"]
+                self.assertIn("Digest", error)
+                self.assertIn("Home Assistant", error)
+                self.assertNotIn("allow_insecure", data["config"]["step"]["user"]["data"])
+                opt_in = data["config"]["step"]["reconfigure"]["data_description"]["allow_insecure"]
+                self.assertIn("HTTP", opt_in)
+                self.assertIn("HTTPS", opt_in)
+                self.assertIn("Digest", opt_in)
+                issue = data["issues"]["basic_auth_refused"]
+                self.assertEqual(set(issue), {"title", "description"})
+                for value in issue.values():
+                    self.assertEqual(set(re.findall(r"\{(\w+)\}", value)), {"name"})
+                self.assertIn("Digest", issue["description"])
+                self.assertIn("Home Assistant", issue["description"])
+                label = data["config"]["step"]["reconfigure"]["data"]["allow_insecure"]
+                self.assertIn(label, error)
+                self.assertIn(label, issue["description"])
+        error = self.strings["config"]["error"]["basic_auth_refused"]
+        for instruction in (
+            "HTTP API services", "Digest", "certificate Home Assistant trusts",
+            "Reconfigure > Allow insecure connection",
+        ):
+            self.assertIn(instruction, error)
+
     def test_all_languages_share_the_same_keys(self) -> None:
         expected = _keys(self.languages["en"])
         for lang, data in self.languages.items():

@@ -53,7 +53,11 @@ from .const import (
     SCAN_INTERVAL_MAX,
     SCAN_INTERVAL_MIN,
 )
-from .coordinator import TwoNIntercomCoordinator, TwoNIntercomRuntimeData
+from .coordinator import (
+    TwoNIntercomCoordinator,
+    TwoNIntercomRuntimeData,
+    async_delete_basic_auth_issue,
+)
 
 if TYPE_CHECKING:
     from .coordinator import TwoNIntercomConfigEntry
@@ -606,6 +610,9 @@ async def async_unload_entry(
         # Clear runtime_data so services and other code that inspects it
         # cannot reach stale coordinator/API objects after teardown.
         entry.runtime_data = None  # type: ignore[assignment]  # cleared after unload
+
+    if unload_ok:
+        async_delete_basic_auth_issue(hass, entry.entry_id)
 
     unload_result: bool = unload_ok
     return unload_result

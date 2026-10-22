@@ -3,11 +3,11 @@ id: TASK-67
 title: >-
   Basic-auth fallback sends the API password to any HTTPS host when the
   certificate is not verified (verify_ssl=False)
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-21T09:44:00Z'
-updated_date: '2026-10-21T10:49:00Z'
+updated_date: '2026-10-21 14:16'
 labels:
   - security
   - bug
@@ -64,11 +64,42 @@ Found by the security review before v1.5.0 (docs/SECURITY-REVIEW-v1.5.0.md, find
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. api.py: add `TwoNInsecureAuthRefusedError(TwoNAuthenticationError)`. `_basic_auth_permitted()` returns True only for `verify_ssl is True` or `allow_insecure`; the protocol alone no longer matters. In `_async_request`, when the challenge is Basic and the fallback is not permitted, log the WARNING (protocol, verify_ssl, host; never credentials) and raise the new error instead of yielding the 401. `async_test_connection` must let the new error propagate (or return a tri-state) so the config flow can tell it apart from "unreachable". Do not touch the Digest middleware (`preemptive=False`) or the Basic retry mechanics themselves (architecture rule: dual auth is intentional).
-2. config_flow.py: `_async_try_connect` catches `TwoNInsecureAuthRefusedError` and remembers it; after the candidate loop, when nothing connected and a refusal was seen, set `errors["base"] = "basic_auth_refused"` instead of `cannot_connect`. Same in `async_step_reauth_confirm` (instead of `invalid_auth`) and in `_async_reconfigure_user_step` (there the user can tick allow_insecure directly). Keep the auto-detect order (verified HTTPS → unverified HTTPS → HTTP) and add no field to the user step.
-3. coordinator.py / __init__.py: on `TwoNInsecureAuthRefusedError` create the Repair issue `basic_auth_refused_<entry_id>` via `homeassistant.helpers.issue_registry` (lazy import with a stub fallback, pattern: `ConfigEntryAuthFailed` in coordinator.py); delete it on the next successful `_async_update_data` and in `async_unload_entry`. Keep the existing 3-strike reauth behaviour.
-4. strings.json + translations/{en,cs,de}.json: `config.error.basic_auth_refused`, `issues.basic_auth_refused.{title,description}`, updated `allow_insecure` data_description.
-5. Tests: update `test_basic_retry_requires_https_or_explicit_opt_in` and `test_basic_auth_permitted_over_https` (now needs verify_ssl=True), add the verify_ssl matrix; config-flow tests for the user/reauth/reconfigure errors; coordinator test for the Repair issue lifecycle; translations test.
-6. Docs: README (connection security section), INSTALLATION, docs/IMPROVEMENTS.md S3 note; put the release-note text into the final summary.
-Must not change: `entry.data` / `entry.options` split (allow_insecure stays in options), the RTSP path, the SSDP flow (TASK-68 is separate).
+1. Add TwoNInsecureAuthRefusedError and permit Basic only for verified HTTPS or the existing explicit allow_insecure option; preserve Digest, RTSP and retry mechanics.
+2. Surface basic_auth_refused through setup, reauth and reconfigure without adding a setup opt-in.
+3. Create a translated warning Repair issue on runtime refusal, retaining three-strike reauth, and remove it after recovery or unload.
+4. Update en/cs/de strings and connection-security documentation; add API matrix, flow and Repair lifecycle regression coverage.
+5. Run the required local Python gates, record evidence and the Security breaking-change release note for TASK-37, and commit locally without ticking criteria or finalizing status. e2e-pi and Jan verification remain external gates.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented verified-HTTPS-or-explicit-opt-in Basic policy with dedicated refusal propagation; setup/reauth/reconfigure errors; translated per-entry Repair issue creation, recovery and unload cleanup; en/cs/de texts and user security/upgrade documentation. Added full protocol/verify_ssl/allow_insecure Basic and Digest matrices, flow refusal/opt-in coverage, and Repair lifecycle/three-strike reauth coverage. Targeted suites are green. Secondary endpoint refusals must bypass cached-data degradation so they reach Repair/reauth handling; ensuring startup cache loading still defers authentication retries to first refresh.
+
+Local gates passed on Python 3.12: full unittest discovery (719 tests), validate.py and py_compile for all integration modules. No E2E command or device interaction was run; e2e-pi must run after the orchestrator pushes. Metadata/event cache refreshes keep intentional graceful degradation but create the Repair issue on a dedicated refusal; polling propagates that refusal into the unchanged three-strike reauth path. A startup regression proves one static switch-capability refusal plus three first-refresh attempts, without aborting setup prematurely. HTTP remains insecure even if verify_ssl=True is supplied; only verified HTTPS or the explicit opt-in permits Basic. No RTSP, SSDP, version, changelog or protected-path changes.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented verified-HTTPS-only automatic Basic fallback, with the existing allow_insecure option required for both plaintext HTTP and unverified HTTPS. Dedicated config errors and translated per-entry Repair guidance explain the device-side fixes and existing-entry opt-in. Digest and the three-strike reauth policy are preserved. Task remains In Progress with all criteria unchecked for the orchestrator.
+
+AC #1: tests/test_api.py AuthenticationRequestTests.test_basic_retry_requires_verified_https_or_explicit_opt_in proves the dedicated authentication subclass, one credential-free WARNING and no retry on insecure transports.
+AC #2: The same complete matrix proves verified HTTPS still performs the Basic retry.
+AC #3: The same matrix proves the explicit opt-in permits Basic on HTTP and unverified HTTPS; config-flow opt-in tests prove it stays in entry.options.
+AC #4: AuthenticationRequestTests.test_digest_path_is_unaffected_for_every_transport_combination covers both success and unresolved Digest challenges for all eight combinations, with preemptive=False middleware and no Basic retry.
+AC #5: ConfigFlowTests.test_user_step_remembers_basic_refusal_across_candidates proves the dedicated setup error, candidate order, resource cleanup and unchanged three-field user form. TranslationConsistencyTests verifies the device-side instructions.
+AC #6: ConfigFlowTests.test_reauth_basic_refusal_is_not_invalid_credentials proves the dedicated reauth error without entry updates; translated error text points to Reconfigure > Allow insecure connection.
+AC #7: Coordinator Repair lifecycle tests prove one stable warning issue per entry, not fixable, translated entry-title placeholder, recovery cleanup and unchanged three-strike reauth. Setup tests prove startup behavior, unload cleanup and retention when unload fails.
+AC #8: tests/test_translations.py passes for strings.json and en/cs/de, including the new error, Repair placeholders and the description of both insecure transports.
+AC #9: README Authentication, INSTALLATION Basic authentication blocked / upgrading existing installations, and docs/IMPROVEMENTS.md S3 now document the rule, device-side remedies and upgrade migration.
+AC #10: Copy-ready TASK-37 release note appears below. No CHANGELOG or manifest version was changed.
+AC #11: Local full suite passed (719 tests), validate.py and integration py_compile passed. PR check e2e-pi is pending; it cannot be run on this VM. Existing e2e/tests/test_00_setup.py and test_20_lifecycle.py cover staging entry loading and reload.
+AC #12: Manual verification by Jan remains pending: self-signed HTTPS with Digest must work through setup, reauth and runtime without opt-in; temporarily selecting Basic must show the dedicated error and Repair issue.
+
+## Release note for TASK-37 / v1.5.0
+
+### Security - Breaking change
+
+HTTP Basic authentication now requires HTTPS with certificate verification enabled. HTTPS with an unverified or factory self-signed certificate is treated as insecure, just like plaintext HTTP: Basic credentials are not sent unless Allow insecure connection is explicitly enabled in Reconfigure. Existing installations using Basic over unverified HTTPS will stop connecting until corrected. Prefer switching the device HTTP API services to Digest, or installing a certificate Home Assistant trusts and enabling certificate verification in Reconfigure. Initial setup has no insecure opt-in. Existing entries show a warning, a Repair issue and a dedicated reauthentication error; users who explicitly accept the password-exposure risk can enable Reconfigure > Allow insecure connection. Digest authentication is unchanged.
+<!-- SECTION:FINAL_SUMMARY:END -->

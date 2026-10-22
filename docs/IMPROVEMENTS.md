@@ -72,6 +72,15 @@ Digest, takže Basic by měl být skutečně jen nouzový.
 > přepínač `allow_insecure` (default vypnuto, dostupný v reconfigure flow).
 > Digest cesta zůstává netknutá. Pokryto testy `test_basic_auth_*`.
 
+> **TASK-67 correction:** unverified HTTPS (`verify_ssl=False`) also counts as
+> insecure: encryption alone does not authenticate the server. Basic fallback
+> now requires verified HTTPS or the existing explicit `allow_insecure` opt-in
+> in Reconfigure. Refusal raises `TwoNInsecureAuthRefusedError`, with a warning,
+> a dedicated setup/reauth/reconfigure error and a runtime Repair issue.
+> Initial setup has no opt-in; use Digest or a trusted certificate instead.
+> Existing Basic installations using unverified HTTPS must fix the device or
+> explicitly accept the risk in Reconfigure. Digest is unchanged.
+
 ### 🟡 S4 — RTSP creds v URL předané ffmpegu
 `api.py:1773-1788` `get_rtsp_url_with_credentials()` vrací URL včetně hesla,
 které jde do `stream_source()` → ffmpeg. Heslo se může objevit v ffmpeg debug

@@ -28,6 +28,7 @@ from .api import (
     TwoNAPIError,
     TwoNAuthenticationError,
     TwoNConnectionError,
+    TwoNInsecureAuthRefusedError,
     TwoNIntercomAPI,
     extract_directory_users,
 )
@@ -200,6 +201,7 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
         self._reconfigure_entry: config_entries.ConfigEntry | None = None
         self._discovered_host: str | None = None
         self._discovered_name: str | None = None
+        self._basic_auth_refused = False
 
     async def _ensure_integration_info(self) -> None:
         """Load and cache integration name/version."""
@@ -234,6 +236,8 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
         try:
             if await api.async_test_connection():
                 return api, True
+        except TwoNInsecureAuthRefusedError:
+            self._basic_auth_refused = True
         except Exception:  # pylint: disable=broad-except
             pass
         await api.async_close()
@@ -252,6 +256,7 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            self._basic_auth_refused = False
             host = user_input[CONF_HOST]
             username = user_input[CONF_USERNAME]
             password = user_input[CONF_PASSWORD]
@@ -294,7 +299,10 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
                         "(tried HTTPS:443 verified, HTTPS:443 unverified, HTTP:80)",
                         host,
                     )
-                    errors["base"] = "cannot_connect"
+                    if self._basic_auth_refused:
+                        errors["base"] = "basic_auth_refused"
+                    else:
+                        errors["base"] = "cannot_connect"
 
                 if api is not None and not errors:
                     # Fetch stable device identity for unique-id
@@ -615,6 +623,8 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
                 )
                 if not await api.async_test_connection():
                     errors["base"] = "invalid_auth"
+            except TwoNInsecureAuthRefusedError:
+                errors["base"] = "basic_auth_refused"
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception(
                     "Reauth connection test failed host=%s",
@@ -702,6 +712,8 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
                 )
                 if not await api.async_test_connection():
                     errors["base"] = "cannot_connect"
+            except TwoNInsecureAuthRefusedError:
+                errors["base"] = "basic_auth_refused"
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception(
                     "Reconfigure connection test failed host=%s",

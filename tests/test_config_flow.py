@@ -513,6 +513,124 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["step_id"], "user")
         self.assertEqual(result["errors"], {"base": "cannot_connect"})
 
+    async def test_user_step_remembers_basic_refusal_across_candidates(self) -> None:
+        flow = self._make_flow()
+        attempts = []
+
+        async def test_connection(api):
+            attempts.append((api.protocol, api.verify_ssl, api.allow_insecure))
+            if api.protocol == "https" and not api.verify_ssl:
+                raise self.config_flow_module.TwoNInsecureAuthRefusedError("refused")
+            return False
+
+        submitted = {"host": "intercom.local", "username": "user", "password": "secret"}
+        with patch.object(FakeAPI, "async_test_connection", test_connection):
+            result = await flow.async_step_user(dict(submitted))
+        self.assertEqual(attempts, [
+            ("https", True, False), ("https", False, False), ("http", False, False),
+        ])
+        self.assertEqual(result["step_id"], "user")
+        self.assertEqual(result["errors"], {"base": "basic_auth_refused"})
+        self.assertEqual(
+            {marker.key for marker in result["data_schema"].schema},
+            {"host", "username", "password"},
+        )
+        self.assertEqual(_form_default(result, "host"), "intercom.local")
+        self.assertTrue(all(api.closed for api in FakeAPI.instances))
+        self.assertEqual(flow._data, {})
+
+        # A new submission must not inherit the preceding attempt's refusal.
+        FakeAPI.connection_result = False
+        result = await flow.async_step_user(dict(submitted))
+        self.assertEqual(result["errors"], {"base": "cannot_connect"})
+
+    async def test_user_step_later_success_takes_precedence_over_refusal(self) -> None:
+        flow = self._make_flow()
+
+        async def test_connection(api):
+            if api.protocol == "https" and not api.verify_ssl:
+                raise self.config_flow_module.TwoNInsecureAuthRefusedError("refused")
+            return api.protocol == "http"
+
+        with patch.object(FakeAPI, "async_test_connection", test_connection):
+            result = await flow.async_step_user({
+                "host": "intercom.local", "username": "user", "password": "secret",
+            })
+        self.assertEqual(result["step_id"], "device")
+        self.assertEqual(result["errors"], {})
+        self.assertEqual(flow._data["protocol"], "http")
+        self.assertTrue(all(api.closed for api in FakeAPI.instances))
+
+    async def test_reauth_basic_refusal_is_not_invalid_credentials(self) -> None:
+        for protocol in ("http", "https"):
+            with self.subTest(protocol=protocol):
+                entry = FakeConfigEntry("entry-1", {
+                    "host": "intercom.local", "username": "user", "password": "old",
+                    "port": 443 if protocol == "https" else 80,
+                    "protocol": protocol, "verify_ssl": False,
+                })
+                hass = FakeHass([entry])
+                flow = self._make_flow(hass)
+                flow.context = {"entry_id": entry.entry_id}
+                await flow.async_step_reauth(entry.data)
+                with patch.object(
+                    FakeAPI, "async_test_connection",
+                    side_effect=self.config_flow_module.TwoNInsecureAuthRefusedError("refused"),
+                ):
+                    result = await flow.async_step_reauth_confirm({
+                        "username": "user", "password": "new",
+                    })
+                self.assertEqual(result["errors"], {"base": "basic_auth_refused"})
+                self.assertEqual(entry.data["password"], "old")
+                self.assertEqual(hass.config_entries.update_calls, [])
+                self.assertEqual(hass.config_entries.reload_calls, [])
+                self.assertTrue(FakeAPI.instances[-1].closed)
+
+    async def test_reconfigure_basic_refusal_then_explicit_opt_in(self) -> None:
+        for protocol in ("http", "https"):
+            with self.subTest(protocol=protocol):
+                entry = FakeConfigEntry("entry-1", {
+                    "host": "intercom.local", "username": "user", "password": "secret",
+                    "port": 443 if protocol == "https" else 80,
+                    "protocol": protocol, "verify_ssl": False,
+                }, options={"scan_interval": 120})
+                hass = FakeHass([entry])
+                flow = self._make_flow(hass)
+                flow.context = {"entry_id": entry.entry_id}
+
+                async def test_connection(api):
+                    if not api.allow_insecure:
+                        raise self.config_flow_module.TwoNInsecureAuthRefusedError("refused")
+                    return True
+
+                with patch.object(FakeAPI, "async_test_connection", test_connection):
+                    result = await flow.async_step_reconfigure({
+                        **entry.data, "allow_insecure": False,
+                    })
+                    self.assertEqual(result["errors"], {"base": "basic_auth_refused"})
+                    self.assertEqual(hass.config_entries.update_calls, [])
+                    self.assertEqual(hass.config_entries.reload_calls, [])
+                    self.assertTrue(FakeAPI.instances[-1].closed)
+
+                    result = await flow.async_step_reconfigure({
+                        **entry.data, "allow_insecure": True,
+                    })
+                    self.assertEqual(result["reason"], "reconfigure_successful")
+                    self.assertEqual(entry.options, {
+                        "scan_interval": 120, "allow_insecure": True,
+                    })
+                    self.assertNotIn("allow_insecure", entry.data)
+
+                    flow = self._make_flow(hass)
+                    flow.context = {"entry_id": entry.entry_id}
+                    await flow.async_step_reauth(entry.data)
+                    result = await flow.async_step_reauth_confirm({
+                        "username": "user", "password": "new",
+                    })
+                    self.assertEqual(result["reason"], "reauth_successful")
+                    self.assertTrue(FakeAPI.instances[-1].allow_insecure)
+                    self.assertTrue(FakeAPI.instances[-1].closed)
+
     async def test_user_step_stores_normalized_mac_separately_from_serial(self) -> None:
         flow = self._make_flow()
         with patch.object(FakeAPI, "system_info", {

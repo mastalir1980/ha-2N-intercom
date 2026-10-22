@@ -17,6 +17,7 @@ from _stubs import (
     ensure_package,
     install_api_stubs,
     install_dt_util_stub,
+    install_issue_registry_stub,
     load_module,
 )
 
@@ -126,6 +127,7 @@ def load_init_module():
     install_api_stubs()
     install_dt_util_stub()
     _install_homeassistant_stubs()
+    install_issue_registry_stub()
     ensure_package("custom_components")
     ensure_package("custom_components.2n_intercom")
     load_module("custom_components.2n_intercom.const", CONST_PATH)
@@ -152,6 +154,7 @@ class FakeConfigEntry:
         self.data = data
         self.options = options or {}
         self.runtime_data: object = None
+        self.title = "Front door"
         self._unload_callbacks: list[object] = []
         self._update_listener = None
         self._background_tasks: list[asyncio.Task] = []
@@ -303,6 +306,66 @@ class AuthenticationSetupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(api.async_reset_session.await_count, 3)
         self.assertIsNone(self.entry.runtime_data)
         self.assertEqual(self.hass.config_entries.forwarded, [])
+
+    async def test_blocked_basic_at_startup_creates_repair_before_reauth(self) -> None:
+        api = FakeAPI()
+        api.async_get_call_status = AsyncMock(
+            side_effect=self.api_module.TwoNInsecureAuthRefusedError("Basic refused")
+        )
+        api.async_reset_session = AsyncMock()
+        with patch.object(self.init_module, "TwoNIntercomAPI", return_value=api):
+            with self.assertRaises(
+                sys.modules["homeassistant.exceptions"].ConfigEntryAuthFailed
+            ):
+                await self.init_module.async_setup_entry(self.hass, self.entry)
+        self.assertEqual(api.async_get_call_status.await_count, 3)
+        self.assertEqual(set(self.hass._test_issues), {
+            ("2n_intercom", "basic_auth_refused_entry-auth")
+        })
+        self.assertIsNone(self.entry.runtime_data)
+
+    async def test_secondary_basic_refusal_at_startup_retries_in_first_refresh(self) -> None:
+        api = FakeAPI()
+        api.async_get_switch_caps = AsyncMock(
+            side_effect=self.api_module.TwoNInsecureAuthRefusedError("Basic refused")
+        )
+        api.async_reset_session = AsyncMock()
+        with patch.object(self.init_module, "TwoNIntercomAPI", return_value=api):
+            with self.assertRaises(
+                sys.modules["homeassistant.exceptions"].ConfigEntryAuthFailed
+            ):
+                await self.init_module.async_setup_entry(self.hass, self.entry)
+        self.assertEqual(api.async_get_switch_caps.await_count, 4)
+        self.assertEqual(api.async_reset_session.await_count, 3)
+        self.assertEqual(set(self.hass._test_issues), {
+            ("2n_intercom", "basic_auth_refused_entry-auth")
+        })
+        self.assertIsNone(self.entry.runtime_data)
+
+    async def test_unload_removes_only_this_entrys_repair(self) -> None:
+        registry = sys.modules["homeassistant.helpers.issue_registry"]
+        for entry_id in (self.entry.entry_id, "other-entry"):
+            registry.async_create_issue(
+                self.hass, "2n_intercom", f"basic_auth_refused_{entry_id}"
+            )
+        self.assertTrue(
+            await self.init_module.async_unload_entry(self.hass, self.entry)
+        )
+        self.assertEqual(set(self.hass._test_issues), {
+            ("2n_intercom", "basic_auth_refused_other-entry")
+        })
+
+    async def test_failed_unload_retains_repair(self) -> None:
+        registry = sys.modules["homeassistant.helpers.issue_registry"]
+        key = ("2n_intercom", f"basic_auth_refused_{self.entry.entry_id}")
+        registry.async_create_issue(self.hass, *key)
+        with patch.object(
+            self.hass.config_entries, "async_unload_platforms", return_value=False
+        ):
+            self.assertFalse(
+                await self.init_module.async_unload_entry(self.hass, self.entry)
+            )
+        self.assertIn(key, self.hass._test_issues)
 
     async def test_transient_auth_error_does_not_abort_setup(self) -> None:
         api = FakeAPI()
