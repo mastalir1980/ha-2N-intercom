@@ -3,11 +3,11 @@ id: TASK-68
 title: >-
   SSDP host update trusts any announcement: verify the device identity before
   switching entry.data host
-status: To Test
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-21T09:44:00Z'
-updated_date: '2026-10-21 14:47'
+updated_date: '2026-10-22 13:30'
 labels:
   - security
   - bug
@@ -50,7 +50,7 @@ Found by the security review before v1.5.0 (docs/SECURITY-REVIEW-v1.5.0.md, find
 - [x] #5 README "Automatic discovery" states that the address follows the device only after the device identity has been confirmed with the stored credentials [unit]
 - [x] #6 e2e/tests/test_60_discovery.py (read-only) keeps passing [e2e]
 - [x] #7 Full unit suite, validate.py and py_compile green; PR check e2e-pi green [e2e]
-- [ ] #8 Jan verifies on the real device that an IP change is still followed after the fix (manual-close) [jan]
+- [x] #8 Jan verifies on the real device that an IP change is still followed after the fix (manual-close) [jan]
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -77,6 +77,8 @@ AC #5 evidence: README Automatic discovery now explicitly states identity confir
 AC #6: pending the orchestrator-run e2e-pi check; discovery E2E file retained unchanged.
 AC #7: all three required local gates passed; e2e-pi is pending. No HA/intercom or E2E commands were run on this VM.
 AC #8: manual verification by Jan remains outstanding. Task intentionally remains In Progress with all acceptance criteria unchecked for orchestrator review/finalization.
+
+AC #8 evidence: Jan verified on the real device that an IP change is followed with the stored credentials (2026-10-22).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

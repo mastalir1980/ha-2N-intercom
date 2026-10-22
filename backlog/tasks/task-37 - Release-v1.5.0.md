@@ -5,7 +5,7 @@ status: To Do
 assignee:
   - '@copilot'
 created_date: '2026-10-15 12:13'
-updated_date: '2026-10-22 09:49'
+updated_date: '2026-10-22 13:30'
 labels:
   - release
 milestone: m-0
@@ -63,4 +63,6 @@ Release of milestone v1.5.0: everything user-facing merged to main since v1.4.0 
 
 <!-- SECTION:NOTES:BEGIN -->
 TASK-67 (merged in PR #99) changed the Basic-auth rule from 1.4.0: Basic is no longer sent over HTTPS with an unverified certificate. The 1.4.0 CHANGELOG line saying the fallback stays enabled over HTTPS is now outdated; the 1.5.0 section must carry the copy-ready release note from the TASK-67 final summary and say that the 1.4.0 rule is superseded. Do not rewrite the published 1.4.0 section.
+
+Pre-release gate met on 2026-10-22: all milestone tasks Done; manual e2e.sh relays run: 22 passed, 2 skipped as expected (SIP sensor, unconfigured IO outputs); relays and grant_access pass.
 <!-- SECTION:NOTES:END -->
