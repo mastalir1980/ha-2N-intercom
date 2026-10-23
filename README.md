@@ -25,6 +25,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 
 ### Camera
 - **JPEG snapshot** via `/api/camera/snapshot`
+- Snapshot sizes are selected from `camera/caps`: the smallest supported size covering both requested dimensions, or the largest available. Unsupported dashboard sizes no longer cause a rejected request and a 640x480 retry on every refresh
 - **Native MJPEG live view** via `/api/camera/snapshot?...&fps=<n>` — served through Home Assistant's `MjpegCamera`, no ffmpeg/HLS round-trip
 - **RTSP stream source** when the device exposes it — requires separate RTSP credentials configured in the options flow (the 2N RTSP server has its own user database independent of the HTTP API accounts)
 - **Credentials are passed to `MjpegCamera` separately** — they never appear in the URL exposed to logs, diagnostics, or dashboards
@@ -283,7 +284,7 @@ Relays must first be enabled in the **intercom settings**; the integration canno
 | Connection | `username` | string | *(required)* | Device API username |
 | Connection | `password` | string | *(required)* | Device API password |
 | Device | `name` | string | *(auto-detected)* | Display name in Home Assistant |
-| Device | `enable_camera` | bool | `true` | Create the camera entity |
+| Device | `enable_camera` | bool | `true` | Create the camera and last-ring image entities |
 | Device | `enable_doorbell` | bool | `true` | Create the doorbell event entity |
 | Device | `called_id` | string | `All calls` | Ringing account / peer filter |
 
@@ -291,7 +292,7 @@ Relays must first be enabled in the **intercom settings**; the integration canno
 
 After initial setup, open the integration's **Options** (Settings → Devices & Services → 2N Intercom → **Configure**) to change behavioral settings without removing the entry. The IP address, port and HTTP API credentials are **not** part of Configure — change them via **⋮ → Reconfigure** on the integration card (or the reauth prompt when credentials stop working).
 
-The options flow has up to three steps:
+The options flow has three kinds of steps:
 
 1. **Device** — name, feature toggles, backup polling interval, firmware channel, ringing account, default grant-access user
 2. **Camera** *(only when camera is enabled)* — live view mode, RTSP credentials, MJPEG resolution/fps, camera source
@@ -304,7 +305,7 @@ Saved relay names, door/gate types, and pulse durations are preserved for relays
 | Step | Parameter | Type | Default | Description |
 |---|---|---|---|---|
 | Device | `name` | string | *(from setup)* | Display name |
-| Device | `enable_camera` | bool | `true` | Toggle camera entity |
+| Device | `enable_camera` | bool | `true` | Toggle camera and last-ring image entities |
 | Device | `enable_doorbell` | bool | `true` | Toggle doorbell event entity |
 | Device | `scan_interval` | 2-600 (s) | 60 | Backup polling interval. Events deliver real-time updates; polling only runs as a safety net |
 | Device | `firmware_channel` | `active_track` \| `lts` \| `beta` | `active_track` | Firmware availability channel; maps to the public update server's `newest` / `lts` / `early` tracks. Does not change device AutoUpdate settings |
@@ -354,6 +355,7 @@ Resulting entities:
 - `binary_sensor.home_intercom_relay_1_active` *(real cached relay state)*
 - `sensor.home_intercom_sip_registration`
 - `sensor.home_intercom_call_state` *(attribute: `active_session_id`)*
+- `update.home_intercom_firmware` *(firmware availability and release notes, only when the device reports `firmwarePackage`)*
 - `switch.home_intercom_front_door`
 - `switch.home_intercom_output_relay1`, `switch.home_intercom_output_output1` *(physical outputs, disabled by default; actual ports depend on the device and extension modules)*
 - `cover.home_intercom_driveway_gate`
@@ -545,7 +547,7 @@ The integration uses two data channels:
 ### Doorbell not triggering
 - Ring detection is exclusively event-driven via the log subscription — there is no polling fallback for ring events
 - Open the integration's diagnostics; the log subscription id should be set
-- Press the button and watch HA logs — the event path should flip the binary sensor within ~1 s
+- Press the button and watch `event.<intercom>_doorbell` — a new timestamp with `event_type: ring` should appear within ~1 s
 - If a specific Called ID does not ring, enable debug logging for `custom_components.2n_intercom`. Every call event records its state, direction/originator, session, canonical peers, configured canonical filter (`all` for All calls) and decision (`rang`, `filtered by peer` or `not a ring`). Only intercom-started calls ring, even with `All calls`
 - If the subscription is down, the listener retries with exponential backoff (up to ~60 s). Ring events during a subscription gap are lost
 

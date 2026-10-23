@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.5.0 - 2026-10-23
+
+### Security - Breaking change
+
+HTTP Basic authentication now requires HTTPS with certificate verification enabled. HTTPS with an unverified or factory self-signed certificate is treated as insecure, just like plaintext HTTP: Basic credentials are not sent unless Allow insecure connection is explicitly enabled in Reconfigure. Existing installations using Basic over unverified HTTPS will stop connecting until corrected. Prefer switching the device HTTP API services to Digest, or installing a certificate Home Assistant trusts and enabling certificate verification in Reconfigure. Initial setup has no insecure opt-in. Existing entries show a warning, a Repair issue and a dedicated reauthentication error; users who explicitly accept the password-exposure risk can enable Reconfigure > Allow insecure connection. Digest authentication is unchanged.
+
+This supersedes the 1.4.0 rule that "Basic stays enabled over HTTPS": that rule no longer applies to HTTPS without certificate verification. Saved connection settings are not changed automatically.
+
+- Automatic IP-address updates now verify the intercom's identity at the new address before changing the saved host. Verification never sends Basic credentials over HTTP or unverified HTTPS, even with the insecure opt-in; those devices need Digest for automatic address updates, or a manual change through Reconfigure.
+- Downloaded diagnostics now redact device serial numbers, MAC addresses, SIP identities, call peers and access-event user identities, including identifiers embedded in entry titles and saved device names. Review remaining connection details and custom names before sharing.
+
+### Features
+
+- **Doorbell event entity and HomeKit auto-linking:** `event.<intercom>_doorbell` emits one `ring` event per intercom-started ring, with called peer and caller details when available. HomeKit automatically links it to the camera on the same device; include only the camera in an Accessory-mode bridge.
+- **Breaking doorbell migration:** the doorbell binary sensor and its registry entry are removed automatically, without a deprecation period. Update automations, blueprint inputs and explicit HomeKit `linked_doorbell_sensor` references to the event entity. Trigger on a new timestamp with `event_type: ring`, not an `on` state; ignore startup, restore and unavailable transitions. Recreate an existing ordinary-camera HomeKit pairing as a video doorbell if needed. See the [migration guide](README.md#doorbell-migration-in-v150-breaking-change) and [HomeKit guide](HOMEKIT_INTEGRATION.md).
+- **Last-ring image:** `image.<intercom>_last_ring` keeps the JPEG captured when the doorbell rings. It is created when the camera is enabled; a failed capture keeps the previous image.
+- **Audited access control:** the new `2n_intercom.grant_access` service opens entry/exit access points on behalf of a directory user, applying their access rights and recording access in the device log. Pass a user UUID or choose the default **grant-access user** in Configure's Device step. Device denials are reported as errors rather than success.
+- **Access-control events:** supported card, PIN, mobile-key, fingerprint and access-result events are read from the log channel. The latest event is available in diagnostics with user identities redacted; card numbers, PINs and mobile-key IDs are never stored.
+- **Extended I/O inputs:** every reported input gets a binary sensor, including extension-module and tamper ports. Inputs are enabled by default; the existing built-in input entity keeps its identity.
+- **Direct I/O output switches:** physical outputs, except `led_secured`, are available as switches that are **disabled by default** and require **I/O - Control** permission. They are **latching**, not timed pulses: direct relay control bypasses logical switch timing and can leave a door **unlocked until the output is turned off**. Prefer the existing logical relay switch/cover for normal timed opening.
+- **Automatic discovery:** 2N and Control4 DS2 / DS2 Mini devices advertising SSDP appear in Home Assistant's Discovered list. Existing entries follow verified IP-address changes without losing their identity.
+- **Firmware availability:** a Firmware update entity shows installed/latest versions and release notes on devices reporting `firmwarePackage` (firmware 3.x). Choose **Firmware channel** in Configure: Active track (default), LTS or Beta. Checks run at setup and every six hours against the public 2N server without device credentials. Installation remains in the device web UI; there is no Install button and device AutoUpdate settings are not changed.
+
+### Fixes
+
+- Calls into the intercom from My2N, Control4 or a SIP phone no longer ring the doorbell. Only intercom-started calls ring, even with **All calls** selected.
+- The Called ID filter now matches any peer in a parallel/group call, rather than only the last peer seen. A selected peer's `/suffix`, such as `1234567890/2`, no longer prevents a match.
+- Snapshots now use a supported size from `camera/caps`: the smallest size covering both requested dimensions, or the largest available. This avoids repeated resolution errors and unnecessary retries at 640x480.
+- Configure now shows directory names instead of raw UUIDs for the default grant-access user, including the selected value. Unknown saved users remain selectable; a directory failure preserves the selection and shows a warning.
+- Saving options preserves saved relay names, door/gate types and pulse durations when relays are absent or cannot be detected.
+- Setup and Configure use **Next** on intermediate steps and **Submit** to save the final step. The unreliable back-navigation checkbox is removed; close and restart the dialog to change an earlier step. Unsaved drafts are discarded.
+- Transient authentication failures refresh the Digest session before requesting credentials again; three consecutive failed poll updates trigger reauthentication. Startup retries no longer loop indefinitely on invalid credentials, and recovery preserves Home Assistant's shared HTTP connection.
+- Empty log pulls no longer cause a busy loop on firmware that returns immediately. Coordinator timestamps are now timezone-aware.
+
+### Docs
+
+- Expanded the [README](README.md) and [installation guide](INSTALLATION.md) for the new entities, options, services and upgrade steps, including event-based doorbell automations and HomeKit setup.
+- Documented Control4 DS2 / DS2 Mini compatibility and where owners can obtain HTTP API credentials.
+- Listed the HTTP API account privileges required by each feature, including **System - Control** for directory queries and **Access Control - Control** for `grant_access`.
+- Clarified that relays must first be enabled in the intercom settings before Home Assistant can discover them, and that HTTP API credentials belong in **Reconfigure**, separately from camera RTSP credentials.
+
 ## 1.4.0 - 2026-10-11
 
 ### Security — secure-by-default connection
