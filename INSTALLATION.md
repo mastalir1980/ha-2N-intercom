@@ -24,6 +24,14 @@ Restart HA to pick up the new integration.
 2. Search for **2N Intercom**
 3. Run the multi-step wizard
 
+Devices advertising **SSDP**, including Control4 DS2 / DS2 Mini, also appear in
+**Settings > Devices & services > Discovered**. Start setup there to prefill the
+host and device name; HTTP API credentials are still required. Existing entries
+follow IP-address changes only after the integration verifies the device identity
+at the new address. Discovery verification never sends Basic credentials over
+HTTP or unverified HTTPS, even with the insecure opt-in; use Digest for automatic
+address updates on those connections, or change the address in **Reconfigure**.
+
 ### 4. Configure
 
 The wizard has two steps:
@@ -56,13 +64,17 @@ Device
 After setup you should see:
 
 - `camera.<name>_camera` — JPEG snapshots and a native MJPEG live view (no ffmpeg)
+- `image.<name>_last_ring` — snapshot captured at the last ring, created when the camera is enabled; a failed capture keeps the previous image
 - `event.<name>_doorbell` — one `ring` event per intercom-started ring
 - `binary_sensor.<name>_input_1` — real device input state
+- Additional input and tamper binary sensors for the ports reported by the device, including extension modules (enabled by default)
 - `binary_sensor.<name>_relay_1_active` — real cached relay state
 - `sensor.<name>_sip_registration` — SIP registration diagnostic
 - `sensor.<name>_call_state` — call state with `active_session_id` attribute
 - `switch.<name>_<relay_name>` for door-type relays (auto-discovered)
 - `cover.<name>_<relay_name>` for gate-type relays (after options flow override)
+- Direct I/O output switches for physical outputs (disabled by default; see the safety warning below)
+- `update.<name>_firmware` — installed/latest firmware and release notes, only when the device reports `firmwarePackage` (firmware 3.x)
 
 Relay entities appear only for relays enabled in the **intercom settings**; the integration cannot enable them, so if none appear, enable them there and reload the integration (see [No relay entities appear](#no-relay-entities-appear)).
 
@@ -76,6 +88,7 @@ If you run the HA HomeKit Bridge, include only the camera in **Accessory** mode.
 - **Doorbell** — automate on a new timestamp of `event.<name>_doorbell` with `event_type: ring`, ignoring startup/restore and unavailable transitions (see [README automation examples](README.md#automation-examples)). The `sensor.<name>_call_state` entity carries the `active_session_id` attribute you'll need to terminate the same session
 - **Door relay** — call `switch.turn_on` (the relay self-resets after the configured pulse duration)
 - **Gate relay** — call `cover.open_cover` / `cover.close_cover`
+- **Last-ring image** — use the image entity on a dashboard or in notifications to show who rang, rather than the current camera view
 
 Upgrading to v1.5.0 removes the old doorbell binary sensor and its registry entry
 automatically, without a deprecation period. Update existing automations,
@@ -92,25 +105,114 @@ For per-relay or device-feature changes, use the regular **Configure** (Options)
 
 Both the setup wizard and **Configure** only move forward. Intermediate steps show **Next**; the last step shows **Submit** and saves the draft. To change values from an earlier step, close the dialog and start again; closing discards unsaved changes. HTTP API credentials are changed only in **⋮ → Reconfigure**; the RTSP username/password in the camera options belong to a separate streaming account.
 
+### Device options
+
+Open **Configure** to choose device features, then camera settings (when enabled)
+and one step per detected relay. New Device-step options in v1.5.0:
+
+| Option | Default | Purpose |
+|---|---|---|
+| **Firmware channel** (`firmware_channel`) | Active track (`active_track`) | Check Active track, LTS (`lts`) or Beta (`beta`) firmware; never changes the device's AutoUpdate settings |
+| **Default user for grant access** (`grant_access_user`) | Empty | Directory user for `2n_intercom.grant_access` when a service call omits `user`; clear the selection to require a user in every call |
+
+The grant-access selector shows directory names instead of UUIDs, including the
+saved selection. If directory lookup fails, a warning is shown and the saved
+user remains selectable. See the [HTTP API account privileges](README.md#http-api-account-privileges)
+for **System - Control**, which directory queries require; this permission also
+allows system configuration changes, so grant it only if acceptable.
+
+The existing **Ringing account (peer)** (`called_id`) filter matches any peer in
+the current session, including parallel/group calls. It ignores case, SIP/SIPS
+scheme, host, port, SIP parameters and the suffix after `/`, so `1234567890/2`
+matches `1234567890`. **All calls** matches all intercom-started rings, not calls
+into the intercom from My2N, Control4 or a SIP phone.
+
+Saved relay names, door/gate types and pulse durations survive an options save
+even when no relays are detected; only the relays shown in the flow are updated.
+See the [full options table](README.md#options-flow-parameters) for camera,
+polling and per-relay settings.
+
+## Firmware availability
+
+The **Firmware** update entity checks the public 2N update server at setup and
+every **six hours**, independently of local polling. It shows installed/latest
+versions and release notes, newest first. Select the channel in **Configure >
+Device > Firmware channel**; use `homeassistant.update_entity` on the update
+entity to refresh immediately. Failed checks keep the last known result.
+
+Checks send only the firmware package, installed version and release-note
+language, never device credentials. Devices without `firmwarePackage` do not get
+this entity. **Install updates in the device web UI**, opened by the entity's
+release link or the device page's configuration link. There is no Install button:
+the integration never downloads, uploads, applies or triggers device firmware,
+and never reads or changes the device's AutoUpdate settings.
+
+## Physical I/O entities
+
+Every input reported in both `/api/io/caps` and `/api/io/status` gets an
+enabled-by-default binary sensor, including extension-module inputs. Ports named
+`tamper` or ending in `.tamper` use the tamper device class. The existing built-in
+`input1` sensor keeps its identity on upgrade. Input states follow `InputChanged`
+events with polling as a safety net.
+
+Every output reported by those endpoints, except the status LED `led_secured`,
+gets a direct output switch. These switches are **disabled by default**; enable
+only the ones you need in the entity settings. State follows `OutputChanged`
+events with polling as a safety net. Control requires **I/O - Control** on the
+HTTP API account.
+
+**Safety warning:** direct output switches are **latching**, not timed pulses.
+They bypass logical switch timing and can leave the door **unlocked until the
+output is turned off**. They may coexist with a logical switch or gate cover
+controlling the same relay. Prefer the logical switch/cover for normal timed
+door or gate opening; direct outputs have no automatic turn-off timer.
+
 ## Services
 
 | Service | Purpose |
 |---|---|
 | `2n_intercom.answer_call` | Answer the active call session (or a specific `session_id`) |
 | `2n_intercom.hangup_call` | Hang up the active call session (or a specific `session_id`) with optional `reason` (`normal` / `rejected` / `busy`) |
+| `2n_intercom.grant_access` | Open an access point on behalf of a directory user, applying their rights and logging access |
 
-Both services target a config entry — pick **2N Intercom** as the integration target in the UI, or pass `data.config_entry_id` from YAML.
+All services target a config entry; pass `data.config_entry_id` from YAML to select a specific intercom when more than one is loaded.
 
 Recommended pattern: pair `hangup_call` with the call-state sensor's `active_session_id` attribute so an automation only ends the session it actually answered.
 
 ```yaml
 - service: 2n_intercom.hangup_call
-  target:
-    config_entry: <entry_id>
   data:
+    config_entry_id: <entry_id>
     session_id: "{{ state_attr('sensor.front_door_call_state', 'active_session_id') }}"
     reason: normal
 ```
+
+### Grant access and access-control events
+
+`2n_intercom.grant_access` uses the device's access control, not direct relay
+control. Pass `access_point: 0` for entry (default) or `1` for exit, and a
+directory `user` UUID, or configure **Default user for grant access**. The access
+point must be enabled, the user must have access rights and the HTTP API account
+needs **Access Control - Control** (separate from switch/cover permission).
+Missing users and device denials raise errors; the service does not report a
+denied access attempt as success.
+
+```yaml
+- service: 2n_intercom.grant_access
+  data:
+    config_entry_id: <entry_id>
+    access_point: 0
+    user: "01234567-89AB-CDEF-0123-456789ABCDEF"
+```
+
+The device records access under that user. Supported **access-control events**
+(card, PIN, mobile key, fingerprint and granted/denied access) are also subscribed
+through the log channel. Only events advertised by `/api/log/caps` are requested.
+The latest event is included in diagnostics with user identities redacted; card
+numbers, PIN codes and mobile-key IDs are never stored. Directory lookup resolves
+user names when **System - Control** is granted. Enable **Logging** and the
+feature-specific account privileges listed in the
+[HTTP API account privileges table](README.md#http-api-account-privileges).
 
 ## Troubleshooting
 
@@ -138,6 +240,10 @@ For initial setup, a dedicated error tells you to switch the device's **Services
 - Open the entity attributes — `live_view_selected_mode` should be `mjpeg` (or `rtsp`), and `mjpeg_available` should be `true`
 - If the device's RTSP licence isn't enabled, MJPEG is the only path. The integration prefers MJPEG automatically when RTSP is unreachable
 - Reload the integration after changing camera caps on the device
+
+JPEG snapshots use the smallest size in `camera/caps` covering both requested
+dimensions, or the largest supported size if none covers them. This avoids
+repeated rejected resolutions and 640x480 retries for arbitrary dashboard sizes.
 
 ### Doorbell event not firing
 - Ring detection is exclusively event-driven via `/api/log/subscribe` — there is no polling fallback for ring events. Subscription failures are retried with exponential backoff; ring events during a gap are lost
@@ -170,6 +276,11 @@ Implemented:
 - Auto-discovered switch / cover entities for relays
 - HomeKit bridge mapping
 - Full HA 2026.4+ compliance
+- SSDP discovery with verified address updates
+- Doorbell event entity with HomeKit camera auto-linking and last-ring image
+- Extension-module input/tamper sensors and disabled-by-default direct output switches
+- `grant_access` service, directory-user option and supported access-control events
+- Informational firmware update entity with Active track / LTS / Beta channel option
 
 Downstream HA automations (mobile actionable notifications, KNX door opening, etc.) consume the entities and services above; they're not part of the fork itself.
 
