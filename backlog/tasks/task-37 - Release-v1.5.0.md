@@ -1,11 +1,11 @@
 ---
 id: TASK-37
 title: Release v1.5.0
-status: In Progress
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-15 12:13'
-updated_date: '2026-10-23 15:42'
+updated_date: '2026-10-23 15:45'
 labels:
   - release
 milestone: m-0
@@ -43,11 +43,11 @@ Release of milestone v1.5.0: everything user-facing merged to main since v1.4.0 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 custom_components/2n_intercom/manifest.json version is 1.5.0 [unit]
-- [ ] #2 CHANGELOG.md has a "## 1.5.0 - <date>" section written for users (what changed and what they may need to do), grouped by Features / Fixes / Docs, built from the tasks of milestone v1.5.0 and the commits since v1.4.0; no internal pipeline/tooling changes [unit]
-- [ ] #3 README and INSTALLATION.md mention every new user-visible option, entity and service from the milestone (check, fix gaps) [unit]
-- [ ] #4 Full unit suite, validate.py and py_compile green; PR check e2e-pi green [e2e]
-- [ ] #5 CHANGELOG 1.5.0 has a Security section marked as a breaking change built from the release note in the TASK-67 final summary (Basic only over verified HTTPS, unverified HTTPS counts as insecure, upgrade path via Reconfigure > Allow insecure connection or Digest/trusted certificate), and it states that the 1.4.0 rule "Basic stays enabled over HTTPS" no longer applies [unit]
+- [x] #1 custom_components/2n_intercom/manifest.json version is 1.5.0 [unit]
+- [x] #2 CHANGELOG.md has a "## 1.5.0 - <date>" section written for users (what changed and what they may need to do), grouped by Features / Fixes / Docs, built from the tasks of milestone v1.5.0 and the commits since v1.4.0; no internal pipeline/tooling changes [unit]
+- [x] #3 README and INSTALLATION.md mention every new user-visible option, entity and service from the milestone (check, fix gaps) [unit]
+- [x] #4 Full unit suite, validate.py and py_compile green; PR check e2e-pi green [e2e]
+- [x] #5 CHANGELOG 1.5.0 has a Security section marked as a breaking change built from the release note in the TASK-67 final summary (Basic only over verified HTTPS, unverified HTTPS counts as insecure, upgrade path via Reconfigure > Allow insecure connection or Digest/trusted certificate), and it states that the 1.4.0 rule "Basic stays enabled over HTTPS" no longer applies [unit]
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -75,3 +75,14 @@ AC #4 local evidence: Python 3.12.15 full unittest discovery passed (744 tests),
 AC #5 evidence: test_v150_security_explains_breaking_change_and_upgrade passes, including verified HTTPS, insecure self-signed HTTPS, Digest/trusted-certificate remedies, Reconfigure opt-in, setup restrictions, Repair guidance and superseding 1.4.0.
 Task remains In Progress, assigned @copilot, with all acceptance criteria unchecked for the orchestrator and independent reviewer.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented by the headless coder. Checks green on 047da4540 after 0 fix round(s): e2e-pi=pass, validate=pass, validate=pass. PR: https://github.com/mastalir1980/ha-2N-intercom/pull/106. Done takes effect when the PR is merged.
+AC #1: manifest.json diff changes version 1.4.0 -&gt; 1.5.0 (only runtime-dir change). tests/test_release.py::test_manifest_version_matches_latest_dated_changelog asserts manifest version equals the newest dated CHANGELOG heading; the test file passes when run from tests/ (6 tests OK). (proven)
+AC #2: CHANGELOG.md has '## 1.5.0 - 2026-10-23' with Security, Features, Fixes and Docs sections in user-facing language, covering the milestone tasks and integration commits since v1.4.0 (grant_access, access events, I/O inputs/outputs, SSDP, firmware entity, doorbell event/last-ring image, Called ID, snapshot, options flow, auth recovery); no pipeline/tooling entries. The 1.4.0 section is untouched (diff only adds lines). tests/test_release.py::test_v150_has_user_facing_release_groups checks the headings. (proven)
+AC #3: README.md and INSTALLATION.md diffs add SSDP discovery, image/last-ring entity, extra input/tamper sensors, direct output switches with safety warning, update entity, firmware_channel and grant_access_user options, Called ID behaviour, grant_access service and access events, snapshot size selection. tests/test_release.py::test_both_guides_cover_new_entities_options_and_service, test_both_guides_explain_direct_output_safety and test_both_guides_explain_doorbell_migration assert these terms in both guides; tests pass. (proven)
+AC #4: Orchestrator confirmed the full unit suite, validate.py, py_compile and all PR checks including e2e-pi are green on this head. The diff changes only docs, the manifest version and a new offline unit test, so the e2e-pi result applies without new E2E code. (proven)
+AC #5: CHANGELOG 1.5.0 begins with '### Security - Breaking change' whose first paragraph is copied verbatim from the TASK-67 final-summary release note (Basic only over verified HTTPS, unverified/self-signed counts as insecure, Digest or trusted certificate, Reconfigure &gt; Allow insecure connection). A following paragraph states it supersedes the 1.4.0 rule 'Basic stays enabled over HTTPS'. tests/test_release.py::test_v150_security_explains_breaking_change_and_upgrade asserts each of these phrases. (proven)
+<!-- SECTION:FINAL_SUMMARY:END -->
