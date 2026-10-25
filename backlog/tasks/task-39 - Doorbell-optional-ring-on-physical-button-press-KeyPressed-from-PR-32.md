@@ -1,11 +1,11 @@
 ---
 id: TASK-39
 title: 'Doorbell: optional ring on physical button press (KeyPressed), from PR #32'
-status: In Progress
+status: To Test
 assignee:
   - '@copilot'
 created_date: '2026-10-15 13:01'
-updated_date: '2026-10-25 16:16'
+updated_date: '2026-10-25 16:20'
 labels:
   - doorbell
   - coordinator
@@ -36,15 +36,15 @@ Open: confirm the call-button key value and event order of a press that places a
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 New option ring_on_keypress (entry.options, default off) in the options flow with strings.json and en/de/cs translations; existing installs keep today's behaviour [unit]
-- [ ] #2 KeyPressed is added to the log subscription only when the option is on and /api/log/caps lists it; a device without it keeps a working subscription - unit test [unit]
-- [ ] #3 KeyPressed for keypad keys (digits, *, #) never rings and the key value is never logged - unit test [unit]
-- [ ] #4 Full sequence KeyPressed + CallStateChanged(outgoing) + CallSessionStateChanged for one press gives exactly one ring and one snapshot - unit test [unit]
-- [ ] #5 A KeyPressed-only ring captures the ring snapshot when ring snapshots are enabled - unit test [unit]
-- [ ] #6 README options table documents the option, that called_id does not apply to button presses, and the keypad behaviour [unit]
-- [ ] #7 Full unit suite, validate.py and py_compile green; PR check e2e-pi green with the option off (default) [e2e]
+- [x] #1 New option ring_on_keypress (entry.options, default off) in the options flow with strings.json and en/de/cs translations; existing installs keep today's behaviour [unit]
+- [x] #2 KeyPressed is added to the log subscription only when the option is on and /api/log/caps lists it; a device without it keeps a working subscription - unit test [unit]
+- [x] #3 KeyPressed for keypad keys (digits, *, #) never rings and the key value is never logged - unit test [unit]
+- [x] #4 Full sequence KeyPressed + CallStateChanged(outgoing) + CallSessionStateChanged for one press gives exactly one ring and one snapshot - unit test [unit]
+- [x] #5 A KeyPressed-only ring captures the ring snapshot when ring snapshots are enabled - unit test [unit]
+- [x] #6 README options table documents the option, that called_id does not apply to button presses, and the keypad behaviour [unit]
+- [x] #7 Full unit suite, validate.py and py_compile green; PR check e2e-pi green with the option off (default) [e2e]
 - [ ] #8 Jan presses the call button on the E2E intercom with the option on (one ring) and off (behaviour as in 1.5.0), and records the key value and event order seen [jan]
-- [ ] #9 A KeyPressed for a call button fires one ring on the doorbell event entity, the same way an intercom-started call does, without waiting for a poll - unit test [unit]
+- [x] #9 A KeyPressed for a call button fires one ring on the doorbell event entity, the same way an intercom-started call does, without waiting for a poll - unit test [unit]
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -80,3 +80,18 @@ Closes #32
 
 Task remains In Progress; no acceptance criteria were checked and no final status was set. No push or PR creation was attempted; the orchestrator owns that step.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented by the headless coder. Checks green on 4deb22990 after 0 fix round(s): e2e-pi=pass, validate=pass, validate=pass. PR: https://github.com/mastalir1980/ha-2N-intercom/pull/112. To Test takes effect when the PR is merged.
+AC #1: const.py DEFAULT_RING_ON_KEYPRESS=False; options flow field in config_flow.py; strings.json and en/de/cs translations updated. tests/test_config_flow.py::test_ring_on_keypress_defaults_off_and_is_saved (default False, saved in options, entry.data untouched) and tests/test_init.py::test_setup_passes_default_off_and_saved_keypress_option (missing option -&gt; off). Full suite of 791 tests passes on my run. (proven)
+AC #2: tests/test_coordinator_keypress.py::KeyPressedSubscriptionTests: KeyPressed subscribed only with option on and listed in caps; absent with option off, caps without it, None/empty/failing caps (legacy list kept); follows caps changes with resubscribe. _build_log_event_list adds it only inside the non-empty-caps branch. (proven)
+AC #3: test_keypad_keys_never_ring (0-9, *, #, malformed/out-of-range keys), test_pin_entry_does_not_ring, test_key_values_are_never_logged (assertLogs: no args, no key/digit in any debug message); test_event.py::test_default_off_and_keypad_keys_do_not_emit_events. The coordinator logs only fixed strings. (proven)
+AC #4: test_coordinator_keypress.py::test_press_that_starts_a_call_rings_once covers key-first, call-first, key-between and initialized/connecting orders with ring_count==1 and exactly one snapshot call; test_event.py::test_keypress_and_both_call_events_emit_one_ring_in_each_order checks a single event with KeyPressed + CallStateChanged(outgoing) + CallSessionStateChanged(button) at every position. (proven)
+AC #5: test_call_button_press_rings_once_with_snapshot: a KeyPressed-only ring with ring_snapshot_enabled calls the snapshot once and sets ring_snapshot; test_call_button_press_without_snapshot_option shows no snapshot when disabled; all 54 buttons covered. (proven)
+AC #6: README.md options table row for ring_on_keypress plus a paragraph stating that called_id does not apply to button presses, keypad keys never ring, caps requirement, and the missing called_peer trade-off. Objective check of the diff. (proven)
+AC #7: I ran the full unit suite: 791 tests OK. The orchestrator confirmed validate.py, py_compile and the e2e-pi PR check green on this head. Default-off e2e coverage added in e2e/tests/test_40_options_flow.py and test_50_access_control.py (no KeyPressed subscription by default, subscription subset of device caps). No existing test lines were weakened: the only removed test lines are the _coordinator helper signature and a Mock import, both extended. (proven)
+AC #8: Jan must press the call button on the E2E intercom with the option on (one ring) and off (1.5.0 behaviour) and record the key value and event order seen. Integration logs deliberately never show key values, so use the device log. (manual)
+AC #9: tests/test_event.py::test_keypress_log_pull_fires_event_without_polling drives a real KeyPressed through _async_run_log_subscription with the real event entity: _trigger_event called once with ring, ring_count 1, last_ring_time published, async_request_refresh not awaited (no poll), called_id filter bypassed, earlier called_peer cleared. (proven)
+<!-- SECTION:FINAL_SUMMARY:END -->
