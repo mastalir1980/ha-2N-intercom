@@ -6,7 +6,8 @@ import asyncio
 import sys
 import types
 import unittest
-from unittest.mock import AsyncMock, patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, Mock, patch
 
 from _stubs import (
     API_PATH,
@@ -1463,6 +1464,263 @@ class ProcessLogEventEdgeCaseTests(unittest.IsolatedAsyncioTestCase):
         c._system_caps = {}
         overrides = c._camera_transport_overrides()
         self.assertNotIn("rtsp_capable", overrides)
+
+
+class _SwitchCapsAPI:
+    """Counting API for switch caps refresh tests."""
+
+    def __init__(self) -> None:
+        self.caps = {"switches": [{"switch": 1, "enabled": True}]}
+        self.switch_caps_calls = 0
+        self.switch_status_calls = 0
+        self.io_caps_calls = 0
+        self.io_status_calls = 0
+        self.fail_switch_caps = False
+
+    async def async_get_system_info(self):
+        return {"model": "2N"}
+
+    async def async_get_system_caps(self):
+        return {}
+
+    async def async_get_phone_status(self):
+        return {}
+
+    async def async_get_call_status(self):
+        return {"state": "idle", "sessions": []}
+
+    async def async_get_switch_caps(self):
+        self.switch_caps_calls += 1
+        if self.fail_switch_caps:
+            raise RuntimeError("temporary switch caps failure")
+        return self.caps
+
+    async def async_get_switch_status(self):
+        self.switch_status_calls += 1
+        return {"switches": [{"switch": 1, "active": False}]}
+
+    async def async_get_io_caps(self):
+        self.io_caps_calls += 1
+        return {"ports": [{"port": "input1", "type": "input"}]}
+
+    async def async_get_io_status(self):
+        self.io_status_calls += 1
+        return {"ports": [{"port": "input1", "state": 0}]}
+
+
+class SwitchCapsRefreshTests(unittest.IsolatedAsyncioTestCase):
+    """Switch caps refresh only on cache misses, events, reconnects or expiry."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.coordinator_module = load_coordinator_module()
+
+    def _make_coordinator(self, scan_interval=60):
+        api = _SwitchCapsAPI()
+        coordinator = self.coordinator_module.TwoNIntercomCoordinator(
+            types.SimpleNamespace(async_create_task=asyncio.create_task),
+            api,
+            scan_interval=scan_interval,
+        )
+        return coordinator, api
+
+    async def test_cached_normal_polls_keep_caps_and_poll_states(self) -> None:
+        c, api = self._make_coordinator()
+        now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        with patch.object(self.coordinator_module.dt_util, "utcnow", return_value=now):
+            await c.async_initialize_static_caches()
+            for _ in range(3):
+                c.data = await c._async_update_data()
+
+        self.assertEqual(api.switch_caps_calls, 1)
+        self.assertEqual(c._switch_caps_refresh_time, now)
+        self.assertEqual(c.data.switch_caps, api.caps)
+        self.assertEqual(api.switch_status_calls, 3)
+        self.assertEqual(api.io_status_calls, 3)
+        self.assertEqual(api.io_caps_calls, 1)
+
+    async def test_uncached_poll_fetches_caps_and_caches_empty_result(self) -> None:
+        c, api = self._make_coordinator()
+        api.caps = {}
+        now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        with patch.object(self.coordinator_module.dt_util, "utcnow", return_value=now):
+            for _ in range(2):
+                c.data = await c._async_update_data()
+
+        self.assertEqual(api.switch_caps_calls, 1)
+        self.assertEqual(c._switch_caps, {})
+        self.assertEqual(c._switch_caps_refresh_time, now)
+
+    async def test_safety_net_uses_elapsed_time_not_scan_interval(self) -> None:
+        self.assertEqual(self.coordinator_module.SWITCH_CAPS_SAFETY_INTERVAL, 600)
+        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        for scan_interval in (2, 60, 600):
+            with self.subTest(scan_interval=scan_interval):
+                c, api = self._make_coordinator(scan_interval)
+                with patch.object(
+                    self.coordinator_module.dt_util, "utcnow", return_value=start,
+                ) as clock:
+                    c.data = await c._async_update_data()
+                    for elapsed in range(scan_interval, 600, scan_interval):
+                        clock.return_value = start + timedelta(seconds=elapsed)
+                        c.data = await c._async_update_data()
+                    clock.return_value = start + timedelta(seconds=599)
+                    c.data = await c._async_update_data()
+                    self.assertEqual(api.switch_caps_calls, 1)
+
+                    api.caps = {"switches": [{"switch": 2, "enabled": True}]}
+                    clock.return_value = start + timedelta(seconds=600)
+                    c.data = await c._async_update_data()
+                    self.assertEqual(api.switch_caps_calls, 2)
+                    self.assertEqual(c.data.switch_caps, api.caps)
+                    self.assertEqual(c._switch_caps_refresh_time, clock.return_value)
+
+                    clock.return_value = start + timedelta(seconds=1199)
+                    c.data = await c._async_update_data()
+                    self.assertEqual(api.switch_caps_calls, 2)
+                    clock.return_value = start + timedelta(seconds=1200)
+                    c.data = await c._async_update_data()
+                    self.assertEqual(api.switch_caps_calls, 3)
+
+    async def test_failed_refresh_retains_caps_and_last_success_for_retry(self) -> None:
+        c, api = self._make_coordinator()
+        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        with patch.object(
+            self.coordinator_module.dt_util, "utcnow", return_value=start,
+        ) as clock:
+            c.data = await c._async_update_data()
+            cached = c.switch_caps
+            api.fail_switch_caps = True
+            clock.return_value = start + timedelta(seconds=600)
+            c.data = await c._async_update_data()
+            self.assertIs(c.data.switch_caps, cached)
+            self.assertEqual(c._switch_caps_refresh_time, start)
+
+            api.fail_switch_caps = False
+            api.caps = {"switches": [{"switch": 2, "enabled": True}]}
+            clock.return_value = start + timedelta(seconds=602)
+            c.data = await c._async_update_data()
+            self.assertEqual(api.switch_caps_calls, 3)
+            self.assertEqual(c.data.switch_caps, api.caps)
+            self.assertEqual(c._switch_caps_refresh_time, clock.return_value)
+
+    async def test_failed_initial_fetch_retries_on_next_poll(self) -> None:
+        c, api = self._make_coordinator()
+        api.fail_switch_caps = True
+        c.data = await c._async_update_data()
+        self.assertIsNone(c._switch_caps)
+        self.assertIsNone(c._switch_caps_refresh_time)
+        api.fail_switch_caps = False
+        c.data = await c._async_update_data()
+        self.assertEqual(api.switch_caps_calls, 2)
+        self.assertEqual(c.data.switch_caps, api.caps)
+
+    async def test_config_and_capability_events_refresh_and_reset_safety_net(self) -> None:
+        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        for event_name in ("ConfigurationChanged", "CapabilitiesChanged"):
+            with self.subTest(event=event_name):
+                c, api = self._make_coordinator()
+                tasks = []
+
+                def create_task(coro):
+                    task = asyncio.create_task(coro)
+                    tasks.append(task)
+                    return task
+
+                c.hass.async_create_task = create_task
+                c.async_update_listeners = Mock()
+                with patch.object(
+                    self.coordinator_module.dt_util, "utcnow", return_value=start,
+                ) as clock:
+                    c.data = await c._async_update_data()
+                    api.caps = {"switches": [{"switch": 2, "enabled": True}]}
+                    clock.return_value = start + timedelta(seconds=100)
+                    self.assertFalse(c._process_log_event({"event": event_name}))
+                    await asyncio.gather(*tasks)
+                    self.assertEqual(api.switch_caps_calls, 2)
+                    self.assertEqual(c.switch_caps, api.caps)
+                    c.async_update_listeners.assert_called_once_with()
+                    self.assertEqual(api.io_caps_calls, 2)
+                    self.assertEqual(c._switch_caps_refresh_time, clock.return_value)
+
+                    clock.return_value = start + timedelta(seconds=699)
+                    c.data = await c._async_update_data()
+                    self.assertEqual(api.switch_caps_calls, 2)
+                    clock.return_value = start + timedelta(seconds=700)
+                    c.data = await c._async_update_data()
+                    self.assertEqual(api.switch_caps_calls, 3)
+
+    async def test_each_subscription_refreshes_caps_once_before_baseline(self) -> None:
+        c, api = self._make_coordinator()
+        baseline_tasks = []
+        baseline_caps = []
+        subscriptions = []
+
+        def create_task(coro):
+            task = asyncio.create_task(coro)
+            baseline_tasks.append(task)
+            return task
+
+        async def baseline_refresh():
+            c.data = await c._async_update_data()
+            baseline_caps.append(c.data.switch_caps)
+
+        async def subscribe(events):
+            subscriptions.append(len(subscriptions) + 1)
+            if len(subscriptions) == 2:
+                api.caps = {"switches": [{"switch": 2, "enabled": True}]}
+            return subscriptions[-1]
+
+        async def run_subscription(subscription_id):
+            await asyncio.gather(*baseline_tasks)
+            if subscription_id == 1:
+                raise RuntimeError("subscription dropped")
+            c._log_listener_stopped = True
+
+        c.hass.async_create_task = create_task
+        c.async_request_refresh = baseline_refresh
+        c._async_run_log_subscription = run_subscription
+        api.async_subscribe_log = subscribe
+        api.async_unsubscribe_log = AsyncMock()
+        now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        with patch.object(self.coordinator_module.dt_util, "utcnow", return_value=now):
+            await c.async_initialize_static_caches()
+            await c._async_log_listener_loop()
+
+        self.assertEqual(subscriptions, [1, 2])
+        self.assertEqual(api.switch_caps_calls, 3)  # startup + two subscriptions
+        self.assertEqual(baseline_caps, [
+            {"switches": [{"switch": 1, "enabled": True}]},
+            {"switches": [{"switch": 2, "enabled": True}]},
+        ])
+        self.assertEqual(api.async_unsubscribe_log.await_count, 2)
+        self.assertIsNone(c._log_subscription_id)
+
+    async def test_failed_subscription_does_not_refresh_caps(self) -> None:
+        c, api = self._make_coordinator()
+
+        async def subscribe(events):
+            c._log_listener_stopped = True
+            return None
+
+        api.async_subscribe_log = subscribe
+        with patch.object(self.coordinator_module.asyncio, "sleep", AsyncMock()):
+            await c._async_log_listener_loop()
+        self.assertEqual(api.switch_caps_calls, 0)
+        self.assertIsNone(c._switch_caps_refresh_time)
+
+    async def test_cancellation_during_subscription_caps_refresh_unsubscribes(self) -> None:
+        c, api = self._make_coordinator()
+        api.async_subscribe_log = AsyncMock(return_value=42)
+        api.async_get_switch_caps = AsyncMock(side_effect=asyncio.CancelledError)
+        api.async_unsubscribe_log = AsyncMock()
+
+        with self.assertRaises(asyncio.CancelledError):
+            await c._async_log_listener_loop()
+
+        api.async_unsubscribe_log.assert_awaited_once_with(42)
+        self.assertIsNone(c._log_subscription_id)
+        self.assertIsNone(c._switch_caps_refresh_time)
 
 
 class LogListenerTests(unittest.IsolatedAsyncioTestCase):

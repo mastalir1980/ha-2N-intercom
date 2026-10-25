@@ -148,8 +148,13 @@ Background task `_async_log_listener_loop`:
 
 ### 3. Polling (záchranná síť)
 `_async_update_data` každých `scan_interval` (default 60 s) načte
-`phone/status`, `switch/caps`, `switch/status`, `io/status`, `call/status` a
+`phone/status`, `switch/status`, `io/status`, `call/status` a
 obnoví baseline, kdyby nějaká push událost vypadla.
+
+`switch/caps` is cached at setup, refreshed on configuration/capability events
+and after each successful log (re)subscription. Polls refresh it only when
+uncached or at least 600 seconds after the last successful fetch. Failed fetches
+retain the cache and are retried by subsequent polls; `io/caps` handling is unchanged.
 
 `system/info` is reused for the first refresh and fetched again on subsequent
 polls so the installed firmware version follows updates performed in the device
