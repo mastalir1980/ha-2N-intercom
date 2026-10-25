@@ -5,12 +5,14 @@ title: >-
   long, silent alarm)
 status: To Do
 assignee: []
-created_date: '2026-08-30 09:27'
-updated_date: '2026-10-13 19:16'
+created_date: 2026-08-30 09:27
+updated_date: '2026-10-24T08:29:00Z'
 labels:
   - access-control
   - security
   - ha-platform
+  - needs-analysis
+milestone: m-1
 dependencies:
   - TASK-4
   - TASK-6
@@ -35,3 +37,9 @@ Tamper decision (Jan, 2026-10-13): when the device reports a tamper input port i
 - [ ] #3 Devices lacking these events degrade gracefully (covered by test)
 - [ ] #4 strings.json, translations (en/de/cs) and icons.json updated; unit tests added
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-24 (Jan): in scope of v1.6.0 (access and security events in automations are the main feature of the version). Not ready yet: needs analysis (payload schema and event types checked against log events from the E2E intercom and the 2N Logged Events manual), implementation plan and verifier tags on every criterion before it is assigned to @copilot. Order: TASK-6, then TASK-5 and TASK-7.
+<!-- SECTION:NOTES:END -->

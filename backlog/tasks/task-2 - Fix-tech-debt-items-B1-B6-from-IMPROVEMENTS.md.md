@@ -3,7 +3,8 @@ id: TASK-2
 title: Fix tech-debt items B1-B6 from IMPROVEMENTS.md
 status: To Do
 assignee: []
-created_date: '2026-08-30 09:27'
+created_date: 2026-08-30 09:27
+updated_date: '2026-10-24T08:29:00Z'
 labels:
   - tech-debt
 dependencies:
@@ -30,3 +31,9 @@ Implement the six robustness proposals from docs/IMPROVEMENTS.md: B1 tz-aware ti
 - [ ] #6 B6: broad except Exception narrowed where the failing operation has a known exception type
 - [ ] #7 Full test suite passes
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-24 roadmap for v1.6.0: B1 done (TASK-2.1). B5 mostly done: hacs.json declares homeassistant 2026.4.0 (README check left). v1.6.0 takes B2 (TASK-2.2) and B3 together with security review O-3/O-5 (TASK-2.3). B4 and B6 stay for a later version; this parent closes by hand when they are done or dropped.
+<!-- SECTION:NOTES:END -->

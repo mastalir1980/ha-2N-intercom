@@ -5,8 +5,8 @@ title: >-
   /api/autoupdate/updatefw, 2N OS 3.3+)
 status: To Do
 assignee: []
-created_date: '2026-10-19 14:57'
-updated_date: '2026-10-19 19:15'
+created_date: 2026-10-19 14:57
+updated_date: '2026-10-24T08:29:00Z'
 labels:
   - firmware
   - update-entity
@@ -46,3 +46,9 @@ Open question (blocks this task, answered by TASK-66): when a newer firmware exi
 - [ ] #5 Install calls only GET /api/autoupdate/updatefw (System Control privilege) on the existing dual-auth request path with the usual 2N error parsing; a missing privilege (codes 7-10) and other device errors raise a translated HomeAssistantError and leave no in_progress state [unit]
 - [ ] #6 Install is offered only when the update entity shows a newer latest_version; after updatefw returns success the entity is in_progress until /api/system/info swVersion changes after a reboot; if the device neither reboots nor changes swVersion within a timeout, a translated error says the device did not start the update (check its update source and track) and in_progress is cleared [unit]
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-24 (Jan, v1.6.0 planning): TASK-65/66 stay in v1.6.0 but do not block its release. If 2N has not published a newer firmware for the E2E intercom (so TASK-66 cannot run) when every other v1.6.0 task is Done, both move to the next milestone.
+<!-- SECTION:NOTES:END -->
