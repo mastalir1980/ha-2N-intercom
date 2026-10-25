@@ -113,13 +113,16 @@ Failed fetches retain the cache and do not advance the successful-fetch timestam
 so subsequent polls can retry. An absent cache is retried on the next poll.
 `io_caps` handling and polling of switch/IO state are unchanged.
 
-### 🟡 B3 — `_async_request_without_auth` zakládá session na každé volání
+### ✅ B3 — `_async_request_without_auth` zakládá session na každé volání
 `api.py:592-596` vytváří nový `ClientSession` + `TCPConnector` pro každý
 veřejný MJPEG probe. Volá se sice jen při setupu, ale je to anti-pattern oproti
 sdílené HA session.
 
-**Návrh:** použít sdílenou session (probe bez auth lze udělat i přes existující
-session s `auth=None`), nebo aspoň jasně omezit na jediné volání.
+**Implemented in TASK-2.3:** the public MJPEG probe reuses the integration's
+API session with a per-request `middlewares=()` override. It does not run
+Digest middleware, send an Authorization header, retry with Basic auth, or
+change the shared session configuration. The normal authenticated request
+path and session ownership/cleanup are unchanged.
 
 ### 🟡 B4 — `MjpegCamera` „mjpeg" režim ve skutečnosti streamuje snapshoty
 `camera.py:208-221` přepisuje `handle_async_mjpeg_stream` tak, že **vždy**
@@ -148,7 +151,8 @@ parsování. Není to bug, jen doporučení zúžit typy tam, kde to jde.
 ## Co je naopak v pořádku (a nedělat horší)
 
 - Oddělení `entry.data` (identita) vs `entry.options` (chování) je čisté.
-- HTTP cesta **nedává creds do URL** a předává je `MjpegCamera` zvlášť – správně.
+- HTTP camera URLs contain no credentials; `MjpegCamera` receives no API
+  credentials, and snapshots/streams use the integration's authenticated path.
 - Diagnostika **rediguje** username/password i RTSP creds (`diagnostics.py:23`).
 - Idempotentní hangup a disambiguace 2N kódu 14 jsou dobře ošetřené.
 - Životní cyklus log-listeneru (background task + STOP listener) je korektní.

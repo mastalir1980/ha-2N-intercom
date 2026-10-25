@@ -43,9 +43,9 @@ def get_stream_source_for_transport(
 ) -> str | None:
     """Build a stream source URL for the chosen transport.
 
-    The MJPEG path always returns a credentials-free URL — the camera
-    entity passes username/password to ``MjpegCamera`` directly. RTSP
-    keeps creds in the URI because that's how the protocol works.
+    The MJPEG path always returns a credentials-free URL. The camera uses
+    the integration's authenticated snapshot path; RTSP keeps creds in
+    the URI because that's how the protocol works.
     """
     if not _transport_has_live_view(transport_info):
         return None
@@ -104,10 +104,8 @@ class TwoNIntercomCamera(
     """Representation of a 2N Intercom camera.
 
     Inherits from ``MjpegCamera`` so the live MJPEG stream is served
-    natively to the frontend without ffmpeg, and so credentials are
-    passed via the ``username``/``password`` fields instead of being
-    embedded in the URL (which would leak them into HA logs and
-    diagnostics — see roadmap §8 H1).
+    natively to the frontend without ffmpeg. HTTP credentials stay in the
+    integration's request path, not in URLs or the base camera's fetch path.
     """
 
     _attr_has_entity_name = True
@@ -126,8 +124,7 @@ class TwoNIntercomCamera(
         api = coordinator.api
         transport_info = coordinator.camera_transport_info
 
-        # Build credentials-free URLs; auth is passed below as separate
-        # username/password fields and applied via HTTP Basic at fetch time.
+        # The overridden image/stream methods use the integration's auth path.
         mjpeg_url = api.build_mjpeg_url(
             width=transport_info.mjpeg_width,
             height=transport_info.mjpeg_height,
@@ -145,8 +142,8 @@ class TwoNIntercomCamera(
             self,
             mjpeg_url=mjpeg_url,
             still_image_url=still_image_url,
-            username=getattr(api, "username", None),
-            password=getattr(api, "password", "") or "",
+            username=None,
+            password=None,
             verify_ssl=getattr(api, "verify_ssl", True),
             unique_id=f"{config_entry.entry_id}_camera",
         )

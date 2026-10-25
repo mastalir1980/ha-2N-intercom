@@ -3,11 +3,11 @@ id: TASK-2.3
 title: >-
   Small API/camera hardening: shared session for the MJPEG probe, no API
   credentials in MjpegCamera, random RTSP cnonce
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-24T08:29:00Z'
-updated_date: '2026-10-24T08:29:00Z'
+updated_date: '2026-10-25 16:05'
 labels:
   - tech-debt
   - security
@@ -48,9 +48,20 @@ Why: three small findings with no user-visible behaviour change, bundled because
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. api.py _async_request_without_auth: reuse the API session and disable the Digest middleware for this request only (aiohttp per-request middlewares=() override, available with DigestAuthMiddleware) or reuse one lazily created no-auth session closed in async_close; pick the one that keeps the HA-shared session untouched. Verify no Authorization header is sent.
-2. camera.py ~148: pass username=None, password=None to MjpegCamera; keep the overridden async_camera_image / handle_async_mjpeg_stream.
-3. api.py RTSP Digest (~1720-1740): cnonce = secrets.token_hex(4); validate username and realm (no ", \r, \n) before building the header; on invalid input treat the RTSP probe as failed with a DEBUG log without values.
-4. Unit tests in tests/test_api.py and tests/test_camera.py; docs/IMPROVEMENTS.md mark B3 done, docs/SECURITY-REVIEW-v1.5.0.md O-3/O-5 add "implemented in TASK-2.3".
-Must not change: dual Basic/Digest auth on the normal request path, allow_insecure rules, RTSP URL handling (known exception for secrets in URL), snapshot resolution logic.
+1. Reuse the integration API session for the public MJPEG probe with per-request middlewares=(), preserving unauthenticated semantics and leaving shared session configuration untouched. If session defaults prevent this, use the task-approved reusable no-auth session closed by async_close.
+2. Construct MjpegCamera with username=None and password=None, preserving the overridden snapshot and MJPEG integration request paths.
+3. Generate RTSP Digest cnonce with secrets.token_hex(4), reject quotes/CR/LF in username or realm before sending the authenticated request, and log failures at DEBUG without values.
+4. Extend API and camera unit coverage plus camera E2E coverage for JPEG proxy and streaming; mark B3 and O-3/O-5 implemented in the referenced docs.
+5. Run all prescribed local Python gates, record implementation notes, and commit locally without ticking criteria, finalizing status, pushing, or running device E2E.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented the task-approved per-request middleware override: the public MJPEG probe reuses async_get_session() with middlewares=(), never mutates shared session configuration, and does not invoke the normal Basic fallback path. Unit coverage exercises repeated public probes, Basic/Digest 401 challenges without retry, injected-session reuse, owned-session reuse/cleanup, and the unaffected normal request path.
+MjpegCamera now receives username=None and password=None. Camera regressions cover credentials-free URLs, coordinator-backed snapshots with requested dimensions, and MJPEG delegation through the same snapshot path.
+RTSP Digest uses secrets.token_hex(4). Unsafe usernames fail before opening a connection; unsafe realms (including escaped or malformed quotes, CR and LF) fail before authenticated OPTIONS. Regression tests cover fresh cnonce generation and digest calculation, legacy no-qop support, successful authenticated OPTIONS, connection cleanup, and DEBUG messages without credentials or invalid values.
+Updated README, architecture notes, B3 completion, and O-3/O-5 implementation references. The existing JPEG camera_proxy E2E regression is retained; test_camera_stream_contains_jpeg_frames adds a bounded multipart stream check requiring two complete JPEG frames.
+Local validation on Python 3.12.15: all 766 unit tests passed; python3 validate.py passed; integration and changed E2E test Python compilation passed; git diff --check passed. Existing unrelated exception-path test doubles emit unawaited-coroutine RuntimeWarnings and were left unchanged.
+E2E was not run on the VM, as required; AC #4 awaits the Pi e2e-pi check. All acceptance checkboxes remain unchanged, and the task remains In Progress for the orchestrator review/finalization.
+<!-- SECTION:NOTES:END -->
