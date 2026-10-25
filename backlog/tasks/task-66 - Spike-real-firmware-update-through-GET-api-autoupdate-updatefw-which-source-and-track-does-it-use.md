@@ -5,7 +5,8 @@ title: >-
   source and track does it use
 status: To Do
 assignee: []
-created_date: '2026-10-19 19:15'
+created_date: 2026-10-19 19:15
+updated_date: '2026-10-24T08:29:00Z'
 labels:
   - firmware
   - investigation
@@ -33,3 +34,9 @@ Run only with Jan present and on his explicit go, when the 2N update server offe
 - [ ] #2 updatefw is called once; the answer, the time until the reboot and the swVersion after the reboot are recorded; it is clear which track was installed (or that nothing was installed) [jan]
 - [ ] #3 docs/API_REFERENCE.md 'Vestavěná aktualizace' updated with the result (no host names, no exact device build) and TASK-65 updated (open question 1 answered, channel option decision recorded) [unit]
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-24 (Jan): does not block the v1.6.0 release; see TASK-65 note.
+<!-- SECTION:NOTES:END -->

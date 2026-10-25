@@ -3,8 +3,8 @@ id: DRAFT-1
 title: 'Per-button doorbell: tell which call button was pressed'
 status: Draft
 assignee: []
-created_date: '2026-10-13 19:54'
-updated_date: '2026-10-15 12:47'
+created_date: 2026-10-13 19:54
+updated_date: '2026-10-24T08:26:00Z'
 labels:
   - ring-detection
   - needs-design
@@ -13,7 +13,8 @@ references:
   - docs/API_REFERENCE.md
   - custom_components/2n_intercom/coordinator.py
   - custom_components/2n_intercom/binary_sensor.py
-  - 'https://github.com/mastalir1980/ha-2N-intercom/issues/10'
+  - https://github.com/mastalir1980/ha-2N-intercom/issues/10
+  - backlog/docs/analysis/doc-1 - Analysis-DRAFT-1-per-button-doorbell.md
 priority: low
 type: feature
 ---
@@ -31,6 +32,28 @@ Not decided yet (Jan: "needs thinking") - this draft is NOT ready for @copilot:
 - Behaviour on fw that does not send originator/info (fw 2.50 unverified).
 - Relation to the called_id filter (replace, keep, or migrate).
 Depends on the ring-detection fix that follows TASK-29.
+
+## Analysis (2026-10-24)
+
+Full analysis: doc-1 "Analysis: DRAFT-1 per-button doorbell" (backlog/docs/analysis). Key finding: the button number (`info`) arrives in the first session event, before the ring, but `coordinator.py` never reads it.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor V as Visitor
+    participant D as 2N intercom
+    participant C as coordinator.py
+    participant E as event.py doorbell
+    participant A as HA automation
+    V->>D: presses button 2
+    D->>C: CallSessionStateChanged initialized, originator=button, info=2
+    Note over C: reads originator (L907), info is dropped
+    D->>C: CallStateChanged ringing, direction=outgoing
+    C->>C: ring_count + 1 (L952-958)
+    C-->>E: coordinator update
+    E->>A: ring with called_peer, caller_name, caller_number
+    Note over A: automation cannot tell button 1 from button 2
+```
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

@@ -3,10 +3,13 @@ id: TASK-6
 title: Fire 2n_intercom_event on the HA event bus with person attribution
 status: To Do
 assignee: []
-created_date: '2026-08-30 09:27'
+created_date: 2026-08-30 09:27
+updated_date: '2026-10-24T08:29:00Z'
 labels:
   - access-control
   - automation
+  - needs-analysis
+milestone: m-1
 dependencies:
   - TASK-4
 priority: high
@@ -26,3 +29,9 @@ For every doorbell and access-control event, fire a 2n_intercom_event on the Hom
 - [ ] #3 README.md documents the event schema with a YAML automation example
 - [ ] #4 Unit tests assert bus events are fired with expected payloads
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-24 (Jan): in scope of v1.6.0 (access and security events in automations are the main feature of the version). Not ready yet: needs analysis (payload schema and event types checked against log events from the E2E intercom and the 2N Logged Events manual), implementation plan and verifier tags on every criterion before it is assigned to @copilot. Order: TASK-6, then TASK-5 and TASK-7.
+<!-- SECTION:NOTES:END -->

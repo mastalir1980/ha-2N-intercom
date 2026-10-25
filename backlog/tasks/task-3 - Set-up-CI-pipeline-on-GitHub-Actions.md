@@ -4,6 +4,7 @@ title: Set up CI pipeline on GitHub Actions
 status: To Do
 assignee: []
 created_date: '2026-08-30 09:27'
+updated_date: '2026-10-24 08:14'
 labels:
   - ci
   - quality

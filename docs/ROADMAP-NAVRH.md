@@ -1,109 +1,146 @@
-# Návrh backlogu — ha-2N-intercom
+# Návrh roadmapy — ha-2N-intercom (po vydání 1.5.0)
 
-Návrh všeho, co by stálo za to implementovat, z pohledu (a) možností 2N HTTP API,
-které integrace zatím nevyužívá, a (b) moderních platforem a konvencí Home Assistanta.
-Zatím jen návrh — nic z toho není založeno jako task v `backlog/`.
-
-Priorita: **P1** = největší přidaná hodnota / malé riziko · **P2** = výrazné rozšíření ·
-**P3** = nice-to-have / závislé na licenci či HW.
+Stav k 2026-10-24. Nahrazuje původní návrh z 2026-08-30 (jeho P1 položky jsou až na výjimky hotové).
+Pravda o úkolech je vždy Backlog na `main` (`backlog task list --plain`, `backlog milestone list`).
+Rozsah 1.5.1 a 1.6.0 Jan odsouhlasil 2026-10-24 (sekce 6) a je založený v Backlogu.
 
 ---
 
-## Co už je hotové (pro kontext)
+## 1. Kde jsme po 1.5.0
 
-Kamera (JPEG/MJPEG/RTSP), event-driven doorbell + stavy přes `log/subscribe`,
-relé jako switch/cover s reálným stavem, answer/hangup služby, SIP + call-state
-senzory, reauth/reconfigure/options flow, HomeKit mapping, diagnostika.
-Používané endpointy: `system/info|caps`, `call/*`, `camera/*`, `switch/*`, `io/*`,
-`phone/status`, `log/*`, `dir/query`. Bezpečnostní položky S1–S3 z
-[IMPROVEMENTS.md](IMPROVEMENTS.md) jsou implementované na větvi
-`security/secure-by-default-connection`.
+Hotové (1.4.0 + 1.5.0): bezpečné výchozí spojení (S1–S3 + oprava Basic nad neověřeným HTTPS),
+doorbell `event` entita s HomeKit propojením, snímek posledního zazvonění (`image`), služba
+`grant_access` s auditní stopou, odběr access událostí z log kanálu, všechny IO vstupy a výstupy,
+SSDP discovery s ověřenou změnou IP, entita dostupnosti firmwaru, redigovaná diagnostika,
+spolehlivá detekce zvonění (jen hovory z interkomu, filtr Called ID přes všechny peery).
 
----
+Z původního návrhu tedy zbývá hlavně: události přístupu **v automatizacích** (A2–A4, A6),
+instalace firmwaru (D1), Repairs (D5), zbytek tech-debtu (B2–B6) a velká témata kolem videa/audia.
 
-## A. Přístupový systém a události (2N API: `log/subscribe`)
+Co se ukázalo od vydání (fakta):
 
-Dnes se odebírá jen call/switch/IO/registration/config + `MotionDetected`.
-Log kanál ale umí podstatně víc a je to největší nevyužitý potenciál integrace —
-interkom je i přístupová jednotka, ne jen zvonek.
-
-| # | Položka | Priorita | Poznámka |
-|---|---|---|---|
-| A1 | **Přihlásit se k access událostem**: `CardEntered`, `CodeEntered`, `MobKeyEntered` (WaveKey/BLE), `FingerEnteredData`, `UserAuthenticated`, `AccessTaken` | **P1** | Vyžaduje čtečku/klávesnici na zařízení; eventy chodí stejným kanálem, minimální změna v koordinátoru |
-| A2 | **HA `event` entity** pro doorbell (device class `doorbell`) a pro access události | **P1** | Moderní HA konvence — `event` platforma místo krátkého pulzu binary sensoru; binary sensor ponechat pro zpětnou kompatibilitu |
-| A3 | **Události na HA event bus** (`2n_intercom_event`) s atributy (uuid uživatele, jméno z `dir/query`, typ pověření, směr in/out, výsledek) | **P1** | Umožní automatizace typu „přišla konkrétní osoba" a napojení na HA `person` |
-| A4 | **Bezpečnostní události**: `TamperSwitchActivated`, `UnauthorizedDoorOpen`, `DoorOpenTooLong`, `SilentAlarm`, `LoginBlocked` | **P1** | Binary sensory / event entity s device class `tamper`, `door`, `safety`; skvělý materiál pro alarmové automatizace |
-| A5 | **`DoorStateChanged`** — skutečný stav dveří z dveřního senzoru | **P2** | Řeší known limitation „no gate position feedback" tam, kde je senzor zapojený; cover pak nemusí být optimistický |
-| A6 | **Device triggers/conditions** (`device_automation`) pro zvonění, access granted/denied, tamper | **P2** | Automatizace klikatelné v UI bez znalosti entity_id |
-| A7 | **`KeyPressed`/`KeyReleased`** — tlačítka a klávesnice jako eventy | **P3** | Např. „dlouhý stisk tlačítka 2 = rozsviť zahradu" |
-
-## B. Ovládání přístupu (2N API: `accesspoint`, `dir`, `switch`)
-
-| # | Položka | Priorita | Poznámka |
-|---|---|---|---|
-| B1 | **Služba `grant_access`** přes `/api/accesspoint/grantaccess` místo surového `switch/ctrl` | **P1** | Otevření se zapíše do access logu zařízení s auditní stopou (kdo/odkud), na rozdíl od přímého sepnutí relé |
-| B2 | **Volitelná `lock` platforma** pro dveřní relé (vedle switche) | **P2** | Lepší sémantika v HA i HomeKit/Alexa („odemkni dveře"); dřív odstraněná lock platforma se vrátí v čisté podobě nad auto-detekcí relé |
-| B3 | **Podpora `hold`/`release` režimu relé** — trvalé otevření (např. brána dokořán, režim „párty") | **P2** | `switch/ctrl` akce hold/release; v HA jako přepínač „drž otevřeno" |
-| B4 | **Správa dočasných přístupových kódů** — služby `set_access_code` / `delete_access_code` nad `dir/update` | **P3** | Use-case: jednorázový PIN pro řemeslníka z HA automatizace; pozor na bezpečnostní review |
-| B5 | **Security relay / secured mode** — detekce a korektní ovládání bezpečnostního relé | **P3** | Jen pokud zařízení má 2N Security Relay |
-
-## C. Kamera a audio
-
-| # | Položka | Priorita | Poznámka |
-|---|---|---|---|
-| C1 | **`image` entita „poslední zazvonění"** — snímek uložený v okamžiku ring eventu | **P1** | HA `image` platforma; notifikace i dashboard pak mají snímek z momentu zvonění, ne aktuální |
-| C2 | **go2rtc / WebRTC live view** — využít nativní go2rtc v HA (2024.11+) pro nízkolatenční stream | **P2** | Výrazně lepší latence než MJPEG/HLS; go2rtc umí RTSP restream i bez licence transcodovat snapshoty |
-| C3 | **Obousměrné audio** — WebRTC/SIP backchannel (go2rtc `webrtc` + SIP, případně ONVIF Profile T backchannel) | **P2** | Řeší hlavní known limitation; technicky nejnáročnější položka, chce spike/prototyp jako první krok |
-| C4 | **Přepínání kamer za běhu** — `select` entita interní/externí kamera místo restartu entry | **P3** | Dnes `camera_source` jen v options |
-| C5 | **Audio test** (`/api/audio/test`) — `button` entita + výsledek jako diagnostický sensor | **P3** | Pravidelný self-test reproduktoru/mikrofonu z HA automatizace |
-
-## D. Správa zařízení (2N API: `system`, `firmware`, `config`)
-
-| # | Položka | Priorita | Poznámka |
-|---|---|---|---|
-| D1 | **`update` entita pro firmware** — kontrola dostupné verze + instalace z HA | **P2** | 2N API `firmware` skupina; HA `update` platforma s release notes; velká údržbová hodnota u více zařízení |
-| D2 | **`button` restart zařízení** (`/api/system/restart`) | **P2** | Triviální, hodí se při diagnostice |
-| D3 | **Zálohování konfigurace** — služba `backup_config` stahující `/api/config` do HA | **P2** | Automatická týdenní záloha konfigurace interkomu; restore nechat manuální |
-| D4 | **Diagnostické senzory navíc**: uptime, firmware verze jako atribut zařízení, stav log subscription | **P3** | Stav subscription pomůže ladit „doorbell not triggering" |
-| D5 | **Repairs platforma** — `issue` při: firmwaru < 2.40, chybějící RTSP licenci se zvoleným `rtsp` režimem, HTTP bez šifrování, zablokovaném účtu | **P2** | Navazuje na S1–S3; uživatel dostane návod k nápravě přímo v HA UI |
-
-## E. Discovery a onboarding
-
-| # | Položka | Priorita | Poznámka |
-|---|---|---|---|
-| E1 | ~~**DHCP discovery** — `dhcp` matcher v manifestu na 2N OUI (7C:1E:B3)~~ | ~~P1~~ | **Vyřazeno** (rozhodnutí 2026-08-30 — není potřeba) |
-| E2 | **mDNS/ONVIF discovery** jako doplněk | **P3** | Podle toho, co zařízení reálně inzerují na síti |
-| E3 | **Zjištění licencí/capabilities při setupu** (`system/caps`) a schování nedostupných options | **P2** | Uživatel bez RTSP licence neuvidí RTSP volby; méně chybných konfigurací |
-
-## F. Kvalita, distribuce, tech-debt
-
-| # | Položka | Priorita | Poznámka |
-|---|---|---|---|
-| F1 | **Dokončit B1–B6 z [IMPROVEMENTS.md](IMPROVEMENTS.md)** (tz-aware timestampy, caps v poll cyklu, sdílená session, MJPEG režim vs. realita, deklarace min. verze HA/aiohttp, zúžení `except`) | **P1** | Už zanalyzováno, malé, bezpečné změny |
-| F2 | **Merge větve `security/secure-by-default-connection`** + release 1.4.0 | **P1** | S1–S3 hotové vč. testů; nenechat je zestárnout na větvi |
-| F3 | **CI na GitHub Actions**: unittest/pytest, `validate.py`, hassfest, HACS action | **P1** | `.github/` existuje, ale bez plné pipeline; podmínka pro další body |
-| F4 | **Zařazení do HACS default repozitáře + home-assistant/brands** | **P2** | Instalace bez custom repository, oficiální logo/ikona v UI |
-| F5 | **Přechod testů na `pytest-homeassistant-custom-component`** + coverage | **P2** | Standard ekosystému; umožní testovat platformy proti reálnému HA test harnessu |
-| F6 | **Další blueprinty**: „kdo přišel" notifikace se jménem, tamper alarm, dveře dlouho otevřené, brána nechána otevřená, dočasný PIN | **P2** | Levná viditelná hodnota, staví na sekci A |
-| F7 | **Dlouhodobě: kandidát na HA core integraci** | **P3** | `quality_scale: platinum` už deklarován; core přinese distribuci všem uživatelům HA, ale i závazek údržby |
-
-## G. Mimo scope (vědomě)
-
-- **My2N / cloud** — integrace je záměrně `local_push`; cloud neřešit.
-- **Lift control, mass-notify, multi-tenant directory UX** — mimo use-case rodinného domu (viz README); případně až po poptávce z komunity.
-- **Automation API (licencované)** — HTTP API pokrývá vše potřebné; duplikovalo by logiku.
+- **Issue #105 (2N IP Uni, fw 2.50):** zvonění vůbec nefunguje. `BASE_LOG_EVENTS`
+  (`coordinator.py:119-129`) obsahuje `InputChanged`, který IP Uni nemá; zařízení odmítne celý
+  odběr kódem 12. `_build_log_event_list()` (`coordinator.py:563-578`) filtruje podle `/api/log/caps`
+  jen volitelné události, základní ne. Stejný stav je i v 1.5.0. Uživatel nabízí test opravy.
+- Tamtéž: kamera a `image` entita vznikají i na zařízení bez kamery (`camera/snapshot` → kód 1),
+  protože `_get_platforms()` (`__init__.py:77-86`) se řídí jen volbou `enable_camera`, ne schopnostmi zařízení.
+- Tamtéž: na `switch/*` a `system/caps` vrací kód 10 (chybí oprávnění). Integrace to dnes jen loguje —
+  stejný „tichý" vzor jako v TASK-12 AC #2.
+- Externí PR #32 (KeyPressed zvonění) je přepracovaný podle TASK-39 a čeká na v1.6.0.
+- TASK-66 (spike instalace firmwaru) jde spustit až ve chvíli, kdy 2N vydá novější firmware pro E2E interkom.
+  Termín tedy neřídíme my.
+- Bezpečnostní revize 1.5.0 (O-1) doporučila pro 1.6 *trust on first use* — pin otisku certifikátu.
 
 ---
 
-## Doporučené pořadí (první iterace)
+## 2. Návrh verze 1.6.0 — „funguje na každém 2N a přístup v automatizacích"
 
-1. **F2 + F1** — merge security větve, doklepnout tech-debt B1–B6, release.
-2. **F3** — CI, ať další práce jede na zelené.
-3. **A1–A4 + B1** — access události + `event` entity + `grant_access`: největší funkční skok, jedna souvislá oblast (koordinátor + nová platforma).
-4. **C1 + E1** — snímek při zazvonění a DHCP discovery: malé, viditelné.
-5. **D5 + E3** — repairs a license-aware options: dotáhne UX konfigurace.
-6. Pak podle chuti: **C2/C3** (go2rtc, two-way audio — nejdřív spike), **D1–D3**, **B2/B3**.
+Cíl verze ve dvou větách: integrace se korektně chová i na menších zařízeních (IP Uni, zařízení
+bez kamery, účty s omezenými právy) a uživatel na chybu dostane jasnou opravu místo mrtvých entit.
+Události přístupu a bezpečnosti jdou poprvé použít v automatizacích.
 
-> **Stav 2026-08-30:** Všechny P1 položky kromě E1 (DHCP — vyřazeno) jsou založené
-> jako tasky `task-1` až `task-9` v `backlog/tasks/` včetně acceptance kritérií
-> a závislostí. Instrukce pro implementaci: `.github/copilot-instructions.md`.
+### 2.0 Hned teď: patch 1.5.1 (doporučení)
+
+| # | Položka | Proč teď |
+|---|---|---|
+| **TASK-71** (N1) | Základní log události odebírat jen pokud je `/api/log/caps` uvádí (fallback: bez caps chování jako dnes) | Zvonění na IP Uni nefunguje vůbec; malá změna v `_build_log_event_list`; uživatel z #105 umí ověřit |
+
+Patch nečeká na nic dalšího z 1.6. Vydání: **TASK-72** Release v1.5.1 (milník `v1.5.1`).
+
+### 2.1 Jádro v1.6.0
+
+| Pořadí | Úkol | Typ | Stav dnes | Co je potřeba udělat před předáním kodérovi |
+|---|---|---|---|---|
+| 1 | **TASK-73** (N2) — kamera a `image` jen když zařízení kameru má (`camera/caps`; kód 1 = bez kamery), výchozí `enable_camera` podle schopností | bug | To Do, `needs-analysis` | analýza: spolehlivý signál „bez kamery“ na fw 2.x/3.x, plán |
+| 2 | **TASK-12** přeformulovat: zařízení odmítá volání (kód 7/10/12) → entity `unavailable` + Repair issue s konkrétním chybějícím oprávněním; žádný „úspěšný" refresh s prázdnými daty | bug | To Do, přepsaný popis a ACs, `needs-analysis` | analýza: mapování kódů 2N na hlášky, co je nezbytné volání; plán |
+| 3 | **TASK-39** — zvonění tlačítkem (KeyPressed), PR #32 | feature | **připravený**, `@copilot` | — |
+| 4 | **TASK-2** rozdělit: **B2** (`switch_caps` ne v každém pollu), **B3** (sdílená session v probe), **O-5** (nepředávat údaje `MjpegCamera`), **O-3** (náhodný `cnonce` v RTSP Digest) | tech-debt | **TASK-2.2** (B2) a **TASK-2.3** (B3, O-3, O-5) připravené, `@copilot` | B4 a B6 později; B5 je skoro hotové (`hacs.json` `homeassistant: 2026.4.0`) |
+| 5 | **TASK-6** — `2n_intercom_event` na event bus (ring, access) | feature | To Do, `needs-analysis` | plán, schéma payloadu, verifier tagy |
+| 6 | **TASK-5** — access `event` entita (card, code, mobile_key, fingerprint, granted, denied) | feature | To Do, `needs-analysis`, závisí na TASK-6 | plán, verifier tagy; staví na event platformě z TASK-53 |
+| 7 | **TASK-7** — bezpečnostní události (tamper, UnauthorizedDoorOpen, DoorOpenTooLong, SilentAlarm, LoginBlocked) | feature | To Do, `needs-analysis`, závisí na TASK-6 | plán, verifier tagy; rozhodnutí o tamperu z 2026-10-13 platí |
+| 8 | **TASK-66** → **TASK-65** — instalace firmwaru tlačítkem Install přes `updatefw` | spike + feature | To Do, `on-hold` | čeká na novější firmware od 2N; release neblokuje (R3) |
+
+### 2.2 Až po 1.6: TOFU pin certifikátu
+
+**DRAFT-2** (N3) — při setupu uložit otisk certifikátu (SHA-256) a dál ho ověřovat (`aiohttp.Fingerprint`).
+Přínos: MITM selže i bez vlastní CA a uživatelé s Basic autentizací, které 1.5.0 odstavila, by mohli
+mít „ověřené" spojení bez nahrávání certifikátu. Otevřené otázky: co při výměně certifikátu
+(update firmwaru, ruční regenerace) — Repair issue s potvrzením nového otisku? Jak se pin chová
+s SSDP změnou IP (TASK-68)? Jan 2026-10-24: ne do 1.6, cíl další verze; nejdřív vyjasnit otázky v draftu.
+
+### 2.3 Pořadí a závislosti
+
+```mermaid
+flowchart LR
+  N1["TASK-71 log caps filtr<br/>(v1.5.1)"] --> N2["TASK-73 kamera podle caps"]
+  N1 --> T12["TASK-12 Repairs<br/>místo tichých chyb"]
+  T12 --> T2["TASK-2 B2/B3/O-3/O-5"]
+  T39["TASK-39 KeyPressed (PR #32)"]
+  T6["TASK-6 event bus"] --> T5["TASK-5 access event entita"]
+  T6 --> T7["TASK-7 bezpečnostní události"]
+  T66["TASK-66 spike updatefw<br/>(čeká na fw od 2N)"] --> T65["TASK-65 Install"]
+  N2 & T2 & T39 & T5 & T7 --> REL["TASK-74 Release v1.6.0"]
+  T65 -. "jen pokud stihne" .-> REL
+```
+
+Šipky jsou doporučené pořadí, závislosti v Backlogu mají jen TASK-5/7 → TASK-6, TASK-65 → TASK-66 a release.
+TASK-39 a TASK-6 nezávisí na ostatních, kodér je může brát hned po TASK-71.
+
+### 2.4 Úklid kolem verze (Jan / GitHub)
+
+- Zavřít issue **#11** a **#13** — slíbili jsme to „až vyjde 1.5.0" a to je dnes.
+- Odpovědět na **#105** (potvrdit příčinu, nabídnout test větve).
+- **PR #47** (verze firmwaru DS2 v dokumentaci) — malá změna, merge.
+- `manifest.json` má `documentation` a `issue_tracker` na fork `savek-cc`, ale issues chodí sem.
+  Ověřit, zda je to záměr.
+- **TASK-42** archivovaný (Jan 2026-10-16: neplánuje se).
+
+---
+
+## 3. Pipeline (souběžně, bez milníku)
+
+Úkoly `manual-path` / `@copilot-mac`, do verze nepatří, ale ovlivňují, jak rychle 1.6 poteče:
+
+| Priorita | Úkol | Proč |
+|---|---|---|
+| 1 | Uzavřít **TASK-35**, **TASK-46**, **TASK-64** (To Test) a **TASK-40** (In Progress, 3/4) | Visí od 16.–21. 10.; chybí jen záznam ověření |
+| 2 | **TASK-70** — `permissions:` a SHA piny v workflow | nález S-4 z bezpečnostní revize, levné |
+| 3 | **TASK-38** — model a build interkomu z veřejného summary | veřejné repo |
+| 4 | **TASK-3** přeformulovat: unit testy + `validate.py` na GitHub runneru i pro **fork PR** | fork PR (#32, #47) dnes nemají žádný automatický test; `e2e-pi` na forcích neběží |
+| 5 | **TASK-59** — tester na Pi pro `[tester]` kritéria | méně ruční práce s To Test u 1.6 |
+| 6 | **TASK-62**, **TASK-63** | drobné opravy kodéra |
+| — | TASK-58 | zůstává `on-hold` |
+
+---
+
+## 4. Později (v1.7+), seřazeno podle hodnoty
+
+| Téma | Položky | Poznámka |
+|---|---|---|
+| Bezpečnost spojení | DRAFT-2 TOFU pin certifikátu | viz 2.2 |
+| Doorbell podle tlačítka | DRAFT-1 | potřebuje návrh tvaru entity; navazuje na TASK-39 |
+| Automatizace v UI | A6 device triggers/conditions | staví na TASK-6 (`device_id` v payloadu) |
+| Stav dveří | A5 `DoorStateChanged` → cover/lock bez optimistického stavu | |
+| Ovládání přístupu | B2 `lock` platforma, B3 hold/release relé | |
+| Repairs a setup | D5 zbytek (fw < 2.40, chybějící RTSP licence), E3 volby podle licencí | TASK-12 udělá základ |
+| Údržba zařízení | D2 restart `button`, D3 záloha konfigurace | |
+| Video a audio | C2 go2rtc/WebRTC, C3 obousměrné audio (nejdřív spike) | nejnáročnější |
+| Distribuce a kvalita | F4 HACS default + brands, F5 `pytest-homeassistant-custom-component`, F6 blueprinty (kdo přišel, tamper, dveře dlouho otevřené) | F6 dává smysl hned po TASK-6/7 |
+| Tech-debt | B4 (MJPEG vs. snapshot-stream), B6 (zúžit `except`) | |
+
+## 5. Mimo scope (beze změny)
+
+My2N / cloud, lift control, mass-notify, multi-tenant directory UX, licencované Automation API.
+DHCP discovery vyřazeno 2026-08-30 (SSDP ho nahradilo).
+
+---
+
+## 6. Rozhodnutí (Jan, 2026-10-24)
+
+| # | Otázka | Rozhodnutí |
+|---|---|---|
+| R1 | #105 jako patch, nebo první úkol 1.6.0? | patch **1.5.1** (TASK-71 + TASK-72) |
+| R2 | Události přístupu (TASK-5/6/7) do 1.6? | všechny tři |
+| R3 | Firmware Install (TASK-65/66) blokuje 1.6? | neblokuje; když spike nestihneme, přesun do další verze |
+| R4 | TOFU pin certifikátu do 1.6? | ne, až po 1.6 (DRAFT-2) |
