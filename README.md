@@ -28,7 +28,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 - Snapshot sizes are selected from `camera/caps`: the smallest supported size covering both requested dimensions, or the largest available. Unsupported dashboard sizes no longer cause a rejected request and a 640x480 retry on every refresh
 - **Native MJPEG live view** via `/api/camera/snapshot?...&fps=<n>` — served through Home Assistant's `MjpegCamera`, no ffmpeg/HLS round-trip
 - **RTSP stream source** when the device exposes it — requires separate RTSP credentials configured in the options flow (the 2N RTSP server has its own user database independent of the HTTP API accounts)
-- **Credentials are passed to `MjpegCamera` separately** — they never appear in the URL exposed to logs, diagnostics, or dashboards
+- **HTTP API credentials stay in the integration's authenticated request path** — they are not passed to `MjpegCamera` or embedded in HTTP camera URLs exposed to logs, diagnostics, or dashboards
 - **Last-ring image** (`image.<intercom>_last_ring`) — a JPEG captured from the configured camera source the moment the doorbell rings, so you can see who rang even after they left. A failed capture keeps the previous image. Created only when the camera is enabled
 - HomeKit-compatible video doorbell
 

@@ -227,8 +227,14 @@ náhledu podle `live_view_mode` (auto/rtsp/mjpeg/jpeg_only) a schopností zaří
   z opakovaných JPEG snapshotů (`handle_async_still_stream`).
 - **JPEG snapshot** – vždy dostupný fallback, cache 1 s v koordinátoru.
 
-Credentials se do `MjpegCamera` předávají **odděleně** (username/password), ne
-v URL – aby neunikly do logů/diagnostiky. RTSP je výjimka (creds patří do URI).
+HTTP API credentials stay in the integration's authenticated request path;
+`MjpegCamera` receives neither a username nor a password. Snapshot and MJPEG
+playback use the coordinator's snapshot cache, preserving Digest/Basic fallback
+and `allow_insecure` rules without credentials in HTTP URLs. The public MJPEG
+probe reuses the API session with a per-request `middlewares=()` override, so
+it sends no credentials and does not alter the session's normal auth path.
+RTSP remains the exception (credentials belong in the URI); its Digest probe
+uses a random client nonce and rejects quotes, CR and LF in usernames or realms.
 
 ---
 

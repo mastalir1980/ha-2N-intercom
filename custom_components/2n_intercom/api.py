@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 import logging
 import re
+import secrets
 from collections.abc import AsyncIterator, Callable
 from typing import Any
 from urllib.parse import quote, urlencode
@@ -48,6 +49,7 @@ RTSP_PROBE_TIMEOUT = 3
 _RESOLUTION_RE = re.compile(r"^\s*(\d+)\s*x\s*(\d+)\s*$")
 _CAMERA_SOURCE_KEYS = {"source", "sources", "videosource", "camerasource"}
 _CAMERA_CAPS_KEYS = {"caps", "camera", "jpeg", "resolution", "resolutions"}
+_RTSP_DIGEST_UNSAFE_RE = re.compile(r'["\r\n]')
 
 
 # 2N error-code constants. The HTTP API manual (section "Error codes")
@@ -544,7 +546,7 @@ class TwoNIntercomAPI:
 
         ``include_auth`` defaults to False so the returned URL never leaks the
         intercom credentials into HA logs, dashboards, or diagnostics. The
-        camera entity passes username/password to ``MjpegCamera`` separately;
+        camera entity uses the integration's authenticated snapshot path;
         the only callers that should opt back in are RTSP-style helpers
         whose protocol requires the credentials in the URI.
         """
@@ -707,9 +709,11 @@ class TwoNIntercomAPI:
         headers: dict[str, str] | None = None,
     ) -> AsyncIterator[aiohttp.ClientResponse]:
         """Send a request without Digest/Basic auth handling."""
+        session = await self.async_get_session()
         url = f"{self._base_url}{path}"
         request_kwargs: dict[str, Any] = {
-            "connector": aiohttp.TCPConnector(ssl=self.verify_ssl),
+            # Override middleware for this request, not the shared session.
+            "middlewares": (),
         }
         if params is not None:
             request_kwargs["params"] = params
@@ -718,11 +722,8 @@ class TwoNIntercomAPI:
         if headers is not None:
             request_kwargs["headers"] = headers
 
-        async with aiohttp.ClientSession(
-            connector=request_kwargs.pop("connector"),
-        ) as session:
-            async with session.request(method, url, **request_kwargs) as response:
-                yield response
+        async with session.request(method, url, **request_kwargs) as response:
+            yield response
 
     async def async_close(self) -> None:
         """Close the API session if we own it.
@@ -1631,6 +1632,9 @@ class TwoNIntercomAPI:
         if not self.rtsp_username or not self.rtsp_password:
             _LOGGER.debug("RTSP probe skipped: no RTSP credentials configured")
             return False
+        if _RTSP_DIGEST_UNSAFE_RE.search(self.rtsp_username):
+            _LOGGER.debug("RTSP probe skipped: invalid Digest username")
+            return False
 
         reader = None
         writer = None
@@ -1710,7 +1714,13 @@ class TwoNIntercomAPI:
         import hashlib  # noqa: PLC0415
 
         nonce_match = re.search(r'nonce="([^"]+)"', challenge_response)
-        realm_match = re.search(r'realm="([^"]+)"', challenge_response)
+        # Match the whole quoted value, including escaped quotes, rather than
+        # silently accepting a prefix of a malformed realm.
+        realm_match = re.search(
+            r'realm="((?:\\.|[^"\\])*)"(?=[ \t]*(?:,|\r?$))',
+            challenge_response,
+            re.MULTILINE,
+        )
         if not nonce_match or not realm_match:
             return None
 
@@ -1721,6 +1731,12 @@ class TwoNIntercomAPI:
 
         username = self.rtsp_username or ""
         password = self.rtsp_password or ""
+        if (
+            _RTSP_DIGEST_UNSAFE_RE.search(username)
+            or _RTSP_DIGEST_UNSAFE_RE.search(realm)
+        ):
+            _LOGGER.debug("RTSP probe: invalid Digest username or realm")
+            return None
 
         ha1 = hashlib.md5(
             f"{username}:{realm}:{password}".encode()
@@ -1729,7 +1745,7 @@ class TwoNIntercomAPI:
 
         if qop:
             nc = "00000001"
-            cnonce = hashlib.md5(nonce.encode()).hexdigest()[:8]
+            cnonce = secrets.token_hex(4)
             digest = hashlib.md5(
                 f"{ha1}:{nonce}:{nc}:{cnonce}:{qop}:{ha2}".encode()
             ).hexdigest()

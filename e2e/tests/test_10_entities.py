@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 
 import pytest
 
@@ -31,6 +32,25 @@ def test_camera_snapshot_is_jpeg(ha, entry, registry):
     assert r.status_code == 200, f"camera_proxy -> {r.status_code}"
     assert r.content[:2] == b"\xff\xd8", "snapshot is not a JPEG"
     assert len(r.content) > 5_000, f"snapshot suspiciously small ({len(r.content)} B)"
+
+
+def test_camera_stream_contains_jpeg_frames(ha, entry, registry):
+    cam = find_by_suffix(registry, entry["entry_id"], "camera")
+    if cam is None or cam.get("disabled_by"):
+        pytest.skip("camera entity not enabled")
+    payload = bytearray()
+    frames = []
+    deadline = time.monotonic() + 30
+    with ha.get(f"/api/camera_proxy_stream/{cam['entity_id']}", stream=True) as response:
+        assert response.status_code == 200, f"camera_proxy_stream -> {response.status_code}"
+        assert "multipart/x-mixed-replace" in response.headers.get("Content-Type", "").lower()
+        for chunk in response.iter_content(chunk_size=4096):
+            payload.extend(chunk)
+            frames = re.findall(rb"\xff\xd8.*?\xff\xd9", payload, flags=re.DOTALL)
+            if len(frames) >= 2 or len(payload) > 5 * 1024 * 1024 or time.monotonic() > deadline:
+                break
+    assert len(frames) >= 2, "camera stream did not deliver two complete JPEG frames"
+    assert all(len(frame) > 5_000 for frame in frames[:2]), "stream frames suspiciously small"
 
 
 def test_doorbell_event_is_available_and_shares_camera_device(ha, entry, registry, twon):

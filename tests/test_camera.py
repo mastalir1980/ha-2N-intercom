@@ -6,6 +6,7 @@ import sys
 import types
 import unittest
 from enum import IntFlag
+from unittest.mock import AsyncMock, patch
 
 from _stubs import (
     API_PATH,
@@ -50,7 +51,7 @@ def _install_homeassistant_stubs() -> None:
             mjpeg_url: str,
             still_image_url: str | None = None,
             username: str | None = None,
-            password: str = "",
+            password: str | None = None,
             verify_ssl: bool = True,
             unique_id: str | None = None,
             **kwargs,
@@ -62,6 +63,10 @@ def _install_homeassistant_stubs() -> None:
             self._password = password
             self._verify_ssl = verify_ssl
             self._attr_unique_id = unique_id
+
+        @property
+        def frame_interval(self):
+            return self._attr_frame_interval
 
     mjpeg_module.MjpegCamera = MjpegCamera
     sys.modules["homeassistant.components.mjpeg"] = mjpeg_module
@@ -309,8 +314,8 @@ class CameraStreamSourceTests(unittest.IsolatedAsyncioTestCase):
                 )
             self.assertEqual(await camera_entity.stream_source(), expected_source)
 
-    async def test_camera_entity_passes_credentials_separately(self) -> None:
-        """Camera must pass username/password to MjpegCamera, not embed in URL."""
+    async def test_camera_entity_does_not_pass_api_credentials_to_mjpeg_camera(self) -> None:
+        """Only the integration request path may access HTTP API credentials."""
         transport_info = self.api_module.CameraTransportInfo(
             selected_mode=self.const_module.LIVE_VIEW_MODE_MJPEG,
             resolved=True,
@@ -319,13 +324,43 @@ class CameraStreamSourceTests(unittest.IsolatedAsyncioTestCase):
         )
         camera_entity, _ = self._make_camera_entity(transport_info)
 
-        # MjpegCamera stub captured the constructor kwargs; the URL must
-        # be credentials-free, and the credentials must be on the entity.
         self.assertNotIn("user:secret", camera_entity._mjpeg_url)
         self.assertNotIn("user:secret", camera_entity._still_image_url or "")
-        self.assertEqual(camera_entity._username, "user")
-        self.assertEqual(camera_entity._password, "secret")
+        self.assertIsNone(camera_entity._username)
+        self.assertIsNone(camera_entity._password)
 
+    async def test_snapshot_and_mjpeg_stream_use_coordinator_snapshot_path(self) -> None:
+        camera_entity, _ = self._make_camera_entity(self.api_module.CameraTransportInfo(
+            selected_mode=self.const_module.LIVE_VIEW_MODE_MJPEG,
+            resolved=True,
+            mjpeg_available=True,
+        ))
+        jpeg = b"\xff\xd8snapshot\xff\xd9"
+        camera_entity.coordinator.async_get_snapshot = AsyncMock(return_value=jpeg)
+        self.assertEqual(
+            await camera_entity.async_camera_image(width=640, height=480), jpeg,
+        )
+        camera_entity.coordinator.async_get_snapshot.assert_awaited_once_with(
+            width=640, height=480,
+        )
+
+        async def still_stream(request, interval):
+            self.assertIs(request, stream_request)
+            self.assertEqual(interval, 0.1)
+            return await camera_entity.async_camera_image()
+
+        stream_request = object()
+        with patch.object(
+            camera_entity, "handle_async_still_stream",
+            AsyncMock(side_effect=still_stream), create=True,
+        ) as stream:
+            self.assertEqual(
+                await camera_entity.handle_async_mjpeg_stream(stream_request), jpeg,
+            )
+            stream.assert_awaited_once_with(stream_request, camera_entity.frame_interval)
+        camera_entity.coordinator.async_get_snapshot.assert_awaited_with(
+            width=None, height=None,
+        )
 
     async def test_camera_entity_deletes_attr_name_set_by_mjpeg_camera(self) -> None:
         """MjpegCamera.__init__ unconditionally sets self._attr_name = None,

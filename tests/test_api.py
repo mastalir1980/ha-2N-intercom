@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import hashlib
 from itertools import product
 import json
 import logging
@@ -174,8 +175,8 @@ class CameraTransportApiTests(unittest.TestCase):
             protocol="https",
         )
 
-        # Default must NOT embed credentials. The camera entity passes
-        # username/password to MjpegCamera separately so logs and HA
+        # Default must NOT embed credentials. The camera entity authenticates
+        # through the integration request path so logs and HA
         # diagnostics never see them in the URL.
         url = api.build_mjpeg_url(width=640, height=480, fps=7, source="internal")
 
@@ -391,6 +392,140 @@ class CameraTransportProbeRetryTests(unittest.IsolatedAsyncioTestCase):
         )
         result = await api.async_probe_rtsp()
         self.assertFalse(result)
+
+
+class RtspDigestTests(unittest.IsolatedAsyncioTestCase):
+    """RTSP Digest must use fresh client nonces and reject unsafe header values."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.api_module = load_api_module()
+
+    def _make_api(self, username="rtsp-user"):
+        return self.api_module.TwoNIntercomAPI(
+            host="intercom.local", username="api-user", password="api-secret",
+            rtsp_username=username, rtsp_password="rtsp-secret",
+        )
+
+    def _challenge(self, realm="rtsp-realm", *, qop=True):
+        qop_header = ', qop="auth"' if qop else ""
+        return (
+            "RTSP/1.0 401 Unauthorized\r\n"
+            f'WWW-Authenticate: Digest realm="{realm}", nonce="server-nonce"'
+            f"{qop_header}\r\n\r\n"
+        )
+
+    def test_digest_uses_a_new_secrets_cnonce_for_each_challenge(self) -> None:
+        api = self._make_api()
+        uri = "rtsp://intercom.local:554/h264_stream"
+        ha1 = hashlib.md5(b"rtsp-user:rtsp-realm:rtsp-secret").hexdigest()
+        ha2 = hashlib.md5(f"OPTIONS:{uri}".encode()).hexdigest()
+        cnonces = ("1234abcd", "abcd5678")
+        with patch.object(
+            self.api_module.secrets, "token_hex", side_effect=cnonces,
+        ) as token_hex:
+            for cnonce in cnonces:
+                header = api._build_rtsp_digest_auth(self._challenge(), "OPTIONS", uri)
+                digest = hashlib.md5(
+                    f"{ha1}:server-nonce:00000001:{cnonce}:auth:{ha2}".encode()
+                ).hexdigest()
+                self.assertEqual(
+                    header,
+                    f'Digest username="rtsp-user", realm="rtsp-realm", '
+                    f'nonce="server-nonce", uri="{uri}", response="{digest}", '
+                    f'qop=auth, nc=00000001, cnonce="{cnonce}"',
+                )
+            self.assertEqual(token_hex.call_count, 2)
+            for call in token_hex.call_args_list:
+                self.assertEqual(call.args, (4,))
+
+    def test_digest_without_qop_keeps_legacy_response(self) -> None:
+        api = self._make_api()
+        uri = "rtsp://intercom.local:554/h264_stream"
+        ha1 = hashlib.md5(b"rtsp-user:rtsp-realm:rtsp-secret").hexdigest()
+        ha2 = hashlib.md5(f"OPTIONS:{uri}".encode()).hexdigest()
+        digest = hashlib.md5(f"{ha1}:server-nonce:{ha2}".encode()).hexdigest()
+        with patch.object(self.api_module.secrets, "token_hex") as token_hex:
+            header = api._build_rtsp_digest_auth(
+                self._challenge(qop=False), "OPTIONS", uri,
+            )
+            token_hex.assert_not_called()
+        self.assertEqual(
+            header,
+            f'Digest username="rtsp-user", realm="rtsp-realm", '
+            f'nonce="server-nonce", uri="{uri}", response="{digest}"',
+        )
+
+    async def test_unsafe_username_fails_before_opening_connection(self) -> None:
+        for char in ('"', "\r", "\n"):
+            with self.subTest(char=repr(char)):
+                api = self._make_api(username=f"unsafe{char}user")
+                with (
+                    patch.object(self.api_module.asyncio, "open_connection") as connect,
+                    self.assertLogs(self.api_module._LOGGER, level="DEBUG") as logs,
+                ):
+                    self.assertFalse(await api.async_probe_rtsp())
+                    self.assertIsNone(api._build_rtsp_digest_auth(
+                        self._challenge(), "OPTIONS", "rtsp://intercom.local:554/h264_stream",
+                    ))
+                    connect.assert_not_called()
+                for value in (api.rtsp_username, api.rtsp_password, api.password):
+                    self.assertNotIn(value, " ".join(logs.output))
+
+    async def test_unsafe_realm_never_sends_authenticated_request(self) -> None:
+        for realm, qop in product(
+            ('unsafe"realm', r'unsafe\"realm', "unsafe\rrealm", "unsafe\nrealm"),
+            (False, True),
+        ):
+            with self.subTest(realm=repr(realm), qop=qop):
+                api = self._make_api()
+                reader = SimpleNamespace(
+                    read=AsyncMock(return_value=self._challenge(realm, qop=qop).encode()),
+                )
+                writer = SimpleNamespace(
+                    write=Mock(), drain=AsyncMock(),
+                    close=Mock(), wait_closed=AsyncMock(),
+                )
+                with (
+                    patch.object(
+                        self.api_module.asyncio, "open_connection",
+                        AsyncMock(return_value=(reader, writer)),
+                    ),
+                    self.assertLogs(self.api_module._LOGGER, level="DEBUG") as logs,
+                ):
+                    self.assertFalse(await api.async_probe_rtsp())
+                writer.write.assert_called_once()
+                self.assertNotIn(b"Authorization:", writer.write.call_args.args[0])
+                writer.close.assert_called_once()
+                writer.wait_closed.assert_awaited_once()
+                for value in (realm, api.rtsp_username, api.rtsp_password, api.password):
+                    self.assertNotIn(value, " ".join(logs.output))
+
+    async def test_valid_digest_probe_sends_authenticated_options(self) -> None:
+        api = self._make_api()
+        reader = SimpleNamespace(read=AsyncMock(side_effect=(
+            self._challenge().encode(), b"RTSP/1.0 200 OK\r\n\r\n",
+        )))
+        writer = SimpleNamespace(
+            write=Mock(), drain=AsyncMock(), close=Mock(), wait_closed=AsyncMock(),
+        )
+        with (
+            patch.object(
+                self.api_module.asyncio, "open_connection",
+                AsyncMock(return_value=(reader, writer)),
+            ),
+            patch.object(self.api_module.secrets, "token_hex", return_value="1234abcd"),
+        ):
+            self.assertTrue(await api.async_probe_rtsp())
+        self.assertEqual(writer.write.call_count, 2)
+        request = writer.write.call_args.args[0]
+        self.assertIn(b"CSeq: 2\r\nAuthorization:", request.replace(
+            b"User-Agent: HomeAssistant-2NIntercom\r\n", b"",
+        ))
+        self.assertIn(b'cnonce="1234abcd"', request)
+        self.assertNotIn(b"rtsp-secret", request)
+        writer.close.assert_called_once()
+        writer.wait_closed.assert_awaited_once()
 
 
 class CallControlApiTests(unittest.IsolatedAsyncioTestCase):
@@ -1119,6 +1254,98 @@ class AuthenticationRequestTests(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.api_module = load_api_module()
+
+    async def test_public_probe_reuses_injected_session_without_auth_or_retries(self) -> None:
+        for status, challenge in (
+            (200, ""), (401, 'Digest realm="device"'), (401, 'Basic realm="device"'),
+        ):
+            with self.subTest(status=status, challenge=challenge):
+                calls = []
+                response = SimpleNamespace(
+                    status=status,
+                    headers={
+                        "Content-Type": "multipart/x-mixed-replace; boundary=frame",
+                        "WWW-Authenticate": challenge,
+                    },
+                    raise_for_status=Mock(side_effect=(
+                        self.api_module.aiohttp.ClientError("Unauthorized")
+                        if status == 401 else None
+                    )),
+                )
+
+                @asynccontextmanager
+                async def request(method, url, **kwargs):
+                    calls.append((method, url, kwargs))
+                    yield response
+
+                digest = Mock()
+                session = SimpleNamespace(
+                    closed=False, request=request, middlewares=(digest,),
+                    headers={"User-Agent": "HomeAssistant"},
+                )
+                api = self.api_module.TwoNIntercomAPI(
+                    "intercom.local", "api-user", "api-secret",
+                    session=session, allow_insecure=True,
+                )
+                with (
+                    patch.object(self.api_module.aiohttp, "ClientSession") as create_session,
+                    patch.object(self.api_module.aiohttp, "TCPConnector") as create_connector,
+                ):
+                    for _ in range(2):
+                        self.assertEqual(
+                            await api.async_probe_mjpeg_public(
+                                capabilities=self.api_module.CameraCapabilities(),
+                            ),
+                            status == 200,
+                        )
+                    create_session.assert_not_called()
+                    create_connector.assert_not_called()
+                self.assertEqual(len(calls), 2)
+                for method, url, kwargs in calls:
+                    self.assertEqual(method, "GET")
+                    self.assertEqual(url, "https://intercom.local:443/api/camera/snapshot")
+                    self.assertEqual(kwargs, {
+                        "middlewares": (),
+                        "params": {
+                            "source": "internal", "width": 1280, "height": 960, "fps": 10,
+                        },
+                        "headers": {"Accept": "multipart/x-mixed-replace,image/jpeg"},
+                    })
+                self.assertIs(api._session, session)
+                self.assertEqual(session.middlewares, (digest,))
+                self.assertEqual(session.headers, {"User-Agent": "HomeAssistant"})
+                digest.assert_not_called()
+                self.assertFalse(session.closed)
+
+                async with api._async_request("GET", "/api/system/info"):
+                    pass
+                self.assertEqual(calls[2][2], {})
+                if "Basic" in challenge:
+                    self.assertEqual(calls[3][2]["auth"].login, "api-user")
+
+    async def test_public_probe_creates_owned_session_only_once(self) -> None:
+        session = self.api_module.aiohttp.ClientSession()
+
+        @asynccontextmanager
+        async def request(method, url, **kwargs):
+            self.assertEqual(kwargs["middlewares"], ())
+            self.assertNotIn("auth", kwargs)
+            yield SimpleNamespace(
+                status=200, headers={"Content-Type": "multipart/x-mixed-replace"},
+            )
+
+        session.request = request
+        api = self.api_module.TwoNIntercomAPI("intercom.local", "api-user", "api-secret")
+        with patch.object(
+            self.api_module.aiohttp, "ClientSession", return_value=session,
+        ) as create_session:
+            for _ in range(2):
+                self.assertTrue(await api.async_probe_mjpeg_public(
+                    capabilities=self.api_module.CameraCapabilities(),
+                ))
+            create_session.assert_called_once()
+        await api.async_close()
+        self.assertTrue(session.closed)
 
     async def test_basic_retry_requires_verified_https_or_explicit_opt_in(self) -> None:
         for protocol, verify_ssl, opt_in in product(
