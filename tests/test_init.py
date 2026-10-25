@@ -482,6 +482,30 @@ class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):
         cls.init_module = load_init_module()
         cls.const_module = sys.modules["custom_components.2n_intercom.const"]
 
+    async def test_setup_passes_default_off_and_saved_keypress_option(self) -> None:
+        for options, enabled in (
+            ({}, False),
+            ({"ring_on_keypress": False}, False),
+            ({"ring_on_keypress": True}, True),
+        ):
+            with self.subTest(options=options):
+                entry = FakeConfigEntry(
+                    "entry-1",
+                    {"host": "example.invalid", "port": 443,
+                     "username": "test-user", "password": "test-password"},
+                    options=options,
+                )
+                hass = FakeHass([entry])
+                with patch.object(self.init_module, "TwoNIntercomAPI", FakeAPI):
+                    await self.init_module.async_setup_entry(hass, entry)
+                try:
+                    coordinator = entry.runtime_data.coordinator
+                    self.assertIs(coordinator._ring_on_keypress, enabled)
+                    self.assertEqual(entry.options, options)
+                    self.assertNotIn("ring_on_keypress", entry.data)
+                finally:
+                    await self.init_module.async_unload_entry(hass, entry)
+
     async def test_setup_removes_only_legacy_doorbell_even_when_disabled(self) -> None:
         for enabled in (True, False):
             with self.subTest(enable_doorbell=enabled):

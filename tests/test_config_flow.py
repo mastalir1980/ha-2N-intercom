@@ -1691,6 +1691,33 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(result["data"]["firmware_channel"], channel)
                 self.assertEqual(entry.data, {"host": "example.invalid"})
 
+    async def test_ring_on_keypress_defaults_off_and_is_saved(self) -> None:
+        for saved, expected_default in (
+            ({}, False), ({"ring_on_keypress": True}, True),
+        ):
+            with self.subTest(saved=saved):
+                entry = FakeConfigEntry(
+                    "entry-1", {"host": "example.invalid"}, options=dict(saved)
+                )
+                flow = self._make_options_flow(entry)
+                form = await flow.async_step_init()
+                marker = next(
+                    marker
+                    for marker in form["data_schema"].schema
+                    if marker.key == "ring_on_keypress"
+                )
+                self.assertEqual(marker.default, expected_default)
+                result = await flow.async_step_device({
+                    "name": "Intercom", "enable_camera": False,
+                    "enable_doorbell": True,
+                    "ring_on_keypress": not expected_default,
+                })
+                self.assertEqual(result["type"], "create_entry")
+                self.assertEqual(
+                    result["data"]["ring_on_keypress"], not expected_default
+                )
+                self.assertEqual(entry.data, {"host": "example.invalid"})
+
     def _grant_user_marker(self, form):
         for marker, field in form["data_schema"].schema.items():
             if marker.key == "grant_access_user":

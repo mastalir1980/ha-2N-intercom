@@ -173,6 +173,18 @@ Detaily endpointů: [`API_REFERENCE.md`](API_REFERENCE.md).
   `CallSessionStateChanged` rings only with a non-empty `originator` other
   than `incoming` (for example, `button`). A missing originator is not a
   ring signal. Calls into the intercom never trigger the doorbell.
+- The opt-in `ring_on_keypress` option (off by default, in `entry.options`)
+  subscribes to `KeyPressed` only when `/api/log/caps` lists it. Call-button
+  keys `%1` through `%54` use the same ring counter and optional snapshot
+  as call events, so the doorbell event fires without a poll even if no
+  call follows. Keypad digits, `*` and `#` never ring; no key values are logged.
+  A press has no peer, bypasses `called_id`, and clears the previous
+  `called_peer`. If it arrives first, the event can have no `called_peer`
+  even when the press starts a call. The shared ring guard prevents a second
+  ring/snapshot in either event order, including intervening
+  `initialized`/`connecting` events. A press-only guard clears after
+  `KEYPRESS_RING_HOLD = 3 s`; a call that takes over is cleared by call state.
+  Unloading cancels the pending timer.
 - The optional `called_id` filter matches **any peer called in the same
   session**, not just the last peer reported. Both call event types accumulate
   canonical peers from `peer`/`address`, including the `connecting` event

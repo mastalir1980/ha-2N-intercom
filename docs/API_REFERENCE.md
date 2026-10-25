@@ -66,6 +66,7 @@ CallStateChanged, CallSessionStateChanged, SwitchStateChanged,
 InputChanged, OutputChanged, RegistrationStateChanged,
 ConfigurationChanged, CapabilitiesChanged, DeviceState
 [, MotionDetected]   # jen když system/caps hlásí motionDetection=active
+[, KeyPressed]       # only with ring_on_keypress enabled and listed in log/caps
 [, CardEntered, CodeEntered, MobKeyEntered, FingerEntered,
    UserAuthenticated, UserRejected, AccessTaken, AccessBlocked,
    AccessLimited, ApiAccessRequested, DirectoryChanged]
@@ -83,6 +84,7 @@ Mapování událost → akce koordinátoru:
 | Událost | Akce |
 |---|---|
 | `CallStateChanged` / `CallSessionStateChanged` | ring detekce, `active_session_id`, peer |
+| `KeyPressed` | Opt-in ring on call-button keys `%1` through `%54`, including a snapshot when enabled; no peer filter. Keypad digits, `*`, `#` never ring; key values are never logged |
 | `SwitchStateChanged` | patch `switch_status[i].active` |
 | `InputChanged` / `OutputChanged` | patch `io_status` portu |
 | `RegistrationStateChanged` | patch SIP účtu v `phone_status` |
