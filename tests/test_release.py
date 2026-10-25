@@ -35,6 +35,18 @@ class ReleaseDocumentationTests(unittest.TestCase):
         self.assertEqual(self.manifest["version"], version)
         self.assertEqual(date.fromisoformat(released_on).isoformat(), released_on)
 
+    def test_v151_documents_log_subscription_fix(self) -> None:
+        self.assertEqual(self.manifest["version"], "1.5.1")
+        self.assertEqual([version for version, _, _ in self.releases[:2]],
+                         ["1.5.1", "1.5.0"])
+        release = self.releases[0][2]
+        for detail in (
+            "### Fixes", "log subscriptions", "2N IP Uni",
+            "Unsupported events", "doorbell ring detection", "#105",
+        ):
+            with self.subTest(detail=detail):
+                self.assertIn(detail, release)
+
     def test_v150_has_user_facing_release_groups(self) -> None:
         releases = {version: body for version, _, body in self.releases}
         self.assertIn("1.5.0", releases)

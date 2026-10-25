@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.1 - 2026-10-25
+
+### Fixes
+
+- Fixed log subscriptions on devices that do not support every event, such as the 2N IP Uni. Unsupported events no longer prevent the subscription from starting, restoring doorbell ring detection on affected devices ([#105](https://github.com/mastalir1980/ha-2N-intercom/issues/105)).
+
 ## 1.5.0 - 2026-10-23
 
 ### Security - Breaking change
