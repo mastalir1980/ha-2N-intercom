@@ -101,6 +101,8 @@ MAX_BACKOFF_DELAY = 60
 NUM_AUTH_ERRORS = 3
 # Snapshot cache duration (seconds)
 SNAPSHOT_CACHE_DURATION = 1
+# Minimum seconds between successful safety-net switch caps refreshes
+SWITCH_CAPS_SAFETY_INTERVAL = 600
 # Doorbell pulse duration (seconds)
 DOORBELL_PULSE_DURATION = 1
 # Log listener backoff bounds
@@ -241,6 +243,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         self._system_info: dict[str, Any] | None = None
         self._phone_status: dict[str, Any] | None = None
         self._switch_caps: dict[str, Any] | None = None
+        self._switch_caps_refresh_time: datetime | None = None
         self._switch_status: dict[str, Any] | None = None
         self._io_caps: dict[str, Any] | None = None
         self._io_status: dict[str, Any] | None = None
@@ -1066,20 +1069,24 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             )
             self._log_subscription_id = subscription_id
             backoff = LOG_LISTENER_INITIAL_BACKOFF
-            # Re-establish baseline state after (re)connection
-            _LOGGER.debug("Subscription established; forcing baseline refresh")
-            self.hass.async_create_task(self.async_request_refresh())
-
             try:
-                await self._async_run_log_subscription(subscription_id)
-            except asyncio.CancelledError:
-                raise
-            except Exception as err:  # pylint: disable=broad-except
-                _LOGGER.debug(
-                    "Log subscription %s dropped: %s; will resubscribe",
-                    subscription_id,
-                    err,
+                # Pick up relay configuration changes missed while disconnected.
+                await self._refresh_secondary_cache(
+                    "_switch_caps", "async_get_switch_caps", "switch caps",
                 )
+                # Re-establish baseline state after (re)connection
+                _LOGGER.debug("Subscription established; forcing baseline refresh")
+                self.hass.async_create_task(self.async_request_refresh())
+                try:
+                    await self._async_run_log_subscription(subscription_id)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as err:  # pylint: disable=broad-except
+                    _LOGGER.debug(
+                        "Log subscription %s dropped: %s; will resubscribe",
+                        subscription_id,
+                        err,
+                    )
             finally:
                 if self._log_subscription_id == subscription_id:
                     self._log_subscription_id = None
@@ -1183,6 +1190,8 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             return cached_value or {}
 
         setattr(self, cache_attr, value)
+        if cache_attr == "_switch_caps":
+            self._switch_caps_refresh_time = dt_util.utcnow()
         result: dict[str, Any] = value
         return result
 
@@ -1323,15 +1332,21 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
                 "phone status",
                 raise_on_insecure_auth=True,
             )
-            # switch_caps: fetched at startup, refreshed on
-            # ConfigurationChanged/CapabilitiesChanged events, and
-            # unconditionally on every poll cycle as a safety net.
-            switch_caps = await self._refresh_secondary_cache(
-                "_switch_caps",
-                "async_get_switch_caps",
-                "switch caps",
-                raise_on_insecure_auth=True,
-            )
+            # Switch caps follow config/capability events and log reconnects;
+            # polling only retries an absent cache or a ten-minute safety net.
+            if (
+                self._switch_caps is None
+                or self._switch_caps_refresh_time is None
+                or dt_util.utcnow() - self._switch_caps_refresh_time
+                >= timedelta(seconds=SWITCH_CAPS_SAFETY_INTERVAL)
+            ):
+                await self._refresh_secondary_cache(
+                    "_switch_caps",
+                    "async_get_switch_caps",
+                    "switch caps",
+                    raise_on_insecure_auth=True,
+                )
+            switch_caps = self._switch_caps or {}
             switch_status = await self._refresh_secondary_cache(
                 "_switch_status",
                 "async_get_switch_status",

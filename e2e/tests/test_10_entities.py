@@ -65,8 +65,8 @@ def test_doorbell_event_is_available_and_shares_camera_device(ha, entry, registr
     )
 
 
-def _relay_entities(registry, entry_id):
-    pat = re.compile(rf"^{re.escape(entry_id)}_switch_(\d+)$")
+def _relay_entities(registry, entry_id, platform="switch"):
+    pat = re.compile(rf"^{re.escape(entry_id)}_{platform}_(\d+)$")
     out = {}
     for e in registry:
         m = pat.match(e.get("unique_id", ""))
@@ -75,10 +75,26 @@ def _relay_entities(registry, entry_id):
     return out
 
 
-def test_switch_entities_match_device_caps(registry, entry, twon):
+def test_relay_switch_and_cover_entities_match_device_caps(registry, entry, twon):
     device_relays = {c["switch"] for c in twon.switch_caps() if c.get("enabled")}
-    ha_relays = set(_relay_entities(registry, entry["entry_id"]))
-    assert ha_relays == device_relays, f"HA relays {sorted(ha_relays)} != device {sorted(device_relays)}"
+    relays = (entry.get("options") or {}).get(
+        "relays", (entry.get("data") or {}).get("relays", []),
+    )
+    gate_relays = {
+        relay["relay_number"] for relay in relays
+        if relay.get("relay_device_type") == "gate"
+    }
+    for platform in ("switch", "cover"):
+        expected = (
+            device_relays & gate_relays
+            if platform == "cover" else device_relays - gate_relays
+        )
+        entities = _relay_entities(registry, entry["entry_id"], platform)
+        assert set(entities) == expected, (
+            f"HA {platform} relays {sorted(entities)} != device {sorted(expected)}"
+        )
+        for entity in entities.values():
+            assert entity["entity_id"].startswith(f"{platform}.")
 
 
 def test_switch_state_matches_device(ha, registry, entry, twon):

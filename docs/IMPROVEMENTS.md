@@ -105,14 +105,13 @@ nebo přes DST můžou být matoucí a HA konvence je `homeassistant.util.dt.utc
 nesly tz a srovnání byla konzistentní s HA.
 
 ### 🟠 B2 — Polling fetchuje i „statická" caps každý cyklus
-`coordinator.py:799-803` – `switch_caps` se přes komentář „safety net" načítá
-**každý poll**, ačkoliv `async_initialize_static_caches` je deklaruje jako
-statická a navíc je obnovuje `ConfigurationChanged` event. Při `scan_interval=2 s`
-(`SCAN_INTERVAL_MIN`) to znamená zbytečné requesty na zařízení.
-
-**Návrh:** `switch_caps` v poll cyklu vynechat (spoléhat na event +
-jednorázové načtení), nebo refetchovat jen jednou za N cyklů. Pro `io_caps` už
-je to správně (`if self._io_caps is None`).
+**Implemented (TASK-2.2):** `switch_caps` is fetched at setup, on
+`ConfigurationChanged` / `CapabilitiesChanged`, and once after every successful
+log (re)subscription. Normal polls reuse the cache; a safety-net refresh is due
+600 seconds after the last successful fetch, independently of `scan_interval`.
+Failed fetches retain the cache and do not advance the successful-fetch timestamp,
+so subsequent polls can retry. An absent cache is retried on the next poll.
+`io_caps` handling and polling of switch/IO state are unchanged.
 
 ### 🟡 B3 — `_async_request_without_auth` zakládá session na každé volání
 `api.py:592-596` vytváří nový `ClientSession` + `TCPConnector` pro každý

@@ -383,6 +383,70 @@ class SwitchDynamicDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         # Still only 1 entity.
         self.assertEqual(len(added), 1)
 
+    async def test_config_and_capability_events_add_and_remove_relay_entities(self) -> None:
+        from test_coordinator import load_coordinator_module
+
+        coordinator_module = load_coordinator_module()
+        registry = self.switch_module.er._test_registry
+        for event_name in ("ConfigurationChanged", "CapabilitiesChanged"):
+            with self.subTest(event=event_name):
+                tasks = []
+                listeners = []
+
+                def create_task(coro):
+                    task = asyncio.create_task(coro)
+                    tasks.append(task)
+                    return task
+
+                def add_listener(callback):
+                    listeners.append(callback)
+                    return lambda: listeners.remove(callback)
+
+                def update_listeners():
+                    for callback in listeners:
+                        callback()
+
+                api = types.SimpleNamespace(
+                    async_get_switch_caps=AsyncMock(return_value=DEVICE_CAPS_ONE_ENABLED),
+                )
+                coordinator = coordinator_module.TwoNIntercomCoordinator(
+                    types.SimpleNamespace(async_create_task=create_task), api,
+                )
+                coordinator.async_add_listener = add_listener
+                coordinator.async_update_listeners = update_listeners
+                await coordinator._refresh_secondary_cache(
+                    "_switch_caps", "async_get_switch_caps", "switch caps",
+                )
+                entry = FakeConfigEntry("event-entry", {"name": "Intercom"})
+                entry.runtime_data = types.SimpleNamespace(coordinator=coordinator)
+                added = []
+
+                def add_entities(entities, update_before_add=False):
+                    for entity in entities:
+                        added.append(entity)
+                        registry.register(
+                            entity._attr_unique_id, f"switch.event_relay_{entity._relay_number}",
+                        )
+
+                await self.switch_module.async_setup_entry(None, entry, add_entities)
+                self.assertEqual([entity._relay_number for entity in added], [1])
+
+                api.async_get_switch_caps.return_value = DEVICE_CAPS_TWO_ENABLED
+                coordinator._process_log_event({"event": event_name})
+                await asyncio.gather(*tasks)
+                self.assertEqual([entity._relay_number for entity in added], [1, 2])
+
+                api.async_get_switch_caps.return_value = DEVICE_CAPS_ONE_ENABLED
+                coordinator._process_log_event({"event": event_name})
+                await asyncio.gather(*tasks)
+                self.assertIsNone(registry.async_get_entity_id(
+                    "switch", "2n_intercom", "event-entry_switch_2",
+                ))
+                self.assertEqual(registry.async_get_entity_id(
+                    "switch", "2n_intercom", "event-entry_switch_1",
+                ), "switch.event_relay_1")
+                self.assertEqual(api.async_get_switch_caps.await_count, 3)
+
 
 class SwitchEntityTests(unittest.IsolatedAsyncioTestCase):
     """Tests for switch entity behavior."""
