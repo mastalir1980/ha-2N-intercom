@@ -3,11 +3,11 @@ id: TASK-71
 title: >-
   Log subscription is rejected on devices that do not support every base event
   (2N IP Uni, code 12)
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-10-24T08:27:00Z'
-updated_date: '2026-10-24T08:27:00Z'
+updated_date: '2026-10-25 15:32'
 labels:
   - coordinator
   - log-channel
@@ -16,7 +16,7 @@ labels:
 milestone: m-2
 dependencies: []
 references:
-  - https://github.com/mastalir1980/ha-2N-intercom/issues/105
+  - 'https://github.com/mastalir1980/ha-2N-intercom/issues/105'
   - custom_components/2n_intercom/coordinator.py
   - custom_components/2n_intercom/api.py
   - tests/test_coordinator.py
@@ -51,17 +51,26 @@ Out of scope (tracked for v1.6.0): camera entities on devices without a camera, 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. coordinator.py _build_log_event_list(): start from BASE_LOG_EVENTS (+ MotionDetected when motion_detection_available). If self._log_caps is a non-empty frozenset, keep only events in it, then add the optional access/DirectoryChanged events exactly as today. If caps are None or empty, return the 1.5.0 list unchanged.
-2. If known caps lack CallStateChanged or CallSessionStateChanged, log one WARNING per coordinator lifetime (flag on the coordinator, no device identifiers in the message).
-3. Keep the resubscribe trigger in the cache refresh path (coordinator.py:531-536) as is; it compares tuples, so a filtered list works without changes.
-4. Unit tests in tests/test_coordinator.py (or tests/test_coordinator_access.py where the log-caps fixtures live): IP Uni caps from issue #105, caps None, empty caps, MotionDetected with/without caps, missing call events warning, resubscribe on caps change.
-5. E2E: extend an existing test (e2e/tests/test_00_setup.py or test_50_access_control.py) to read diagnostics subscribed_events and compare it with twon.log_caps(); no relays, no calls.
-6. docs/API_REFERENCE.md: one line in the log channel / firmware quirks section: the device rejects the whole filter (code 12) when any event is unsupported, so every event is checked against /api/log/caps.
-Must not change: event-driven ring detection, graceful degradation pattern for unsupported events, the listener backoff, api.py async_get_log_caps() contract (None = unknown).
+1. Filter BASE_LOG_EVENTS and available MotionDetected against non-empty log caps before adding the existing optional access/DirectoryChanged events; preserve the legacy list for None/empty caps.
+2. Warn once per coordinator lifetime when known caps lack either required call event; leave event-driven ring detection, listener backoff, API caps contract and tuple-based resubscribe trigger unchanged.
+3. Add unit coverage in tests/test_coordinator_access.py for the issue #105 IP Uni caps, unknown/empty caps, motion combinations, missing-call-event warnings and live cache-refresh resubscription.
+4. Extend e2e/tests/test_50_access_control.py to require non-empty diagnostics subscribed_events and compare every event against twon.log_caps(), without relays or calls.
+5. Update docs/API_REFERENCE.md for code 12 unsupported-filter rejection; run all required local Python gates, record implementation notes, and commit locally without pushing or finalizing acceptance criteria.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Before the v1.5.1 release, Jan asks the reporter of issue #105 to test main on the IP Uni (he offered to). His result is recorded here; it does not block the release.
+
+Implemented capability filtering for all base/motion subscription events while preserving the existing optional access/directory selection and None/empty-caps fallback. Added a coordinator-lifetime warning flag for missing call events; listener backoff, event-driven ring handling, API caps contract and tuple-based resubscribe trigger remain unchanged.
+
+AC #1: tests/test_coordinator_access.py::LogCapsSubscriptionTests.test_ip_uni_caps_filter_unsupported_base_events checks the exact issue #105 capabilities, removes InputChanged, retains both call events and starts a supported subscription. The supported-access test now also asserts the filtered base-event list.
+AC #2: test_no_access_events_without_log_caps covers None/empty caps with and without active motion, preserving the exact legacy subscription list and emitting no warning.
+AC #3: test_motion_requires_system_and_log_capabilities_when_known covers all four system-motion/log-motion combinations; unknown/empty caps retain legacy motion behaviour.
+AC #4: test_missing_call_events_warn_once_and_still_subscribe covers either/both missing call events, exactly one WARNING across repeated list builds and capability recovery/regression, and successful supported subscriptions.
+AC #5: test_caps_events_resubscribe_with_changed_base_event_filter runs the listener for both CapabilitiesChanged and ConfigurationChanged with InputChanged removed and restored; verifies both successive subscription lists. Existing unchanged-caps and access-event resubscribe tests remain green.
+AC #6: extended e2e/tests/test_50_access_control.py::test_subscribed_access_events_match_device_log_caps to require non-empty diagnostics subscribed_events and compare every event with independently fetched twon.log_caps(). No relays or calls; execution is pending the e2e-pi PR check.
+
+Updated docs/API_REFERENCE.md to explain whole-filter rejection with code 12 and non-empty-caps filtering. Local Python 3.12 gates passed: targeted coordinator suite (212 tests), full unittest discovery (748 tests), python3 validate.py, and compilation of all integration modules. No E2E/network commands were run on the VM. Task remains In Progress with all acceptance criteria unchecked for orchestrator review/finalization.
 <!-- SECTION:NOTES:END -->

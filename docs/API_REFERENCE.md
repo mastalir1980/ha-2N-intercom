@@ -33,7 +33,7 @@ Basic**, pokud zařízení vrátí `401` s `WWW-Authenticate: Basic`.
 | `/api/io/ctrl` | GET | `async_io_control` | `port`, `action=on\|off`; latching output control, requires I/O control privilege and bypasses logical-switch timing |
 | `/api/camera/caps` | GET | `async_get_camera_caps` | rozlišení JPEG, zdroje (internal/external) |
 | `/api/camera/snapshot` | GET | `async_get_snapshot` / MJPEG | `source`, `width`, `height`, (`fps` for MJPEG); snapshot sizes map to supported JPEG resolutions from `camera/caps` |
-| `/api/log/caps` | GET | `async_get_log_caps` | `events` = seznam podporovaných událostí; průnik s přístupovými událostmi |
+| `/api/log/caps` | GET | `async_get_log_caps` | `events` = supported events; filters every subscribed event when non-empty |
 | `/api/log/subscribe` | GET | `async_subscribe_log` | `filter` = seznam událostí → vrací `id` |
 | `/api/log/pull` | GET | `async_pull_log` | `id`, `timeout` (long-poll, server blokuje) |
 | `/api/log/unsubscribe` | GET | `async_unsubscribe_log` | `id` |
@@ -75,6 +75,8 @@ ConfigurationChanged, CapabilitiesChanged, DeviceState
 `log/caps` se čte při každém (re)subscribe a po `ConfigurationChanged` /
 `CapabilitiesChanged`; když se seznam změní, listener se přihlásí znovu. Když
 `log/caps` selže, přístupové události se neodebírají (základní odběr jede dál).
+
+The device rejects the whole filter with code 12 if any event is unsupported, so every event (including base and motion events) is checked against non-empty `/api/log/caps`; unknown or empty caps retain the legacy base/motion list.
 
 Mapování událost → akce koordinátoru:
 

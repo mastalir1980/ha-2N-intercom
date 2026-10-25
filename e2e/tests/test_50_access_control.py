@@ -35,18 +35,24 @@ def _diagnostics(ha, entry_id: str) -> dict:
 def test_subscribed_access_events_match_device_log_caps(ha, entry, twon):
     if "access_control" not in _diagnostics(ha, entry["entry_id"]):
         pytest.skip("deployed integration has no access_control diagnostics (TASK-4 not deployed)")
-    device_supported = ACCESS_EVENTS & set(twon.log_caps())
+    device_log_caps = set(twon.log_caps())
+    device_supported = ACCESS_EVENTS & device_log_caps
 
     def subscribed():
         events = _diagnostics(ha, entry["entry_id"]).get("access_control", {}).get("subscribed_events")
         return events if events else None
 
     events = ha.wait_for(subscribed, timeout=60, what="log subscription reported in diagnostics")
+    assert events, "HA reports an empty log subscription"
+    unsupported = set(events) - device_log_caps
+    assert not unsupported, (
+        f"HA subscribed events absent from device log/caps: {sorted(unsupported)}"
+    )
     assert ACCESS_EVENTS & set(events) == device_supported, (
         f"HA subscribed {sorted(ACCESS_EVENTS & set(events))}, "
         f"device log/caps supports {sorted(device_supported)}"
     )
-    if "DirectoryChanged" in twon.log_caps():
+    if "DirectoryChanged" in device_log_caps:
         assert "DirectoryChanged" in events
 
 
