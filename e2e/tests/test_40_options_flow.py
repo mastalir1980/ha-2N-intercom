@@ -63,6 +63,15 @@ def test_options_flow_last_step_and_forward_only_navigation(ha, twon, entry) -> 
             assert "go_back" not in _field_names(flow)
             assert _current_options(ha.entries()[0]) == options_before
 
+            if step_id == "device":
+                keypress_field = next(
+                    field for field in flow["data_schema"]
+                    if field.get("name") == "ring_on_keypress"
+                )
+                assert keypress_field.get("default") is options_before.get(
+                    "ring_on_keypress", False
+                )
+
             if step_id == "camera":
                 # RTSP password stays masked and is never suggested (TASK-15).
                 rtsp_pw = next(

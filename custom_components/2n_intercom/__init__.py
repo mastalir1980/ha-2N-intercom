@@ -33,6 +33,7 @@ from .const import (
     CONF_CALLED_ID,
     CONF_ENABLE_CAMERA,
     CONF_ENABLE_DOORBELL,
+    CONF_RING_ON_KEYPRESS,
     CONF_GRANT_ACCESS_USER,
     CONF_MAC,
     CONF_PROTOCOL,
@@ -45,6 +46,7 @@ from .const import (
     DEFAULT_ALLOW_INSECURE,
     DEFAULT_ENABLE_CAMERA,
     DEFAULT_ENABLE_DOORBELL,
+    DEFAULT_RING_ON_KEYPRESS,
     DEFAULT_PROTOCOL,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_VERIFY_SSL,
@@ -523,6 +525,9 @@ async def async_setup_entry(
         config_entry=entry,
         ring_snapshot_enabled=bool(
             _get_option(entry, CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA)
+        ),
+        ring_on_keypress=bool(
+            _get_option(entry, CONF_RING_ON_KEYPRESS, DEFAULT_RING_ON_KEYPRESS)
         ),
     )
 

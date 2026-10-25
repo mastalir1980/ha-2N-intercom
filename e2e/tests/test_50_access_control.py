@@ -56,6 +56,24 @@ def test_subscribed_access_events_match_device_log_caps(ha, entry, twon):
         assert "DirectoryChanged" in events
 
 
+def test_keypress_option_defaults_off_without_changing_device_subscription(ha, entry, twon):
+    """Default-off HA excludes KeyPressed even when the device supports it."""
+    assert (entry.get("options") or {}).get("ring_on_keypress", False) is False
+    device_log_caps = set(twon.log_caps())
+    events = ha.wait_for(
+        lambda: _diagnostics(ha, entry["entry_id"]).get(
+            "access_control", {}
+        ).get("subscribed_events"),
+        timeout=60,
+        what="default-off log subscription reported in diagnostics",
+    )
+    assert events, "HA reports an empty log subscription"
+    assert "KeyPressed" not in events
+    assert set(events) <= device_log_caps, "HA subscribed to unsupported device events"
+    for event in {"CallStateChanged", "CallSessionStateChanged"} & device_log_caps:
+        assert event in events, f"Default-off HA is missing supported {event}"
+
+
 def test_last_ring_image_follows_camera(ha, entry, registry):
     # HA records each set-up entity platform as "<integration>.<platform>".
     if "2n_intercom.image" not in ha.config().get("components", []):

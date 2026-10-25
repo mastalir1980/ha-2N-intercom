@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 import types
 import unittest
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 from _stubs import ENTITY_PATH, EVENT_PATH, install_event_stubs, load_module
 from test_coordinator import load_coordinator_module
@@ -69,10 +70,14 @@ class DoorbellEventTests(unittest.IsolatedAsyncioTestCase):
     def setUpClass(cls) -> None:
         cls.module, cls.coordinator_module = load_event_module()
 
-    def _coordinator(self, *, called_id=None):
+    def _coordinator(self, *, called_id=None, ring_on_keypress=False):
         coordinator = self.coordinator_module.TwoNIntercomCoordinator(
-            types.SimpleNamespace(), types.SimpleNamespace(), called_id=called_id
+            types.SimpleNamespace(loop=asyncio.get_running_loop()),
+            types.SimpleNamespace(),
+            called_id=called_id,
+            ring_on_keypress=ring_on_keypress,
         )
+        self.addAsyncCleanup(coordinator.async_stop_log_listener)
         coordinator.data = self.coordinator_module.TwoNIntercomData(
             call_status={}, last_ring_time=None, caller_info=None,
             active_session_id=None, available=True, phone_status={},
@@ -144,6 +149,73 @@ class DoorbellEventTests(unittest.IsolatedAsyncioTestCase):
                 coordinator._publish_event_state()
 
                 entity._trigger_event.assert_called_once_with("ring", {"called_peer": "100"})
+
+    async def test_keypress_log_pull_fires_event_without_polling(self) -> None:
+        coordinator = self._coordinator(ring_on_keypress=True, called_id="200")
+        coordinator._last_called_peer = "previous-peer"
+        coordinator.async_request_refresh = AsyncMock()
+        entity = self._entity(coordinator)
+        await entity.async_added_to_hass()
+
+        async def pull_and_stop(subscription_id, timeout):
+            coordinator._log_listener_stopped = True
+            return [{"event": "KeyPressed", "params": {"key": "%1"}}]
+
+        coordinator.api.async_pull_log = AsyncMock(side_effect=pull_and_stop)
+        await coordinator._async_run_log_subscription(1)
+
+        entity._trigger_event.assert_called_once_with("ring", {})
+        self.assertEqual(coordinator.ring_count, 1)
+        self.assertEqual(coordinator.data.last_ring_time, coordinator.last_ring_time)
+        self.assertIsNone(coordinator.called_peer)
+        coordinator.async_request_refresh.assert_not_awaited()
+
+    async def test_keypress_and_both_call_events_emit_one_ring_in_each_order(self) -> None:
+        key_event = {"event": "KeyPressed", "params": {"key": "%1"}}
+        call_events = [
+            {
+                "event": event,
+                "params": {"state": "ringing", "session": 42, "peer": "100", **signal},
+            }
+            for event, signal in (
+                ("CallStateChanged", {"direction": "outgoing"}),
+                ("CallSessionStateChanged", {"originator": "button"}),
+            )
+        ]
+        for key_index in range(3):
+            for publish_each in (True, False):
+                with self.subTest(key_index=key_index, publish_each=publish_each):
+                    coordinator = self._coordinator(ring_on_keypress=True)
+                    entity = self._entity(coordinator)
+                    await entity.async_added_to_hass()
+                    events = list(call_events)
+                    events.insert(key_index, key_event)
+
+                    for event in events:
+                        if coordinator._process_log_event(event) and publish_each:
+                            coordinator._publish_event_state()
+                    coordinator._publish_event_state()
+
+                    expected = {} if key_index == 0 and publish_each else {"called_peer": "100"}
+                    entity._trigger_event.assert_called_once_with("ring", expected)
+                    self.assertEqual(coordinator.ring_count, 1)
+
+    async def test_default_off_and_keypad_keys_do_not_emit_events(self) -> None:
+        for enabled, keys in (
+            (False, ["%1"]),
+            (True, [*"0123456789", "*", "#"]),
+        ):
+            with self.subTest(enabled=enabled):
+                coordinator = self._coordinator(ring_on_keypress=enabled)
+                entity = self._entity(coordinator)
+                await entity.async_added_to_hass()
+                for key in keys:
+                    self.assertFalse(coordinator._process_log_event({
+                        "event": "KeyPressed", "params": {"key": key},
+                    }))
+                    coordinator._publish_event_state()
+                entity._trigger_event.assert_not_called()
+                self.assertEqual(coordinator.ring_count, 0)
 
     async def test_next_ring_triggers_again_even_after_pulse_expired(self) -> None:
         coordinator = self._coordinator()

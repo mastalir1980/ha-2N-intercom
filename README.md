@@ -307,6 +307,7 @@ Saved relay names, door/gate types, and pulse durations are preserved for relays
 | Device | `name` | string | *(from setup)* | Display name |
 | Device | `enable_camera` | bool | `true` | Toggle camera and last-ring image entities |
 | Device | `enable_doorbell` | bool | `true` | Toggle doorbell event entity |
+| Device | `ring_on_keypress` | bool | `false` | Also ring on a call-button press that starts no call (`KeyPressed`). See below |
 | Device | `scan_interval` | 2-600 (s) | 60 | Backup polling interval. Events deliver real-time updates; polling only runs as a safety net |
 | Device | `firmware_channel` | `active_track` \| `lts` \| `beta` | `active_track` | Firmware availability channel; maps to the public update server's `newest` / `lts` / `early` tracks. Does not change device AutoUpdate settings |
 | Device | `called_id` | string | `All calls` | Ringing account / peer filter |
@@ -323,6 +324,8 @@ Saved relay names, door/gate types, and pulse durations are preserved for relays
 | Relay | `relay_pulse_duration` | int (ms) | *(from device)* | How long the relay stays triggered. Default is the device's switchOnDuration |
 
 For Called ID (`called_id`), the part after `/` is ignored when matching peers, so `1234567890/2` matches `1234567890`.
+
+**Ring on call-button press** (`ring_on_keypress`, off by default): a call button with no call destination only reports `KeyPressed` and never starts a call, so without this option it never rings. With it on, a press of a call button (reported as `%1`, `%2`, …) rings the doorbell once, also when the press starts a call. Keypad keys (digits, `*`, `#`) never ring, so entering a PIN does not ring. Called ID (`called_id`) does not apply to button presses, because a press has no peer: with a specific Called ID, every call-button press rings. The option only takes effect when the device lists `KeyPressed` in `/api/log/caps`. A ring from a button press carries no `called_peer` attribute. When a press also places a call, the ring can fire on the press before the call is known, so that ring has no `called_peer` either; leave the option off if your automations rely on it.
 
 The default grant-access user is displayed by directory name, even when the stored UUID uses different letter case. Unnamed directory entries and unknown stored users have explicit localized labels. If the directory cannot be loaded, the form shows a warning; the stored user remains selected and you can still submit the options without changing it.
 

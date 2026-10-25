@@ -11,6 +11,7 @@ CONF_PROTOCOL = "protocol"
 CONF_VERIFY_SSL = "verify_ssl"
 CONF_ENABLE_CAMERA = "enable_camera"
 CONF_ENABLE_DOORBELL = "enable_doorbell"
+CONF_RING_ON_KEYPRESS = "ring_on_keypress"
 # Opt-in flag for insecure transport: allow plaintext HTTP Basic-auth fallback.
 # Default off so credentials are never sent in cleartext without consent.
 CONF_ALLOW_INSECURE = "allow_insecure"
@@ -59,6 +60,7 @@ DEFAULT_VERIFY_SSL = False
 DEFAULT_ALLOW_INSECURE = False
 DEFAULT_ENABLE_CAMERA = True
 DEFAULT_ENABLE_DOORBELL = True
+DEFAULT_RING_ON_KEYPRESS = False
 DEFAULT_SCAN_INTERVAL = 60  # seconds — events deliver real-time updates; polling is a safety net
 DEFAULT_FIRMWARE_CHANNEL = "active_track"
 FIRMWARE_CHANNEL_TRACKS = {
@@ -112,6 +114,8 @@ ACCESS_LOG_EVENTS = (
 )
 # Signals a directory change; used to invalidate the uuid -> name cache.
 DIRECTORY_CHANGED_EVENT = "DirectoryChanged"
+# Optional key press event, subscribed only with ring_on_keypress.
+KEY_PRESSED_EVENT = "KeyPressed"
 
 # Credential types exposed on parsed access events.
 CREDENTIAL_CARD = "card"
