@@ -1,4 +1,4 @@
-"""Coordinator tests for access-control events (TASK-4) and ring snapshots (TASK-9)."""
+"""Coordinator tests for log subscriptions, access-control events and ring snapshots."""
 
 from __future__ import annotations
 
@@ -20,6 +20,27 @@ BASE_EVENTS = [
     "ConfigurationChanged",
     "CapabilitiesChanged",
     "DeviceState",
+]
+
+IP_UNI_LOG_CAPS = [
+    "KeyPressed",
+    "KeyReleased",
+    "OutputChanged",
+    "SwitchStateChanged",
+    "SwitchOperationChanged",
+    "SwitchesBlocked",
+    "ApiAccessRequested",
+    "DtmfEntered",
+    "CallSessionStateChanged",
+    "CallStateChanged",
+    "RegistrationStateChanged",
+    "DeviceState",
+    "LoginBlocked",
+    "HardwareChanged",
+    "DirectoryChanged",
+    "DirectorySaved",
+    "CapabilitiesChanged",
+    "ConfigurationChanged",
 ]
 
 
@@ -125,6 +146,7 @@ class LogCapsSubscriptionTests(_CoordinatorTestCase):
         api = _FakeAPI(
             log_caps=[
                 "CallStateChanged",
+                "CallSessionStateChanged",
                 "CardEntered",
                 "CodeEntered",
                 "UserAuthenticated",
@@ -139,7 +161,14 @@ class LogCapsSubscriptionTests(_CoordinatorTestCase):
         subscribed = api.subscriptions[0]
         self.assertEqual(
             subscribed,
-            BASE_EVENTS + ["CardEntered", "CodeEntered", "UserAuthenticated", "DirectoryChanged"],
+            [
+                "CallStateChanged",
+                "CallSessionStateChanged",
+                "CardEntered",
+                "CodeEntered",
+                "UserAuthenticated",
+                "DirectoryChanged",
+            ],
         )
         self.assertNotIn("FingerEntered", subscribed)
         self.assertNotIn("SomeFutureEvent", subscribed)
@@ -148,7 +177,9 @@ class LogCapsSubscriptionTests(_CoordinatorTestCase):
 
     async def test_all_access_events_when_device_supports_them(self) -> None:
         const = __import__("sys").modules["custom_components.2n_intercom.const"]
-        api = _FakeAPI(log_caps=list(const.ACCESS_LOG_EVENTS))
+        api = _FakeAPI(
+            log_caps=BASE_EVENTS + ["MotionDetected"] + list(const.ACCESS_LOG_EVENTS)
+        )
         coordinator, _hass, _ = self._make(api)
         coordinator._system_caps = {"motionDetection": "active,licensed"}
 
@@ -160,13 +191,84 @@ class LogCapsSubscriptionTests(_CoordinatorTestCase):
         )
 
     async def test_no_access_events_without_log_caps(self) -> None:
-        for caps in (None, RuntimeError("caps failed"), "garbage"):
-            api = _FakeAPI(log_caps=caps)
-            coordinator, _hass, _ = self._make(api)
+        for caps in (None, [], RuntimeError("caps failed"), "garbage"):
+            for motion_available in (False, True):
+                with self.subTest(caps=caps, motion_available=motion_available):
+                    api = _FakeAPI(log_caps=caps)
+                    coordinator, _hass, _ = self._make(api)
+                    if motion_available:
+                        coordinator._system_caps = {"motionDetection": "active,licensed"}
 
+                    with self.assertNoLogs(self.module._LOGGER, level="WARNING"):
+                        await self._run_listener_once(coordinator)
+
+                    expected = BASE_EVENTS + (["MotionDetected"] if motion_available else [])
+                    self.assertEqual(coordinator._build_log_event_list(), expected)
+                    self.assertEqual(api.subscriptions[0], expected)
+
+    async def test_ip_uni_caps_filter_unsupported_base_events(self) -> None:
+        api = _FakeAPI(log_caps=IP_UNI_LOG_CAPS)
+        coordinator, _hass, _ = self._make(api)
+
+        with self.assertNoLogs(self.module._LOGGER, level="WARNING"):
             await self._run_listener_once(coordinator)
 
-            self.assertEqual(api.subscriptions[0], BASE_EVENTS, caps)
+        expected = [event for event in BASE_EVENTS if event != "InputChanged"]
+        expected += ["ApiAccessRequested", "DirectoryChanged"]
+        self.assertEqual(coordinator._build_log_event_list(), expected)
+        self.assertEqual(api.subscriptions[0], expected)
+        self.assertLessEqual(set(api.subscriptions[0]), set(IP_UNI_LOG_CAPS))
+        self.assertNotIn("InputChanged", api.subscriptions[0])
+        self.assertIn("CallStateChanged", api.subscriptions[0])
+        self.assertIn("CallSessionStateChanged", api.subscriptions[0])
+
+    async def test_motion_requires_system_and_log_capabilities_when_known(self) -> None:
+        for motion_available in (False, True):
+            for motion_listed in (False, True):
+                with self.subTest(available=motion_available, listed=motion_listed):
+                    caps = BASE_EVENTS + (["MotionDetected"] if motion_listed else [])
+                    api = _FakeAPI(log_caps=caps)
+                    coordinator, _hass, _ = self._make(api)
+                    coordinator._system_caps = {
+                        "motionDetection": "active,licensed" if motion_available else "licensed"
+                    }
+
+                    await self._run_listener_once(coordinator)
+
+                    expected = BASE_EVENTS + (
+                        ["MotionDetected"] if motion_available and motion_listed else []
+                    )
+                    self.assertEqual(coordinator._build_log_event_list(), expected)
+                    self.assertEqual(api.subscriptions[0], expected)
+
+    async def test_missing_call_events_warn_once_and_still_subscribe(self) -> None:
+        for missing in (
+            {"CallStateChanged"},
+            {"CallSessionStateChanged"},
+            {"CallStateChanged", "CallSessionStateChanged"},
+        ):
+            with self.subTest(missing=missing):
+                caps = [event for event in BASE_EVENTS if event not in missing]
+                api = _FakeAPI(log_caps=caps)
+                coordinator, _hass, _ = self._make(api)
+
+                with self.assertLogs(self.module._LOGGER, level="WARNING") as logs:
+                    await self._run_listener_once(coordinator)
+                    self.assertEqual(coordinator._build_log_event_list(), caps)
+                    coordinator._log_caps = frozenset(BASE_EVENTS)
+                    coordinator._build_log_event_list()
+                    coordinator._log_caps = frozenset(caps)
+                    coordinator._build_log_event_list()
+
+                self.assertEqual(len(logs.records), 1)
+                self.assertEqual(logs.records[0].levelname, "WARNING")
+                self.assertEqual(
+                    logs.records[0].getMessage(),
+                    "Ring detection is not available on this device: "
+                    "log capabilities lack CallStateChanged or CallSessionStateChanged",
+                )
+                self.assertEqual(api.subscriptions, [caps])
+                self.assertEqual(coordinator.subscribed_log_events, tuple(caps))
 
     async def test_no_access_events_when_api_lacks_log_caps(self) -> None:
         api = _FakeAPI()
@@ -210,6 +312,29 @@ class LogCapsSubscriptionTests(_CoordinatorTestCase):
 
         self.assertEqual(api.pull_calls, 0)
         self.assertFalse(coordinator._log_resubscribe_requested)
+
+    async def test_caps_events_resubscribe_with_changed_base_event_filter(self) -> None:
+        without_input = [event for event in BASE_EVENTS if event != "InputChanged"]
+        for event_name in ("CapabilitiesChanged", "ConfigurationChanged"):
+            for initial, updated in ((BASE_EVENTS, without_input), (without_input, BASE_EVENTS)):
+                with self.subTest(event=event_name, initial=initial):
+                    api = _FakeAPI(log_caps=initial)
+                    coordinator, hass, _ = self._make(api)
+
+                    async def pull(sub_id, timeout=1):
+                        if sub_id == 1:
+                            api.log_caps = updated
+                            return [{"event": event_name, "params": {}}]
+                        coordinator._log_listener_stopped = True
+                        return []
+
+                    api.async_pull_log = pull
+                    await asyncio.wait_for(coordinator._async_log_listener_loop(), timeout=5)
+                    await hass.drain()
+
+                    self.assertEqual(api.subscriptions, [initial, updated])
+                    self.assertEqual(coordinator.subscribed_log_events, tuple(updated))
+                    self.assertFalse(coordinator._log_resubscribe_requested)
 
     async def test_malformed_access_event_does_not_break_pull_loop(self) -> None:
         coordinator, _hass, api = self._make()

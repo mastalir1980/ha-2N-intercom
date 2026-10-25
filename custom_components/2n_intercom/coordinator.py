@@ -113,9 +113,9 @@ DIRECTORY_REFRESH_MIN_INTERVAL = 60
 # How many access sessions remember the credential type of their *Entered event
 ACCESS_SESSION_MEMORY = 16
 
-# Events the listener always subscribes to. Optional events (MotionDetected,
-# access control, DirectoryChanged) are added only when the device supports
-# them, so one unsupported event never breaks the whole subscription.
+# Base subscription events, filtered against log caps when known.
+# Optional events (MotionDetected, access control, DirectoryChanged) are
+# added only when the device supports them.
 BASE_LOG_EVENTS = (
     "CallStateChanged",
     "CallSessionStateChanged",
@@ -261,6 +261,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         self._log_caps: frozenset[str] | None = None
         self._subscribed_log_events: tuple[str, ...] = ()
         self._log_resubscribe_requested = False
+        self._ring_detection_unavailable_warned = False
         self._last_access_event: AccessEvent | None = None
         self._access_session_credentials: OrderedDict[
             tuple[int | None, str], str
@@ -563,14 +564,23 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
     def _build_log_event_list(self) -> list[str]:
         """Return the events to subscribe to, limited to what the device supports.
 
-        Access-control events and DirectoryChanged are only added when
-        /api/log/caps lists them. Without caps they are skipped entirely:
-        subscribing to an unsupported event could break the subscription.
+        Non-empty log caps filter every event. Unknown or empty caps keep
+        the legacy base/motion list, without access-control or directory events.
         """
         log_events = list(BASE_LOG_EVENTS)
         if self.motion_detection_available:
             log_events.append("MotionDetected")
         if self._log_caps:
+            log_events = [event for event in log_events if event in self._log_caps]
+            if (
+                not {"CallStateChanged", "CallSessionStateChanged"} <= self._log_caps
+                and not self._ring_detection_unavailable_warned
+            ):
+                _LOGGER.warning(
+                    "Ring detection is not available on this device: "
+                    "log capabilities lack CallStateChanged or CallSessionStateChanged"
+                )
+                self._ring_detection_unavailable_warned = True
             log_events.extend(
                 event
                 for event in (*ACCESS_LOG_EVENTS, DIRECTORY_CHANGED_EVENT)
