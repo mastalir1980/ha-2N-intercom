@@ -81,6 +81,8 @@ known result, not an incorrect "up to date" state.
 device page's configuration link open that interface. There is no Install button;
 the integration does not download, upload, apply or trigger device firmware.
 
+**OEM-branded units get no firmware entity.** The Control4 DS2 Door Station (verified on firmware `2.43.1.56.3`) reports an empty `firmwarePackage`, so there is nothing to look up on the 2N update server and the entity is not created. The device's own web UI check (**Maintenance → System → Check Now**) can't check either and shows "Server error". Firmware for these units comes from the OEM, for example through the Control4 controller or your dealer.
+
 ## Capability Matrix
 
 | Category | Status | Notes |
@@ -528,6 +530,7 @@ The integration uses two data channels:
 - **No gate position feedback** — the IP Verso has no gate-position sensor; cover entities use optimistic state transitions
 - **Single camera source** — only one camera source (internal or external) can be active per config entry
 - **Firmware < 2.40 unsupported** — older firmware versions use a different API surface
+- **Control4 DS2: no firmware update entity** — the door station reports an empty `firmwarePackage`, so the 2N update server can't be queried. Updates come from Control4 ([Firmware updates](#firmware-updates))
 - **Control4 DS2 / DS2 Mini: relays may not switch** — on some Control4 installs a relay command succeeds at the API level (the station even shows the door-open icon) but nothing switches, because the lock or gate is wired to Control4 hardware rather than to the 2N relay. The 2N HTTP API cannot see or control that wiring ([#10](https://github.com/mastalir1980/ha-2N-intercom/issues/10))
 
 ## Troubleshooting
