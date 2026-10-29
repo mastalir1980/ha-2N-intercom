@@ -86,7 +86,7 @@ the integration does not download, upload, apply or trigger device firmware.
 | Category | Status | Notes |
 |---|---|---|
 | **Done** | JPEG snapshot, native MJPEG live view, RTSP stream source (when licensed), event-driven ring/switch/IO/phone/config state, backup polling safety net, relay switch/cover control with real device state, SIP/call diagnostic sensors, answer/hangup/grant_access services, access-control events, last-ring image, reauth and reconfigure flows, HomeKit bridge mapping | All verified against 2N IP Verso 2.50.0.76.2 |
-| **Out of fork scope** | Two-way audio, multi-tenant directory UX, keypad workflow, lift control, mass-notify | Not needed for a single-family-house deployment |
+| **Out of fork scope** | Multi-tenant directory UX, keypad workflow, lift control, mass-notify | Not needed for a single-family-house deployment |
 | **License-dependent** | Automation API, Audio Test, NFC, Noise Detection, SMTP, FTP, SNMP, TR069, Lift Control | Only available when the device license exposes them; not planned in this fork |
 
 ### Camera Support Baseline
@@ -522,7 +522,7 @@ The integration uses two data channels:
 
 ## Known Limitations
 
-- **No two-way audio** — the HA camera platform does not support bi-directional audio; the doorbell ring triggers notifications but audio is device-side only
+- **No two-way audio yet** — Home Assistant 2026.11 adds two-way audio for cameras (a Labs preview feature that needs WebRTC and HTTPS), but this integration does not declare it yet. Audio is device-side only for now
 - **RTSP requires a separate license** — the 2N RTSP server is a paid feature; without it, only MJPEG streaming is available
 - **RTSP credentials are independent** — the RTSP server has its own user database; HTTP API credentials do not work for RTSP
 - **No gate position feedback** — the IP Verso has no gate-position sensor; cover entities use optimistic state transitions
