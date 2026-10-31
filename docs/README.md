@@ -10,6 +10,7 @@ Vývojářská / technická dokumentace. Uživatelské návody zůstávají v ko
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Přehled komponent, datový model, tok dat, životní cyklus, kamera transport, dynamické entity. |
 | [`API_REFERENCE.md`](API_REFERENCE.md) | 2N HTTP/RTSP endpointy, které integrace volá, mapování událostí, zvláštnosti firmwaru. |
 | [`IMPROVEMENTS.md`](IMPROVEMENTS.md) | Návrh vylepšení – bezpečnost (TLS/HTTP/Basic) a možné chyby, seřazené dle závažnosti. |
+| [`product/`](product/README.md) | Product analysis: 2N capabilities, Home Assistant changes, gaps (GAP). Sources with dates. |
 
 ### Diagramy (Excalidraw)
 
