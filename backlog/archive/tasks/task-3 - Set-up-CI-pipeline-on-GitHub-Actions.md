@@ -4,7 +4,7 @@ title: Set up CI pipeline on GitHub Actions
 status: To Do
 assignee: []
 created_date: '2026-08-30 09:27'
-updated_date: '2026-10-24 08:14'
+updated_date: '2026-11-08 06:29'
 labels:
   - ci
   - quality
@@ -27,3 +27,9 @@ Add a GitHub Actions workflow so every PR and push to main runs the full validat
 - [ ] #3 hassfest and HACS validation actions run and pass
 - [ ] #4 README.md shows a CI status badge
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Superseded: CI exists as .github/workflows/hacs.yml, hassfest.yml and e2e-pi.yml.
+<!-- SECTION:NOTES:END -->

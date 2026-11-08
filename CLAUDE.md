@@ -47,6 +47,10 @@ Work on this repo is split between two agents:
 
 - **Analyse before writing tasks.** Read the relevant code, `docs/*`, E2E reports and the 2N API docs;
   state findings with file/line pointers. Say what is fact (seen in code, logs, API response) and what is a hypothesis.
+- **Public repo vs private plan repo.** This Backlog holds only approved tasks for the next open milestone, bugs
+  and tooling tasks. Roadmap, task proposals, analyses, discussions, tester reports and security findings in the
+  integration live in Jan's private plan repo (cloned next to this repo on his Mac, see `CLAUDE.local.md`) with its
+  own `CLAUDE.md`; never copy them into tracked files here. Task titles are public (PR titles, branch names).
 - **Prepare tasks so Copilot can execute them without guessing** — see "Definition of ready" below.
   Assign ready tasks to `@copilot` (`backlog task edit <id> -a @copilot`).
   Pipeline tooling tasks that touch the coder's protected paths (`.github/`, `e2e/ci/`, `e2e/scripts/`, `tools/coder/`,
@@ -81,6 +85,8 @@ Work on this repo is split between two agents:
 1. Created via `backlog task create` (after `backlog instructions task-creation`), in English.
 2. **Description:** the why, the current behaviour and the expected behaviour, with evidence
    (E2E report path, log excerpt without secrets, 2N API response).
+   The task is **self-contained**: it never points to the private plan repo (roadmap, proposals, analyses),
+   because the coder and the reviewer cannot read it.
 3. **Acceptance criteria:** testable, one behaviour each; include the expected unit test(s) and,
    for features, the E2E check ("HA says X ⇄ 2N API says X"). Mark relay-switching checks as such.
    Every criterion ends with exactly one verifier tag that says who proves it:
@@ -107,7 +113,7 @@ Work on this repo is split between two agents:
 | Backlog (tasks, bugs) | `backlog/tasks/` — **only via `backlog` CLI**, never edit the files |
 | Architecture (Czech) | `docs/ARCHITECTURE.md` + `docs/architecture.excalidraw`, `docs/event-flow.excalidraw` |
 | 2N API endpoints + firmware quirks (Czech) | `docs/API_REFERENCE.md`; user-facing list in `README.md` → "2N API Endpoints Used" |
-| Why tasks exist (Czech) | `docs/ROADMAP-NAVRH.md` (feature roadmap), `docs/IMPROVEMENTS.md` (security S1–S5, tech-debt B1–B6 with code pointers) |
+| Roadmap, proposals, analyses, security reviews | Not in this repo: Jan's private plan repo, which the coder and the reviewer cannot read. Tasks here must be self-contained. |
 | User docs | `README.md`, `INSTALLATION.md`, `HOMEKIT_INTEGRATION.md`; `blueprints/` (doorbell automation blueprint) |
 | History | `CHANGELOG.md`; `IMPLEMENTATION_SUMMARY.md` is a historical snapshot (v1.3.x), not the source of truth |
 | HACS / hassfest CI | `.github/workflows/hacs.yml`, `.github/workflows/hassfest.yml`, `hacs.json`, `validate.py` |
@@ -198,6 +204,7 @@ Never run `e2e/e2e.sh relays`, `--relays` or `reset-entry` unless Jan asks in th
   any manual checks (he does it, or tells Claude the result).
 - **Versions are Backlog milestones** (`v1.5.0`, …). Every user-facing task gets the next open milestone when it is
   created (`-m vX.Y.Z`); pipeline/tooling tasks (`manual-path`, `ci`, `infra`) get none. `backlog milestone list` shows progress.
+  Only the next open milestone gets tasks; later versions stay in the private plan repo.
 - **Order of work for the headless coder:** ready tasks of the earliest open milestone first (by version number),
   then later milestones, tasks without a milestone last; inside a group by priority, then task id.
   The systemd timer on the VM (`ha2n-coder-next.timer`, see `tools/coder/README.md`) picks them up on its own once
