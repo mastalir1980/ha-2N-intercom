@@ -29,7 +29,7 @@ v [`CLAUDE.md`](../CLAUDE.md) a [`.github/copilot-instructions.md`](../.github/c
 
 | Agent | Role | Smí | Nesmí |
 |---|---|---|---|
-| **Grooming agent** (Claude, plánovaný běh) | příprava zadání | jednou za čas projde roadmapu, issues a backlog a připraví jeden návrh úkolu jako draft | zakládat úkoly ready pro Copilota bez Janova „ber“, psát do issues bez souhlasu |
+| **Grooming agent** (Claude, plánovaný běh) | příprava zadání | jednou za čas projde roadmapu, issues a backlog a připraví jeden návrh úkolu v soukromém plánovacím repu | zakládat úkoly ready pro Copilota bez Janova „ber“, psát do issues bez souhlasu |
 | **Claude** | analytik, tech lead | analýza, úkoly v Backlogu, plány, triage E2E, review, `docs/*` | psát kód bez Janova pokynu, commitovat a pushovat bez pokynu |
 | **Copilot** (headless na VM) | programátor kódu integrace | úkoly přiřazené `@copilot`: implementace, unit + E2E testy, dokumentace | měnit chráněné cesty, mergovat |
 | **Copilot** (VS Code na Macu) | programátor nástrojů pipeline | úkoly `@copilot-mac` se štítkem `manual-path` (`.github/`, `e2e/ci/`, `tools/coder/` …) | mergovat |
@@ -41,7 +41,7 @@ v [`CLAUDE.md`](../CLAUDE.md) a [`.github/copilot-instructions.md`](../.github/c
 ```mermaid
 flowchart LR
   SRC[roadmapa, GitHub issues,<br/>backlog, E2E bugy] --> GR[Grooming agent<br/>plánovaný běh]
-  GR --> DR[návrh jako Backlog draft]
+  GR --> DR[návrh v soukromém<br/>plánovacím repu]
   DR --> J0([Jan: iterace nad návrhem])
   J0 -- upravit --> DR
   J0 -- ber --> C
@@ -81,15 +81,15 @@ Zadání se nevymýšlí ad hoc, ale připravuje a iteruje. Grooming agent je pl
 Návrh přijde do nové konverzace v projektu Claude a iteruje se v ní. Stav (rozpracovaný návrh,
 odložené položky, historie) drží v gitignorovaném `e2e/state/grooming.json`. Postup:
 
-1. **Projde zdroje:** [`ROADMAP-NAVRH.md`](ROADMAP-NAVRH.md) (sekce A až F, sekce G je mimo scope),
-   otevřené GitHub issues, úkoly a drafty v Backlogu, bugy z E2E triage, [`IMPROVEMENTS.md`](IMPROVEMENTS.md).
+1. **Projde zdroje:** roadmapu, návrhy a seznam vylepšení v soukromém plánovacím repu, otevřené GitHub issues,
+   úkoly v Backlogu, bugy z E2E triage.
 2. **Vybere jednoho kandidáta:** priorita a doporučené pořadí v roadmapě, poptávka z issues, hotové
    závislosti, velikost na jeden PR, bugy a bezpečnost před funkcemi. Hlídá duplicity s existujícími úkoly.
-3. **Připraví návrh jako Backlog draft:** proč teď a odkud (ID z roadmapy, číslo issue), současné
+3. **Připraví návrh v soukromém plánovacím repu:** proč teď a odkud (ID z roadmapy, číslo issue), současné
    a cílové chování, návrh kritérií, odhad velikosti, nejvýš tři otevřené otázky, dva náhradní kandidáti.
    Když issue řeší existující funkce, navrhne místo úkolu odpověď do issue.
-4. **Iteruje s Janem.** Najednou je rozpracovaný jen jeden návrh. Na „ber“ se draft povýší na úkol,
-   doplní se Definition of Ready a `@copilot`; na „odlož“ zůstane draft s poznámkou proč.
+4. **Iteruje s Janem.** Najednou je rozpracovaný jen jeden návrh. Na „ber“ se z návrhu stane soběstačný úkol v Backlogu (jen pro nejbližší verzi),
+   doplní se Definition of Ready a `@copilot`; na „odlož“ zůstane návrh s poznámkou proč.
 5. **Udržuje backlog:** upozorní na úkoly, které už nejsou aktuální nebo ready (např. částečně hotové).
 
 Změny v Backlogu jdou jako backlog-only PR z `main`. Do GitHub issues agent nic nepíše bez Janova souhlasu.
@@ -105,7 +105,7 @@ Změny v Backlogu jdou jako backlog-only PR z `main`. Do GitHub issues agent nic
 
 | Stav / krok | Kdo | Co se děje |
 |---|---|---|
-| Draft (grooming) | grooming agent → Jan | návrh úkolu v `backlog/drafts`, iterace s Janem, dokud nemá otevřené otázky; pak „ber“ (draft se povýší na úkol) nebo „odlož“ |
+| Návrh (grooming) | grooming agent → Jan | návrh úkolu v soukromém plánovacím repu, iterace s Janem, dokud nemá otevřené otázky; pak „ber“ (vznikne úkol v Backlogu) nebo „odlož“ |
 | Analýza | Claude | čte kód, `docs/*`, E2E reporty, 2N API; odliší fakta od hypotéz |
 | *To Do*, `@copilot` | Claude | úkol splňuje Definition of Ready (`CLAUDE.md`): popis s důkazy, testovatelná kritéria, plán, reference, priorita, žádné otevřené otázky |
 | Na `main` | Claude → Jan | větev `backlog-<téma>` z `origin/main`, backlog-only PR, Jan ho hned mergne |
@@ -170,7 +170,6 @@ Chyby z E2E zakládá triage jako úkoly typu `bug` se štítkem `e2e` ([`e2e/ag
 | [`CLAUDE.md`](../CLAUDE.md) | pravidla, role, mapa kódu, Definition of Ready / Done |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | komponenty integrace, tok dat, životní cyklus |
 | [`API_REFERENCE.md`](API_REFERENCE.md) | 2N endpointy a zvláštnosti firmwaru |
-| [`ROADMAP-NAVRH.md`](ROADMAP-NAVRH.md), [`IMPROVEMENTS.md`](IMPROVEMENTS.md) | proč úkoly existují |
 | [`e2e/README.md`](../e2e/README.md) | E2E pipeline z Macu, staging, noční běh |
 | [`e2e/ci/README.md`](../e2e/ci/README.md) | runner na Pi, bezpečnostní model, instalace |
 | [`tools/coder/README.md`](../tools/coder/README.md) | headless kodér na VM, tokeny, cena běhů |
