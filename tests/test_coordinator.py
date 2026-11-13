@@ -773,6 +773,19 @@ class CallRingDetectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(coordinator.data.ring_snapshot, b"ring-jpeg")
         self.assertEqual(coordinator.active_session_id, "42")
 
+    async def test_ring_on_device_without_camera_captures_no_snapshot(self) -> None:
+        coordinator, tasks, api = self._make_coordinator()
+        api.camera_present = False
+
+        self.assertTrue(coordinator._process_log_event({
+            "event": "CallStateChanged",
+            "params": {"state": "ringing", "direction": "outgoing", "session": 42},
+        }))
+
+        self.assertTrue(coordinator.ring_active)
+        self.assertEqual(tasks, [])
+        api.async_get_snapshot.assert_not_awaited()
+
     async def test_ring_count_deduplicates_call_pair_and_increases_for_next_ring(self) -> None:
         coordinator, tasks, _api = self._make_coordinator()
         self.assertEqual(coordinator.ring_count, 0)

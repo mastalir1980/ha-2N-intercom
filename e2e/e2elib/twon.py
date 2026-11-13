@@ -71,6 +71,9 @@ class TwoN:
     def system_caps(self) -> dict[str, Any]:
         return self._get("/api/system/caps")
 
+    def camera_caps(self) -> dict[str, Any]:
+        return self._get("/api/camera/caps")
+
     def switch_caps(self) -> list[dict[str, Any]]:
         return self._get("/api/switch/caps").get("switches", [])
 
