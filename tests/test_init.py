@@ -355,6 +355,22 @@ class AuthenticationSetupTests(unittest.IsolatedAsyncioTestCase):
             ("2n_intercom", "basic_auth_refused_other-entry")
         })
 
+    async def test_unload_removes_this_entrys_privilege_repairs(self) -> None:
+        registry = sys.modules["homeassistant.helpers.issue_registry"]
+        for entry_id in (self.entry.entry_id, "other-entry"):
+            for feature in ("switch", "io", "camera", "directory"):
+                registry.async_create_issue(
+                    self.hass, "2n_intercom",
+                    f"api_privilege_missing_{entry_id}_{feature}",
+                )
+        self.assertTrue(
+            await self.init_module.async_unload_entry(self.hass, self.entry)
+        )
+        self.assertEqual(set(self.hass._test_issues), {
+            ("2n_intercom", f"api_privilege_missing_other-entry_{feature}")
+            for feature in ("switch", "io", "camera", "directory")
+        })
+
     async def test_failed_unload_retains_repair(self) -> None:
         registry = sys.modules["homeassistant.helpers.issue_registry"]
         key = ("2n_intercom", f"basic_auth_refused_{self.entry.entry_id}")

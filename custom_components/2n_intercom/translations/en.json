@@ -81,6 +81,10 @@
     "basic_auth_refused": {
       "title": "Insecure Basic authentication blocked for {name}",
       "description": "The device for {name} requested HTTP Basic authentication over plaintext HTTP or HTTPS with an unverified certificate. Home Assistant refused to send recoverable credentials. Switch the device's HTTP API services to Digest authentication, or install a certificate Home Assistant trusts and enable certificate verification in Reconfigure. If you accept the risk of exposing the API password, open Settings > Devices & services > 2N Intercom > Reconfigure > Allow insecure connection. This warning is removed after a successful update."
+    },
+    "api_privilege_missing": {
+      "title": "HTTP API account for {name} lacks the {privilege} privilege",
+      "description": "The intercom refused a request from Home Assistant ({error}). The entities that depend on it are missing or do not update. On the intercom open Services > HTTP API, check that the service uses an authentication method the account supports, and grant the account the privilege {privilege}. This warning is removed after the next successful request. If your model does not offer this privilege, you can ignore this warning."
     }
   },
   "options": {
