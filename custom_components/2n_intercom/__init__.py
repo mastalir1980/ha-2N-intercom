@@ -56,6 +56,7 @@ from .const import (
 from .coordinator import (
     TwoNIntercomCoordinator,
     TwoNIntercomRuntimeData,
+    async_delete_api_privilege_issues,
     async_delete_basic_auth_issue,
 )
 
@@ -639,6 +640,7 @@ async def async_unload_entry(
 
     if unload_ok:
         async_delete_basic_auth_issue(hass, entry.entry_id)
+        async_delete_api_privilege_issues(hass, entry.entry_id)
 
     unload_result: bool = unload_ok
     return unload_result

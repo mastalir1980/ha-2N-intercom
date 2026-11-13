@@ -72,6 +72,33 @@ TWON_ERROR_CODE_NOT_SUPPORTED = 1  # function is not supported by this device
 TWON_ERROR_CODES_UNSUPPORTED = frozenset({1, 2, 4})  # not supported / bad path / disabled
 TWON_ERROR_CODES_PERMISSION = frozenset({7, 8, 9, 10})  # HTTPS / auth method / auth / privileges
 TWON_ERROR_CODE_REQUEST_REJECTED = 18  # grantaccess: access point disallowed
+# Codes that mean "this account may not use the service": invalid
+# authentication method, authorization required, insufficient privileges.
+TWON_ERROR_CODES_PRIVILEGE = frozenset({8, 9, 10})
+
+# Polled state calls the integration cannot work without. When the device
+# refuses all of them the refresh fails instead of reporting empty data.
+# /api/system/info is left out on purpose: it keeps answering on a device
+# that refuses everything else (seen with code 7 on an HTTPS-only device).
+ESSENTIAL_API_PATHS = ("/api/phone/status", "/api/call/status")
+
+# Optional features by path prefix. A refusal here must not take the whole
+# integration down; the value is the feature key used for Repair issues.
+API_FEATURE_PREFIXES = (
+    ("/api/switch/", "switch"),
+    ("/api/io/", "io"),
+    ("/api/camera/", "camera"),
+    ("/api/dir/", "directory"),
+)
+API_FEATURES = tuple(feature for _prefix, feature in API_FEATURE_PREFIXES)
+
+
+def feature_for_path(path: str) -> str | None:
+    """Return the optional feature a request path belongs to, if any."""
+    for prefix, feature in API_FEATURE_PREFIXES:
+        if path.startswith(prefix):
+            return feature
+    return None
 
 
 @dataclass(frozen=True)
@@ -487,6 +514,9 @@ class TwoNIntercomAPI:
         self._session_factory = session_factory
         self._base_url = f"{protocol}://{host}:{port}"
         self._camera_capabilities = CameraCapabilities()
+        # Last 2N refusal per request path; a successful answer removes the
+        # path. Lets the coordinator tell "refused" from "empty".
+        self._device_errors: dict[str, TwoNDeviceError] = {}
         # None = unknown (not asked yet, or the request failed); only a
         # definitive device answer to camera/caps sets True or False.
         self._camera_present: bool | None = None
@@ -526,6 +556,43 @@ class TwoNIntercomAPI:
     def camera_present(self) -> bool | None:
         """Return whether camera/caps proved a camera (``None`` = unknown)."""
         return self._camera_present
+
+    @property
+    def device_errors(self) -> dict[str, TwoNDeviceError]:
+        """Return the last 2N refusal per path (paths that answered are absent)."""
+        return dict(self._device_errors)
+
+    def _record_device_result(
+        self,
+        path: str,
+        error: TwoNDeviceError | None,
+        action: str,
+        *,
+        log: bool = True,
+    ) -> None:
+        """Remember the device's answer for *path* and log a refusal once.
+
+        The first refusal is a WARNING (INFO for code 1 on an optional
+        feature: the model simply lacks it). The same refusal on later
+        polls is DEBUG so a refused service does not fill the log.
+        """
+        previous = self._device_errors.get(path)
+        if error is None:
+            self._device_errors.pop(path, None)
+            return
+        self._device_errors[path] = error
+        if not log:
+            return
+        if previous is not None and previous.code == error.code:
+            level = logging.DEBUG
+        elif (
+            error.code == TWON_ERROR_CODE_NOT_SUPPORTED
+            and feature_for_path(path) is not None
+        ):
+            level = logging.INFO
+        else:
+            level = logging.WARNING
+        log_device_error(level, action, path, None, error)
 
     def _get_basic_auth(self) -> aiohttp.BasicAuth:
         """Return HTTP BasicAuth for all requests."""
@@ -862,18 +929,19 @@ class TwoNIntercomAPI:
             if isinstance(data, dict):
                 if data.get("success") is False:
                     error = parse_device_error(data)
+                    if error is not None:
+                        self._record_device_result(
+                            "/api/dir/query",
+                            error,
+                            "directory query",
+                            log=not raise_on_device_error,
+                        )
                     if raise_on_device_error:
                         detail = error.format() if error is not None else "unknown error"
                         raise TwoNAPIError(f"Directory query rejected: {detail}")
-                    if error is not None:
-                        log_device_error(
-                            logging.WARNING,
-                            "directory query",
-                            "/api/dir/query",
-                            None,
-                            error,
-                        )
                     return []
+
+                self._record_device_result("/api/dir/query", None, "directory query")
 
                 if "result" in data:
                     result = data.get("result")
@@ -921,16 +989,13 @@ class TwoNIntercomAPI:
             # Expected format: {"success": true, "result": {...}}
             if isinstance(data, dict):
                 if data.get("success", False):
+                    self._record_device_result("/api/call/status", None, "call status")
                     result: dict[str, Any] = data.get("result", {})
                     return result
                 error = parse_device_error(data)
                 if error is not None:
-                    log_device_error(
-                        logging.WARNING,
-                        "call status",
-                        "/api/call/status",
-                        None,
-                        error,
+                    self._record_device_result(
+                        "/api/call/status", error, "call status"
                     )
             return {}
 
@@ -971,13 +1036,14 @@ class TwoNIntercomAPI:
 
             if isinstance(data, dict):
                 if data.get("success", False):
+                    self._record_device_result(path, None, label)
                     result = data.get("result", {})
                     if isinstance(result, dict):
                         return result
                     return {}
                 error = parse_device_error(data)
                 if error is not None:
-                    log_device_error(logging.WARNING, label, path, None, error)
+                    self._record_device_result(path, error, label)
             return {}
 
         except TwoNAuthenticationError:
@@ -1441,16 +1507,13 @@ class TwoNIntercomAPI:
 
             if isinstance(data, dict):
                 if data.get("success", False):
+                    self._record_device_result("/api/system/info", None, "system info")
                     sys_result: dict[str, Any] = data.get("result", {})
                     return sys_result
                 error = parse_device_error(data)
-                if error is not None and log_errors:
-                    log_device_error(
-                        logging.WARNING,
-                        "system info",
-                        "/api/system/info",
-                        None,
-                        error,
+                if error is not None:
+                    self._record_device_result(
+                        "/api/system/info", error, "system info", log=log_errors
                     )
             return {}
 
@@ -1541,6 +1604,12 @@ class TwoNIntercomAPI:
             self._camera_present = _camera_present_from_caps(
                 data, self._camera_capabilities
             )
+            if isinstance(data, dict) and "success" in data:
+                self._record_device_result(
+                    CAMERA_CAPS_PATH,
+                    None if data.get("success") else parse_device_error(data),
+                    "camera caps",
+                )
         except Exception as err:  # pylint: disable=broad-except
             _LOGGER.debug("Unable to fetch camera capabilities: %s", err)
             if force_refresh:
@@ -2087,12 +2156,8 @@ class TwoNIntercomAPI:
                             )
 
                         if error is not None:
-                            log_device_error(
-                                logging.WARNING,
-                                "camera snapshot",
-                                CAMERA_SNAPSHOT_PATH,
-                                params,
-                                error,
+                            self._record_device_result(
+                                CAMERA_SNAPSHOT_PATH, error, "camera snapshot"
                             )
                         else:
                             _LOGGER.warning(
@@ -2104,6 +2169,9 @@ class TwoNIntercomAPI:
                                 params,
                             )
                         return None
+                    self._record_device_result(
+                        CAMERA_SNAPSHOT_PATH, None, "camera snapshot"
+                    )
                     image_bytes: bytes = await response.read()
                     return image_bytes
 

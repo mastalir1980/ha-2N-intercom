@@ -23,6 +23,20 @@ def test_entities_available(ha, registry):
     assert not bad, f"unavailable entities: {bad}"
 
 
+def test_no_repair_issue_when_device_accepts_all_calls(ha, twon):
+    """HA has no open Repair issue <-> the 2N API answers every polled service."""
+    # Ground truth: the same read-only calls succeed for the E2E account
+    # (each raises when the device refuses it).
+    twon.phone_status()
+    twon.switch_status()
+    twon.io_status()
+    twon.camera_caps()
+    issues = ha.repair_issues()
+    assert not issues, "open Repair issues: " + ", ".join(
+        f"{i.get('issue_id')} ({i.get('translation_key')})" for i in issues
+    )
+
+
 def test_camera_snapshot_is_jpeg(ha, entry, registry):
     cam = find_by_suffix(registry, entry["entry_id"], "camera")
     if cam is None or cam.get("disabled_by"):
