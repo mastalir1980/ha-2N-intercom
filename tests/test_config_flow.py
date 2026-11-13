@@ -304,11 +304,19 @@ class FakeAPI:
     async def async_get_directory(self, *, raise_on_device_error=False):
         return []
 
+    async def async_get_camera_caps(self, *, force_refresh=False):
+        if FakeAPI.camera_caps_error is not None:
+            raise FakeAPI.camera_caps_error
+        self.camera_present = FakeAPI.camera_present_result
+        return None
+
     async def async_close(self) -> None:
         self.closed = True
 
 
 FakeAPI.connection_result = True
+FakeAPI.camera_present_result = None
+FakeAPI.camera_caps_error = None
 FakeAPI.system_info = {"serialNumber": "SN-123456", "macAddr": "00:11:22:33:44:55"}
 
 
@@ -945,6 +953,31 @@ class ConfigFlowTests(unittest.IsolatedAsyncioTestCase):
         result = await flow.async_step_device(None)
         self.assertEqual(result["type"], "form")
         self.assertEqual(result["step_id"], "device")
+
+    async def test_device_step_offers_camera_unless_device_has_none(self) -> None:
+        """The camera toggle is hidden only on a definitive 'no camera'."""
+        cases = (
+            (True, None, True),
+            (None, None, True),
+            (None, TimeoutError("camera/caps timed out"), True),
+            (False, None, False),
+        )
+        for present, error, offered in cases:
+            with self.subTest(present=present, error=error):
+                FakeAPI.camera_present_result = present
+                FakeAPI.camera_caps_error = error
+                self.addCleanup(setattr, FakeAPI, "camera_present_result", None)
+                self.addCleanup(setattr, FakeAPI, "camera_caps_error", None)
+                flow = self._make_flow()
+                flow._data = {
+                    "host": "192.0.2.20", "port": 443,
+                    "username": "user", "password": "pass",
+                }
+                result = await flow.async_step_device(None)
+                keys = {marker.key for marker in result["data_schema"].schema}
+                self.assertEqual("enable_camera" in keys, offered)
+                self.assertIn("enable_doorbell", keys)
+                self.assertTrue(all(api.closed for api in FakeAPI.instances))
 
     # --- Unique ID uses serial ---
 
@@ -2433,6 +2466,45 @@ class OptionsFlowNavigationTests(unittest.IsolatedAsyncioTestCase):
         flow = self._make_options_flow(entry)
         result = await flow.async_step_device(None)
         self.assertIs(result["last_step"], False)
+
+    async def test_device_without_camera_gets_no_camera_settings(self) -> None:
+        """No toggle, no camera step, and the saved choice is kept."""
+        entry = self._make_entry(options={"enable_camera": True})
+        entry.runtime_data = _make_runtime([])
+        entry.runtime_data.coordinator.camera_present = False
+        flow = self._make_options_flow(entry)
+
+        form = await flow.async_step_device(None)
+        keys = {marker.key for marker in form["data_schema"].schema}
+        self.assertNotIn("enable_camera", keys)
+        self.assertIn("enable_doorbell", keys)
+        self.assertIs(form["last_step"], True)
+
+        result = await flow.async_step_device({
+            "name": "Intercom", "enable_doorbell": True,
+            "ring_on_keypress": False, "scan_interval": 60,
+            "firmware_channel": "stable",
+        })
+        self.assertEqual(result["type"], "create_entry")
+        self.assertIs(result["data"]["enable_camera"], True)
+
+    async def test_camera_settings_stay_when_presence_is_unknown(self) -> None:
+        for present in (None, True):
+            with self.subTest(present=present):
+                entry = self._make_entry(options={"enable_camera": True})
+                entry.runtime_data = _make_runtime([])
+                entry.runtime_data.coordinator.camera_present = present
+                flow = self._make_options_flow(entry)
+                form = await flow.async_step_device(None)
+                keys = {marker.key for marker in form["data_schema"].schema}
+                self.assertIn("enable_camera", keys)
+                self.assertIs(form["last_step"], False)
+                result = await flow.async_step_device({
+                    "name": "Intercom", "enable_camera": True,
+                    "enable_doorbell": True, "ring_on_keypress": False,
+                    "scan_interval": 60, "firmware_channel": "stable",
+                })
+                self.assertEqual(result["step_id"], "camera")
 
     async def test_device_step_not_last_when_relays_detected(self) -> None:
         entry = self._make_entry(options={"enable_camera": False})

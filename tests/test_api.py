@@ -2131,6 +2131,65 @@ class AdditionalApiMethodTests(unittest.IsolatedAsyncioTestCase):
         caps = await api.async_get_camera_caps()
         self.assertEqual(caps, self.api_module.CameraCapabilities())
 
+    async def test_camera_present_is_unknown_before_camera_caps(self) -> None:
+        self.assertIsNone(self._make_api().camera_present)
+
+    async def test_camera_present_true_when_caps_list_a_camera(self) -> None:
+        api = self._make_api({
+            "success": True,
+            "result": {"jpegResolution": [{"width": 640, "height": 480}]},
+        })
+        await api.async_get_camera_caps()
+        self.assertIs(api.camera_present, True)
+
+    async def test_camera_absent_on_definitive_camera_caps_answers(self) -> None:
+        """Code 1 or an empty successful answer prove there is no camera."""
+        for payload in (
+            {"success": False,
+             "error": {"code": 1, "description": "function is not supported"}},
+            {"success": True, "result": {}},
+            {"success": True, "result": {"jpegResolution": [], "sources": []}},
+        ):
+            with self.subTest(payload=payload):
+                api = self._make_api(payload)
+                await api.async_get_camera_caps()
+                self.assertIs(api.camera_present, False)
+
+    async def test_camera_presence_stays_unknown_when_caps_are_refused(self) -> None:
+        """Privilege, auth and other 2N errors never mean 'no camera'."""
+        for payload in (
+            {"success": False,
+             "error": {"code": 10, "description": "insufficient privileges"}},
+            {"success": False,
+             "error": {"code": 8, "description": "invalid authentication method"}},
+            {"success": False, "error": {"code": 12, "description": "invalid"}},
+            {"success": False},
+            {"result": {}},
+        ):
+            with self.subTest(payload=payload):
+                api = self._make_api(payload)
+                await api.async_get_camera_caps()
+                self.assertIsNone(api.camera_present)
+
+    async def test_camera_presence_survives_transient_failures(self) -> None:
+        """A timeout, HTTP 5xx or 401 changes nothing: unknown stays unknown
+        and a camera seen earlier stays present."""
+        for seen_before in (None, True):
+            for failure in (TimeoutError(), RuntimeError("HTTP 503"),
+                            self.api_module.TwoNAuthenticationError("401")):
+                with self.subTest(seen_before=seen_before, failure=failure):
+                    api = self._make_api()
+                    api._camera_present = seen_before
+
+                    @asynccontextmanager
+                    async def failing_request(*args, _failure=failure, **kwargs):
+                        raise _failure
+                        yield  # pragma: no cover
+
+                    api._async_request = failing_request
+                    await api.async_get_camera_caps(force_refresh=True)
+                    self.assertIs(api.camera_present, seen_before)
+
     async def test_get_snapshot_success(self) -> None:
         api = self._make_api(None, content_type="image/jpeg")
         api.response._body = b"\xff\xd8\xff"

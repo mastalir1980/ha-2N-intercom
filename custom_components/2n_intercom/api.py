@@ -66,6 +66,7 @@ _CAMERA_CAPS_KEYS = {"caps", "camera", "jpeg", "resolution", "resolutions"}
 # The whole point of the helpers below is that the code itself is rarely
 # enough; the description string is the disambiguator.
 TWON_ERROR_CODE_UNSPECIFIED = 14
+TWON_ERROR_CODE_NOT_SUPPORTED = 1  # function is not supported by this device
 # Codes from the master table (HTTP API manual 2.3) used to classify
 # rejections of user-facing actions such as grant_access.
 TWON_ERROR_CODES_UNSUPPORTED = frozenset({1, 2, 4})  # not supported / bad path / disabled
@@ -332,6 +333,28 @@ def _collect_camera_sources(value: Any) -> list[str]:
     return sources
 
 
+def _camera_present_from_caps(
+    payload: Any, capabilities: CameraCapabilities
+) -> bool | None:
+    """Tell whether a camera/caps answer proves the device has a camera.
+
+    Only a definitive device answer counts: ``True`` for a successful
+    answer that lists resolutions or sources, ``False`` for a successful
+    answer that lists neither or for 2N error code 1 (function not
+    supported). Every other answer (other 2N codes such as missing
+    privileges, malformed bodies) returns ``None`` so a refused or broken
+    request is never mistaken for a missing camera.
+    """
+    if not isinstance(payload, dict) or "success" not in payload:
+        return None
+    if payload.get("success"):
+        return bool(capabilities.jpeg_resolutions or capabilities.sources)
+    error = parse_device_error(payload)
+    if error is not None and error.code == TWON_ERROR_CODE_NOT_SUPPORTED:
+        return False
+    return None
+
+
 def parse_camera_caps(payload: dict[str, Any] | None) -> CameraCapabilities:
     """Parse camera/caps into a normalized capability object."""
     if not isinstance(payload, dict):
@@ -464,6 +487,9 @@ class TwoNIntercomAPI:
         self._session_factory = session_factory
         self._base_url = f"{protocol}://{host}:{port}"
         self._camera_capabilities = CameraCapabilities()
+        # None = unknown (not asked yet, or the request failed); only a
+        # definitive device answer to camera/caps sets True or False.
+        self._camera_present: bool | None = None
         self._snapshot_caps_fallback_logged = False
         self._camera_transport_info = CameraTransportInfo(
             requested_mode=DEFAULT_LIVE_VIEW_MODE,
@@ -495,6 +521,11 @@ class TwoNIntercomAPI:
             )
             self._owns_session = True
         return self._session
+
+    @property
+    def camera_present(self) -> bool | None:
+        """Return whether camera/caps proved a camera (``None`` = unknown)."""
+        return self._camera_present
 
     def _get_basic_auth(self) -> aiohttp.BasicAuth:
         """Return HTTP BasicAuth for all requests."""
@@ -1507,6 +1538,9 @@ class TwoNIntercomAPI:
                     data = await response.json()
 
             self._camera_capabilities = parse_camera_caps(data)
+            self._camera_present = _camera_present_from_caps(
+                data, self._camera_capabilities
+            )
         except Exception as err:  # pylint: disable=broad-except
             _LOGGER.debug("Unable to fetch camera capabilities: %s", err)
             if force_refresh:

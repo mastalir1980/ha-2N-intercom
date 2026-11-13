@@ -186,6 +186,34 @@ async def _async_get_directory_choices(
             await api.async_close()
 
 
+async def _async_camera_present(data: dict[str, Any]) -> bool | None:
+    """Ask the device whether it has a camera (``None`` = unknown).
+
+    ``False`` only when camera/caps gives a definitive answer; any failure
+    returns ``None`` so the setup form keeps offering the camera.
+    """
+    api: TwoNIntercomAPI | None = None
+    try:
+        api = TwoNIntercomAPI(
+            host=data[CONF_HOST],
+            port=data.get(CONF_PORT, DEFAULT_PORT_HTTPS),
+            username=data.get(CONF_USERNAME, ""),
+            password=data.get(CONF_PASSWORD, ""),
+            protocol=data.get(CONF_PROTOCOL, DEFAULT_PROTOCOL),
+            verify_ssl=data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+            allow_insecure=data.get(CONF_ALLOW_INSECURE, DEFAULT_ALLOW_INSECURE),
+        )
+        await api.async_get_camera_caps()
+        present = getattr(api, "camera_present", None)
+        return present if isinstance(present, bool) else None
+    except Exception:  # pylint: disable=broad-except
+        _LOGGER.debug("Camera detection failed", exc_info=True)
+        return None
+    finally:
+        if api is not None:
+            await api.async_close()
+
+
 class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg,misc]
     """Handle a config flow for 2N Intercom."""
 
@@ -552,24 +580,26 @@ class TwoNIntercomConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type:
             )
         )
 
-        data_schema = vol.Schema(
-            {
-                vol.Required("name", default=default_name): cv.string,
+        fields: dict[Any, Any] = {
+            vol.Required("name", default=default_name): cv.string,
+        }
+        # A device that reports no camera gets no camera toggle; the option
+        # stays unset so a camera module added later shows up after a reload.
+        if await _async_camera_present(self._data) is not False:
+            fields[
                 vol.Required(
                     CONF_ENABLE_CAMERA,
                     default=self._data.get(CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA),
-                ): cv.boolean,
-                vol.Required(
-                    CONF_ENABLE_DOORBELL,
-                    default=self._data.get(
-                        CONF_ENABLE_DOORBELL, DEFAULT_ENABLE_DOORBELL
-                    ),
-                ): cv.boolean,
-                vol.Optional(
-                    CONF_CALLED_ID, default=default_called
-                ): called_field,
-            }
-        )
+                )
+            ] = cv.boolean
+        fields[
+            vol.Required(
+                CONF_ENABLE_DOORBELL,
+                default=self._data.get(CONF_ENABLE_DOORBELL, DEFAULT_ENABLE_DOORBELL),
+            )
+        ] = cv.boolean
+        fields[vol.Optional(CONF_CALLED_ID, default=default_called)] = called_field
+        data_schema = vol.Schema(fields)
 
         return self.async_show_form(
             step_id="device",
@@ -890,6 +920,20 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
         else:
             self._detected_relays = []
 
+    def _camera_present(self) -> bool | None:
+        """Return the running coordinator's camera detection (no I/O).
+
+        ``None`` when the entry is not loaded or the device gave no
+        definitive answer; the camera settings are then offered as before.
+        """
+        runtime: TwoNIntercomRuntimeData | None = getattr(
+            self.config_entry, "runtime_data", None
+        )
+        if runtime is None:
+            return None
+        present = getattr(runtime.coordinator, "camera_present", None)
+        return present if isinstance(present, bool) else None
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -905,6 +949,7 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
         # Relay detection drives both the follow-up steps and the
         # best-effort Next/Submit label below.
         self._refresh_detected_relays()
+        camera_present = self._camera_present()
 
         # Connection data for the API call to fetch peers lives in entry.data.
         conn_data = dict(self.config_entry.data)
@@ -984,7 +1029,13 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
             # step so the user can tune live-view mode and MJPEG resolution.
             # Disabling the camera skips it entirely and omits camera values
             # from the saved options.
-            if user_input.get(CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA):
+            if camera_present is False:
+                # The toggle is hidden on a device without a camera; keep
+                # the saved choice instead of dropping it from the options.
+                self._data[CONF_ENABLE_CAMERA] = bool(
+                    self._current_option(CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA)
+                )
+            elif user_input.get(CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA):
                 return await self.async_step_camera()
 
             for camera_key in (
@@ -1010,16 +1061,24 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
             )
         )
 
+        camera_fields: dict[Any, Any] = {}
+        if camera_present is not False:
+            camera_fields[
+                vol.Required(
+                    CONF_ENABLE_CAMERA,
+                    default=self._session_option(
+                        CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA
+                    ),
+                )
+            ] = cv.boolean
+
         data_schema = vol.Schema(
             {
                 vol.Required(
                     "name",
                     default=self._session_option("name", "2N Intercom"),
                 ): cv.string,
-                vol.Required(
-                    CONF_ENABLE_CAMERA,
-                    default=self._session_option(CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA),
-                ): cv.boolean,
+                **camera_fields,
                 vol.Required(
                     CONF_ENABLE_DOORBELL,
                     default=self._session_option(
@@ -1059,8 +1118,9 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlow):  # type: ignore[misc]
         # on the camera toggle on this very form, which the label cannot
         # react to live. We label from the *current* (session or saved)
         # camera setting plus detected relays.
-        has_followup = bool(
-            self._session_option(CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA)
+        has_followup = (
+            camera_present is not False
+            and bool(self._session_option(CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA))
         ) or bool(self._detected_relays)
 
         return self.async_show_form(

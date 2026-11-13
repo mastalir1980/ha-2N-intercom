@@ -964,7 +964,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             # ring; count it and capture the snapshot only on the first.
             if not self._ring_detected:
                 self._ring_count += 1
-                if self._ring_snapshot_enabled:
+                if self._ring_snapshot_enabled and self.camera_present is not False:
                     self.hass.async_create_task(self._async_capture_ring_snapshot())
             self._ring_detected = True
             self._last_ring_time = dt_util.utcnow()
@@ -1563,6 +1563,16 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
     def system_caps(self) -> dict[str, str]:
         """Return cached system capabilities."""
         return self._system_caps or {}
+
+    @property
+    def camera_present(self) -> bool | None:
+        """Return whether the device has a camera (``None`` = unknown).
+
+        Comes from the camera/caps answer fetched with the static caches;
+        ``False`` only on a definitive device answer, never on a failure.
+        """
+        present = getattr(self.api, "camera_present", None)
+        return present if isinstance(present, bool) else None
 
     @property
     def rtsp_server_available(self) -> bool:

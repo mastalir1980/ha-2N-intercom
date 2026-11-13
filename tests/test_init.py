@@ -1187,6 +1187,72 @@ class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("sensor", platforms)
         self.assertEqual(platforms.count("update"), 1)
 
+    async def test_get_platforms_skips_camera_only_when_device_has_none(self) -> None:
+        """Camera and image follow the option unless the device has no camera."""
+        entry = FakeConfigEntry("entry-1", {}, options={"enable_camera": True})
+        for camera_present, expected in ((None, True), (True, True), (False, False)):
+            with self.subTest(camera_present=camera_present):
+                platforms = self.init_module._get_platforms(entry, camera_present)
+                self.assertEqual("camera" in platforms, expected)
+                self.assertEqual("image" in platforms, expected)
+                self.assertIn("switch", platforms)
+
+    async def _setup_with_camera_presence(self, camera_present):
+        """Set an entry up twice (setup + restart) with existing camera entities."""
+
+        class CameraAPI(FakeAPI):
+            pass
+
+        CameraAPI.camera_present = camera_present
+        entry = FakeConfigEntry(
+            "entry-1",
+            {"host": "example.invalid", "port": 443,
+             "username": "test-user", "password": "test-password"},
+            options={"enable_camera": True},
+        )
+        hass = FakeHass([entry])
+        entities = {
+            ("camera", "2n_intercom", "entry-1_camera"): "camera.front_door",
+            ("image", "2n_intercom", "entry-1_last_ring"): "image.front_door_last_ring",
+            ("camera", "2n_intercom", "entry-2_camera"): "camera.other_intercom",
+        }
+        registry = hass.entity_registry
+        registry.async_get_entity_id.side_effect = (
+            lambda domain, platform, uid: entities.get((domain, platform, uid))
+        )
+        registry.async_remove.side_effect = lambda eid: entities.pop(
+            next(key for key, value in entities.items() if value == eid)
+        )
+        with patch.object(self.init_module, "TwoNIntercomAPI", CameraAPI):
+            for _ in range(2):
+                self.assertTrue(await self.init_module.async_setup_entry(hass, entry))
+                await self.init_module.async_unload_entry(hass, entry)
+        return hass, entities
+
+    async def test_device_without_camera_gets_no_camera_or_image_entity(self) -> None:
+        hass, entities = await self._setup_with_camera_presence(False)
+        self.assertEqual(len(hass.config_entries.forwarded), 2)
+        for _entry_id, platforms in hass.config_entries.forwarded:
+            self.assertNotIn("camera", platforms)
+            self.assertNotIn("image", platforms)
+            self.assertIn("switch", platforms)
+        # Stale entities of this entry are removed, another entry's stay.
+        self.assertEqual(
+            entities,
+            {("camera", "2n_intercom", "entry-2_camera"): "camera.other_intercom"},
+        )
+
+    async def test_unknown_camera_presence_keeps_camera_entities(self) -> None:
+        """A failed camera/caps request (unknown) never removes or hides them."""
+        for camera_present in (None, True):
+            with self.subTest(camera_present=camera_present):
+                hass, entities = await self._setup_with_camera_presence(camera_present)
+                for _entry_id, platforms in hass.config_entries.forwarded:
+                    self.assertIn("camera", platforms)
+                    self.assertIn("image", platforms)
+                self.assertEqual(len(entities), 3)
+                hass.entity_registry.async_remove.assert_not_called()
+
     async def test_get_platforms_always_includes_switch(self) -> None:
         """Switch platform is always included for auto-detection."""
         init_module = self.init_module
