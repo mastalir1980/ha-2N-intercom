@@ -5,18 +5,18 @@ status: To Do
 assignee:
   - '@copilot'
 created_date: '2026-10-24T08:29:00Z'
+updated_date: '2026-11-14 09:58'
 labels:
   - release
 milestone: m-1
 dependencies:
   - TASK-39
-  - TASK-73
-  - TASK-12
   - TASK-2.2
   - TASK-2.3
   - TASK-6
   - TASK-5
   - TASK-7
+  - TASK-81
 references:
   - CHANGELOG.md
   - custom_components/2n_intercom/manifest.json
@@ -40,3 +40,9 @@ Release of milestone v1.6.0 ("works on every 2N device, access and security even
 - [ ] #3 README and INSTALLATION.md mention every new user-visible option, entity, event and Repair issue from the milestone (check, fix gaps) [unit]
 - [ ] #4 Full unit suite, validate.py and py_compile green; PR check e2e-pi green [e2e]
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-14: TASK-73 and TASK-12 moved to milestone v1.5.2 and ship in TASK-81 (release branch from tag v1.5.1). They stay on main, so 1.6.0 contains them too; the 1.6.0 changelog must not list them again as new fixes.
+<!-- SECTION:NOTES:END -->
