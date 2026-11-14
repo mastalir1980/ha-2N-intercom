@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.2 - 2026-11-14
+
+### Fixes
+
+- Devices without a camera, such as the 2N IP Uni, no longer get a camera entity and a last-ring image that can never work. The setup and options forms hide the camera settings on these devices, and entities created by an earlier version are removed. A failed request to the device never removes a working camera ([#105](https://github.com/mastalir1980/ha-2N-intercom/issues/105)).
+- When the intercom refuses requests, the integration now says so instead of showing empty entities. If the HTTP API account lacks a privilege for relays, inputs/outputs, the camera or the directory, a Repair issue names the missing privilege and disappears once the request succeeds. If the device refuses the phone and call status requests, the entities become unavailable and the log names the device error (for example `code=7 invalid connection type` on a device that accepts only HTTPS). A feature the model does not have is switched off quietly ([#105](https://github.com/mastalir1980/ha-2N-intercom/issues/105)).
+- A request the device keeps refusing is logged as a warning once instead of on every poll.
+
 ## 1.5.1 - 2026-10-25
 
 ### Fixes
