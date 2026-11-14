@@ -20,12 +20,18 @@ from homeassistant.helpers.update_coordinator import (
 from homeassistant.util import dt as dt_util
 
 from .api import (
+    API_FEATURES,
+    ESSENTIAL_API_PATHS,
+    TWON_ERROR_CODE_NOT_SUPPORTED,
+    TWON_ERROR_CODES_PRIVILEGE,
     CameraTransportInfo,
+    TwoNDeviceError,
     TwoNAuthenticationError,
     TwoNConnectionError,
     TwoNInsecureAuthRefusedError,
     TwoNIntercomAPI,
     coerce_bool,
+    feature_for_path,
 )
 from .const import (
     ACCESS_BUS_EVENT_TYPES,
@@ -77,6 +83,32 @@ def async_delete_basic_auth_issue(hass: HomeAssistant, entry_id: str) -> None:
     except ImportError:  # pragma: no cover - minimal HA test stubs
         return
     ir.async_delete_issue(hass, DOMAIN, f"basic_auth_refused_{entry_id}")
+
+
+# Privilege group, as named in the intercom's HTTP API account settings,
+# that each optional feature needs. Shown in the Repair issue.
+API_FEATURE_PRIVILEGES = {
+    "switch": "Switches - Monitoring",
+    "io": "I/O - Monitoring",
+    "camera": "Camera - Monitoring",
+    "directory": "System - Control",
+}
+
+
+def _api_privilege_issue_id(entry_id: str, feature: str) -> str:
+    return f"api_privilege_missing_{entry_id}_{feature}"
+
+
+def async_delete_api_privilege_issues(hass: HomeAssistant, entry_id: str) -> None:
+    """Remove an unloaded entry's missing-privilege Repair issues."""
+    try:
+        from homeassistant.helpers import issue_registry as ir
+    except ImportError:  # pragma: no cover - minimal HA test stubs
+        return
+    for feature in API_FEATURES:
+        ir.async_delete_issue(
+            hass, DOMAIN, _api_privilege_issue_id(entry_id, feature)
+        )
 
 
 @dataclass
@@ -252,6 +284,8 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         # runs at a time
         self._retry_count = 0
         self._auth_error_count = 0
+        # Features with an open missing-privilege Repair issue.
+        self._privilege_issue_features: set[str] = set()
         self._snapshot_cache: bytes | None = None
         self._snapshot_cache_time: datetime | None = None
         self._snapshot_cache_size: tuple[int | None, int | None] | None = None
@@ -1496,7 +1530,9 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             )
             # Switch caps follow config/capability events and log reconnects;
             # polling only retries an absent cache or a ten-minute safety net.
-            if (
+            switch_supported = not self._feature_not_supported("switch")
+            io_supported = not self._feature_not_supported("io")
+            if switch_supported and (
                 self._switch_caps is None
                 or self._switch_caps_refresh_time is None
                 or dt_util.utcnow() - self._switch_caps_refresh_time
@@ -1509,13 +1545,19 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
                     raise_on_insecure_auth=True,
                 )
             switch_caps = self._switch_caps or {}
-            switch_status = await self._refresh_secondary_cache(
-                "_switch_status",
-                "async_get_switch_status",
-                "switch status",
-                raise_on_insecure_auth=True,
+            # A feature the device answered "not supported" (code 1) for is
+            # not polled again; everything else keeps working.
+            switch_status = (
+                await self._refresh_secondary_cache(
+                    "_switch_status",
+                    "async_get_switch_status",
+                    "switch status",
+                    raise_on_insecure_auth=True,
+                )
+                if switch_supported and not self._feature_not_supported("switch")
+                else {}
             )
-            if self._io_caps is None:
+            if io_supported and self._io_caps is None:
                 await self._refresh_secondary_cache(
                     "_io_caps",
                     "async_get_io_caps",
@@ -1524,15 +1566,31 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
                     raise_on_insecure_auth=True,
                 )
             io_caps = self._io_caps or {}
-            io_status = await self._refresh_secondary_cache(
-                "_io_status",
-                "async_get_io_status",
-                "io status",
-                raise_on_insecure_auth=True,
+            io_status = (
+                await self._refresh_secondary_cache(
+                    "_io_status",
+                    "async_get_io_status",
+                    "io status",
+                    raise_on_insecure_auth=True,
+                )
+                if io_supported and not self._feature_not_supported("io")
+                else {}
             )
 
             # Get current call status
             call_status = await self.api.async_get_call_status()
+
+            self._async_sync_privilege_issues()
+            refused = self._essential_refusals()
+            if refused:
+                # Every essential call got a 2N error body: reporting success
+                # would show empty entities for a device that refuses us.
+                detail = "; ".join(
+                    f"{path}: {error.format()}" for path, error in refused.items()
+                )
+                raise UpdateFailed(
+                    f"Device refused every essential API call ({detail})"
+                )
 
             # Reset retry / auth-failure counters on successful update
             self._retry_count = 0
@@ -1617,10 +1675,73 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
                     f"Failed to connect after {MAX_RETRIES} retries"
                 ) from err
                 
+        except UpdateFailed:
+            # Raised above with a complete message; the base coordinator
+            # logs the failure once and again on recovery.
+            raise
+
         except Exception as err:
             # Generic API errors - mark entities unavailable but keep trying
             _LOGGER.warning("API error: %s", err)
             raise UpdateFailed(f"Error communicating with device: {err}") from err
+
+    def _device_errors(self) -> dict[str, TwoNDeviceError]:
+        """Return the API client's last refusal per path ({} when unknown)."""
+        errors = getattr(self.api, "device_errors", None)
+        return errors if isinstance(errors, dict) else {}
+
+    def _essential_refusals(self) -> dict[str, TwoNDeviceError]:
+        """Return the essential refusals when *all* essential calls are refused."""
+        errors = self._device_errors()
+        if all(path in errors for path in ESSENTIAL_API_PATHS):
+            return {path: errors[path] for path in ESSENTIAL_API_PATHS}
+        return {}
+
+    def _feature_not_supported(self, feature: str) -> bool:
+        """Return True when the device answered code 1 for an optional feature."""
+        return any(
+            error.code == TWON_ERROR_CODE_NOT_SUPPORTED
+            and feature_for_path(path) == feature
+            for path, error in self._device_errors().items()
+        )
+
+    def _async_sync_privilege_issues(self) -> None:
+        """Open or clear one Repair issue per feature refused for privileges."""
+        if self.config_entry is None:
+            return
+        try:
+            from homeassistant.helpers import issue_registry as ir
+        except ImportError:  # pragma: no cover - minimal HA test stubs
+            return
+        refused: dict[str, TwoNDeviceError] = {}
+        for path, error in self._device_errors().items():
+            feature = feature_for_path(path)
+            if feature is not None and error.code in TWON_ERROR_CODES_PRIVILEGE:
+                refused.setdefault(feature, error)
+
+        entry_id = self.config_entry.entry_id
+        for feature in API_FEATURES:
+            issue_id = _api_privilege_issue_id(entry_id, feature)
+            if feature in refused:
+                if feature in self._privilege_issue_features:
+                    continue
+                self._privilege_issue_features.add(feature)
+                ir.async_create_issue(
+                    self.hass,
+                    DOMAIN,
+                    issue_id,
+                    is_fixable=False,
+                    severity=ir.IssueSeverity.WARNING,
+                    translation_key="api_privilege_missing",
+                    translation_placeholders={
+                        "name": self.config_entry.title,
+                        "privilege": API_FEATURE_PRIVILEGES[feature],
+                        "error": refused[feature].format(),
+                    },
+                )
+            elif feature in self._privilege_issue_features:
+                self._privilege_issue_features.discard(feature)
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
     def _async_create_basic_auth_issue(self) -> None:
         """Warn existing installations about the blocked Basic fallback."""

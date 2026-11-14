@@ -81,6 +81,10 @@
     "basic_auth_refused": {
       "title": "Nezabezpečené ověření Basic pro {name} bylo zablokováno",
       "description": "Zařízení {name} požadovalo ověření HTTP Basic přes nešifrované HTTP nebo HTTPS s neověřeným certifikátem. Home Assistant odmítl odeslat obnovitelné přihlašovací údaje. Přepněte služby HTTP API zařízení na ověřování Digest nebo nainstalujte certifikát, kterému Home Assistant důvěřuje, a zapněte ověřování certifikátu přes Znovu nakonfigurovat. Pokud přijímáte riziko prozrazení API hesla, otevřete Nastavení > Zařízení a služby > 2N Intercom > Znovu nakonfigurovat > Povolit nezabezpečené připojení. Upozornění zmizí po úspěšné aktualizaci."
+    },
+    "api_privilege_missing": {
+      "title": "Účtu HTTP API pro {name} chybí oprávnění {privilege}",
+      "description": "Interkom odmítl požadavek z Home Assistantu ({error}). Entity, které na něm závisí, chybí nebo se neaktualizují. V interkomu otevřete Služby > HTTP API, zkontrolujte, že služba používá způsob ověření, který účet podporuje, a přidělte účtu oprávnění {privilege}. Toto upozornění zmizí po dalším úspěšném požadavku. Pokud váš model toto oprávnění nenabízí, můžete upozornění ignorovat."
     }
   },
   "options": {

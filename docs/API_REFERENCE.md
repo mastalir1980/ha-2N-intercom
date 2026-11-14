@@ -328,6 +328,19 @@ Zařízení má vlastní plánovač aktualizací. Konfigurace (cesty z UI a ze z
 - Probe: nešifrovaný `OPTIONS`, podle `401` se sestaví **Digest** hlavička
   (`_build_rtsp_digest_auth`, MD5 dle RFC 2069/2617) a ověří se `200 OK`.
 
+## Odmítnutá volání (2N chybové tělo, `success: false`)
+
+`api.py` si u každé cesty pamatuje poslední odmítnutí (`TwoNIntercomAPI.device_errors`);
+úspěšná odpověď záznam smaže. První odmítnutí se loguje jako WARNING, stejné odmítnutí
+při dalších pollech jen jako DEBUG. Koordinátor z toho po každém pollu vyvodí:
+
+| Situace | Chování |
+|---|---|
+| Odmítnuté `/api/phone/status` i `/api/call/status` (jakýkoli kód, typicky 7) | Refresh selže (`UpdateFailed`, entity nedostupné), zpráva obsahuje 2N chybu. `/api/system/info` se nepočítá: odpovídá i na zařízení, které odmítá vše ostatní |
+| Kód 8, 9 nebo 10 na volitelné funkci (`/api/switch/`, `/api/io/`, `/api/camera/`, `/api/dir/`) | Jedna Repair issue na funkci (`api_privilege_missing_<entry_id>_<funkce>`) s názvem chybějící skupiny oprávnění; zmizí po úspěšném volání nebo při unloadu |
+| Kód 1 na volitelné funkci | Funkce se tiše vypne (switch a io se přestanou pollovat), jeden řádek INFO, žádná Repair issue |
+| HTTP 401 | Beze změny: jen 401 počítá do reauth (tři neúspěšné polly) |
+
 ## Zvláštnosti firmwaru (zachytit při údržbě)
 
 - **Call-control = GET, ne POST.** POST bez `Content-Type` → `code 14
