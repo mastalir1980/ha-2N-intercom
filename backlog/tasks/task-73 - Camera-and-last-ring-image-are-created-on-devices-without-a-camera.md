@@ -1,15 +1,16 @@
 ---
 id: TASK-73
 title: Camera and last-ring image are created on devices without a camera
-status: In Progress
+status: To Test
 assignee:
   - '@claude'
 created_date: '2026-10-24T08:28:00Z'
-updated_date: '2026-11-13 19:34'
+updated_date: '2026-11-14 00:27'
 labels:
   - camera
   - compatibility
   - github-issue
+  - manual-close
 milestone: m-3
 dependencies: []
 references:
@@ -36,10 +37,10 @@ Open before ready (analysis): which signal reliably means "no camera" on fw 2.x 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A device that reports no camera gets no camera and no image entity, at setup and after restart [unit]
-- [ ] #2 A transient camera/caps failure (timeout, 5xx, auth) never removes or hides existing camera entities [unit]
-- [ ] #3 The setup and options flow do not offer camera settings on a device without a camera [unit]
-- [ ] #4 E2E: the E2E intercom (has a camera) still gets its camera and image entity and camera_proxy returns a JPEG [e2e]
+- [x] #1 A device that reports no camera gets no camera and no image entity, at setup and after restart [unit]
+- [x] #2 A transient camera/caps failure (timeout, 5xx, auth) never removes or hides existing camera entities [unit]
+- [x] #3 The setup and options flow do not offer camera settings on a device without a camera [unit]
+- [x] #4 E2E: the E2E intercom (has a camera) still gets its camera and image entity and camera_proxy returns a JPEG [e2e]
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -64,3 +65,14 @@ Must not change: dual auth, entry.data/options split, behaviour when detection i
 <!-- SECTION:NOTES:BEGIN -->
 2026-11-13 (Claude): implemented in worktree branch task-73-no-camera-entities-without-camera (not committed yet). api.py: camera_present + _camera_present_from_caps; coordinator.py: camera_present property, no ring snapshot when False; __init__.py: _get_platforms(entry, camera_present) and registry cleanup of <entry>_camera / <entry>_last_ring; config_flow.py: _async_camera_present for the setup form, options flow reads the coordinator. Unit tests: test_api (camera_present_*, camera_absent_*, camera_presence_*), test_init (test_get_platforms_skips_camera_only_when_device_has_none, test_device_without_camera_gets_no_camera_or_image_entity, test_unknown_camera_presence_keeps_camera_entities), test_config_flow (test_device_step_offers_camera_unless_device_has_none, test_device_without_camera_gets_no_camera_settings, test_camera_settings_stay_when_presence_is_unknown), test_coordinator (test_ring_on_device_without_camera_captures_no_snapshot). E2E: test_camera_entities_follow_device_camera in e2e/tests/test_10_entities.py (+ TwoN.camera_caps). Local run: 833 unit tests green except test_blueprint (jinja2 missing in the local Python, unrelated), validate.py green. E2E not run yet. Open: confirm with the issue #105 reporter what camera/caps answers on a camera-less device.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+A device that gives a definitive 'no camera' answer to GET /api/camera/caps (2N code 1, or success without resolutions and sources) gets no camera and no last-ring image entity, stale registry entries are removed and the setup and options flow hide the camera settings. A failed request changes nothing. PR: https://github.com/mastalir1980/ha-2N-intercom/pull/123. Checks green on 29ed316: e2e-pi=pass (24 passed, 0 failed, 1 skipped; the skip is the same as on main), validate=pass. Jan ran the stacked branch on his production intercom (has a camera) on 2026-11-14 with no regression.
+AC #1: proven. test_init.test_device_without_camera_gets_no_camera_or_image_entity sets the entry up twice (setup + restart) and asserts camera/image are not forwarded and this entry's stale registry entries are removed; test_get_platforms_skips_camera_only_when_device_has_none; test_api.test_camera_absent_on_definitive_camera_caps_answers.
+AC #2: proven. test_api.test_camera_presence_survives_transient_failures (timeout, HTTP 5xx, 401) and test_camera_presence_stays_unknown_when_caps_are_refused (codes 8, 10, 12, malformed bodies); test_init.test_unknown_camera_presence_keeps_camera_entities asserts both platforms are forwarded and registry.async_remove is never called.
+AC #3: proven. test_config_flow.test_device_step_offers_camera_unless_device_has_none (setup form) and test_device_without_camera_gets_no_camera_settings (options flow: no toggle, no camera step, saved choice kept); test_camera_settings_stay_when_presence_is_unknown.
+AC #4: proven. e2e-pi on the PR: test_camera_entities_follow_device_camera (new) and test_camera_snapshot_is_jpeg passed on the E2E intercom.
+Kept in To Test (manual-close): no camera-less device was available. What /api/camera/caps answers on the device from issue #105 must be confirmed by the reporter before the task is Done.
+<!-- SECTION:FINAL_SUMMARY:END -->
