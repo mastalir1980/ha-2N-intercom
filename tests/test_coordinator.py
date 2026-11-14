@@ -501,6 +501,19 @@ class CallRingDetectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(coordinator.data.ring_snapshot, b"ring-jpeg")
         self.assertEqual(coordinator.active_session_id, "42")
 
+    async def test_ring_on_device_without_camera_captures_no_snapshot(self) -> None:
+        coordinator, tasks, api = self._make_coordinator()
+        api.camera_present = False
+
+        self.assertTrue(coordinator._process_log_event({
+            "event": "CallStateChanged",
+            "params": {"state": "ringing", "direction": "outgoing", "session": 42},
+        }))
+
+        self.assertTrue(coordinator.ring_active)
+        self.assertEqual(tasks, [])
+        api.async_get_snapshot.assert_not_awaited()
+
     async def test_ring_count_deduplicates_call_pair_and_increases_for_next_ring(self) -> None:
         coordinator, tasks, _api = self._make_coordinator()
         self.assertEqual(coordinator.ring_count, 0)
@@ -2233,6 +2246,140 @@ class AsyncUpdateDataErrorTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(c._ring_detected)
         self.assertEqual(c._last_call_state_value, "idle")
         self.assertEqual(c.ring_count, 0)
+
+
+class DeviceRefusalTests(unittest.IsolatedAsyncioTestCase):
+    """A device that answers 2N error bodies must not look healthy (TASK-12)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.coordinator_module = load_coordinator_module()
+        cls.UpdateFailed = sys.modules[
+            "homeassistant.helpers.update_coordinator"
+        ].UpdateFailed
+
+    def _error(self, code: int, description: str = "refused"):
+        return self.coordinator_module.TwoNDeviceError(
+            code=code, description=description, param=None
+        )
+
+    def _make(self, device_errors: dict):
+        """Coordinator over an API whose calls all answer empty (as refused ones do)."""
+        api = types.SimpleNamespace(device_errors=device_errors)
+        for method in (
+            "async_get_system_info", "async_get_call_status",
+            "async_get_phone_status", "async_get_switch_caps",
+            "async_get_switch_status", "async_get_io_caps",
+            "async_get_io_status", "async_reset_session",
+        ):
+            setattr(api, method, AsyncMock(return_value={}))
+        entry = types.SimpleNamespace(entry_id="entry-1", title="Front door", options={})
+        hass = types.SimpleNamespace()
+        coordinator = self.coordinator_module.TwoNIntercomCoordinator(
+            hass, api, config_entry=entry
+        )
+        return coordinator, api, hass
+
+    async def test_refresh_fails_when_every_essential_call_is_refused(self) -> None:
+        errors = {
+            "/api/phone/status": self._error(7, "invalid connection type"),
+            "/api/call/status": self._error(7, "invalid connection type"),
+        }
+        coordinator, _api, _hass = self._make(errors)
+
+        with self.assertNoLogs(self.coordinator_module._LOGGER, level="WARNING"):
+            with self.assertRaises(self.UpdateFailed) as raised:
+                await coordinator._async_update_data()
+        message = str(raised.exception)
+        self.assertIn("/api/call/status", message)
+        self.assertIn("code=7", message)
+        self.assertIn("invalid connection type", message)
+
+        # One essential call answering again is enough to report data.
+        del errors["/api/call/status"]
+        data = await coordinator._async_update_data()
+        self.assertTrue(data.available)
+
+    async def test_refused_optional_calls_alone_do_not_fail_the_refresh(self) -> None:
+        coordinator, _api, _hass = self._make({
+            "/api/switch/caps": self._error(10),
+            "/api/switch/status": self._error(10),
+            "/api/io/caps": self._error(1),
+            "/api/system/caps": self._error(10),
+        })
+        data = await coordinator._async_update_data()
+        self.assertTrue(data.available)
+
+    async def test_privilege_refusal_opens_one_repair_issue_and_clears_it(self) -> None:
+        cases = (
+            ("switch", "/api/switch/status", "Switches - Monitoring"),
+            ("io", "/api/io/status", "I/O - Monitoring"),
+            ("camera", "/api/camera/snapshot", "Camera - Monitoring"),
+            ("directory", "/api/dir/query", "System - Control"),
+        )
+        registry = sys.modules["homeassistant.helpers.issue_registry"]
+        for code in (8, 9, 10):
+            for feature, path, privilege in cases:
+                with self.subTest(code=code, feature=feature):
+                    errors = {path: self._error(code, "insufficient privileges")}
+                    coordinator, _api, hass = self._make(errors)
+                    key = ("2n_intercom", f"api_privilege_missing_entry-1_{feature}")
+
+                    with patch.object(
+                        registry, "async_create_issue",
+                        wraps=registry.async_create_issue,
+                    ) as create:
+                        for _poll in range(3):
+                            await coordinator._async_update_data()
+                    self.assertEqual(create.call_count, 1)
+                    self.assertEqual(hass._test_issues, {key: {
+                        "is_fixable": False,
+                        "severity": "warning",
+                        "translation_key": "api_privilege_missing",
+                        "translation_placeholders": {
+                            "name": "Front door",
+                            "privilege": privilege,
+                            "error": f"code={code} description='insufficient privileges'",
+                        },
+                    }})
+
+                    errors.clear()  # the call succeeded
+                    await coordinator._async_update_data()
+                    self.assertEqual(hass._test_issues, {})
+
+    async def test_two_refused_paths_of_one_feature_share_one_issue(self) -> None:
+        coordinator, _api, hass = self._make({
+            "/api/switch/caps": self._error(10),
+            "/api/switch/status": self._error(10),
+        })
+        await coordinator._async_update_data()
+        self.assertEqual(
+            set(hass._test_issues),
+            {("2n_intercom", "api_privilege_missing_entry-1_switch")},
+        )
+
+    async def test_not_supported_feature_is_switched_off_without_issue(self) -> None:
+        """Code 1 on io stops io polling only: no Repair issue, no warning."""
+        coordinator, api, hass = self._make({"/api/io/caps": self._error(1)})
+
+        with self.assertNoLogs(self.coordinator_module._LOGGER, level="WARNING"):
+            for _poll in range(2):
+                data = await coordinator._async_update_data()
+
+        api.async_get_io_caps.assert_not_awaited()
+        api.async_get_io_status.assert_not_awaited()
+        self.assertEqual(api.async_get_switch_status.await_count, 2)
+        self.assertEqual(api.async_get_phone_status.await_count, 2)
+        self.assertEqual(data.io_status, {})
+        self.assertTrue(data.available)
+        self.assertEqual(getattr(hass, "_test_issues", {}), {})
+
+    async def test_api_without_refusal_tracking_behaves_as_before(self) -> None:
+        coordinator, api, hass = self._make({})
+        del api.device_errors
+        data = await coordinator._async_update_data()
+        self.assertTrue(data.available)
+        self.assertEqual(getattr(hass, "_test_issues", {}), {})
 
 
 class PropertyTests(unittest.IsolatedAsyncioTestCase):

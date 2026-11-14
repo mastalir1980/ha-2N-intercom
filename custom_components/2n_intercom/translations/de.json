@@ -81,6 +81,10 @@
     "basic_auth_refused": {
       "title": "Unsichere Basic-Authentifizierung für {name} blockiert",
       "description": "Das Gerät für {name} hat HTTP-Basic-Authentifizierung über unverschlüsseltes HTTP oder HTTPS mit ungeprüftem Zertifikat angefordert. Home Assistant hat das Senden umkehrbar kodierter Zugangsdaten verweigert. Stellen Sie die HTTP-API-Dienste des Geräts auf Digest um oder installieren Sie ein Zertifikat, dem Home Assistant vertraut, und aktivieren Sie die Zertifikatsprüfung unter Neu konfigurieren. Wenn Sie das Risiko einer Offenlegung des API-Passworts akzeptieren, öffnen Sie Einstellungen > Geräte & Dienste > 2N Intercom > Neu konfigurieren > Unsichere Verbindung zulassen. Die Warnung verschwindet nach einer erfolgreichen Aktualisierung."
+    },
+    "api_privilege_missing": {
+      "title": "Dem HTTP-API-Konto für {name} fehlt die Berechtigung {privilege}",
+      "description": "Die Sprechanlage hat eine Anfrage von Home Assistant abgelehnt ({error}). Die davon abhängigen Entitäten fehlen oder werden nicht aktualisiert. Öffne an der Sprechanlage Services > HTTP API, prüfe, ob der Dienst eine vom Konto unterstützte Authentifizierungsmethode verwendet, und erteile dem Konto die Berechtigung {privilege}. Diese Warnung wird nach der nächsten erfolgreichen Anfrage entfernt. Wenn dein Modell diese Berechtigung nicht anbietet, kannst du die Warnung ignorieren."
     }
   },
   "options": {
