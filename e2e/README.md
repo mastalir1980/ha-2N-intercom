@@ -26,7 +26,10 @@ Agent smí jen číst soubory a volat `backlog` + read-only `git`. Kód neupravu
 
 ## Jednorázové nastavení
 
-1. `e2e/e2e.sh setup` — venv, Backlog.md CLI, vytvoří `e2e/.env`.
+1. `e2e/e2e.sh setup` — venv (závislosti E2E z `e2e/requirements.txt` i unit testů z
+   `tests/requirements.txt`, protože pipeline pouští unit testy stejným venv), Backlog.md CLI,
+   vytvoří `e2e/.env`. Když ve venv závislost unit testů chybí, fáze `unit` skončí hláškou se
+   jménem souboru a příkazem k instalaci; stačí znovu pustit `e2e/e2e.sh setup`.
 2. Vyplň `e2e/.env`: `PI_SSH` (funkční `ssh` bez hesla, klíč), IP a účet interkomu, čísla relé
    pro ruční test. Na interkomu použij **vlastní HTTP API účet** (např. `e2e`, *Services → HTTP API →
    Accounts*), ne admin účet webu. Potřebná práva:
