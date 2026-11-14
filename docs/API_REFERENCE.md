@@ -31,7 +31,7 @@ Basic**, pokud zařízení vrátí `401` s `WWW-Authenticate: Basic`.
 | `/api/io/caps` | GET | `async_get_io_caps` | physical ports; one binary sensor per input also present in io/status, including module and tamper ports |
 | `/api/io/status` | GET | `async_get_io_status` | cached input/output states, patched by InputChanged/OutputChanged events |
 | `/api/io/ctrl` | GET | `async_io_control` | `port`, `action=on\|off`; latching output control, requires I/O control privilege and bypasses logical-switch timing |
-| `/api/camera/caps` | GET | `async_get_camera_caps` | rozlišení JPEG, zdroje (internal/external) |
+| `/api/camera/caps` | GET | `async_get_camera_caps` | rozlišení JPEG, zdroje (internal/external); zároveň detekce kamery: chyba `code 1` nebo úspěch bez rozlišení a zdrojů = zařízení nemá kameru (žádná entita `camera`/`image`, žádné nastavení kamery ve flow). Timeout, HTTP chyba nebo jiný 2N kód = neznámo, nic se nemění |
 | `/api/camera/snapshot` | GET | `async_get_snapshot` / MJPEG | `source`, `width`, `height`, (`fps` for MJPEG); snapshot sizes map to supported JPEG resolutions from `camera/caps` |
 | `/api/log/caps` | GET | `async_get_log_caps` | `events` = supported events; filters every subscribed event when non-empty |
 | `/api/log/subscribe` | GET | `async_subscribe_log` | `filter` = seznam událostí → vrací `id` |

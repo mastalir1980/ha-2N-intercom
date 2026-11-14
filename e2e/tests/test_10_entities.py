@@ -34,6 +34,23 @@ def test_camera_snapshot_is_jpeg(ha, entry, registry):
     assert len(r.content) > 5_000, f"snapshot suspiciously small ({len(r.content)} B)"
 
 
+def test_camera_entities_follow_device_camera(entry, registry, twon):
+    """HA has a camera and a last-ring image <-> 2N camera/caps lists a camera."""
+    options = entry.get("options") or {}
+    if not options.get("enable_camera", (entry.get("data") or {}).get("enable_camera", True)):
+        pytest.skip("camera is switched off in the entry options")
+    caps = twon.camera_caps()
+    device_has_camera = bool(caps.get("jpegResolution") or caps.get("sources"))
+    camera = find_by_suffix(registry, entry["entry_id"], "camera")
+    image = find_by_suffix(registry, entry["entry_id"], "last_ring")
+    assert (camera is not None) == device_has_camera, (
+        f"camera entity present={camera is not None}, device camera={device_has_camera}"
+    )
+    assert (image is not None) == device_has_camera, (
+        f"last-ring image present={image is not None}, device camera={device_has_camera}"
+    )
+
+
 def test_camera_stream_contains_jpeg_frames(ha, entry, registry):
     cam = find_by_suffix(registry, entry["entry_id"], "camera")
     if cam is None or cam.get("disabled_by"):
