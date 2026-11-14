@@ -370,6 +370,57 @@ Enable **Camera** and **Doorbell** in the 2N integration. Add **HomeKit Bridge**
 
 If the camera was already paired as an ordinary camera, remove that old pairing and recreate the accessory so Apple Home discovers the video doorbell. Do not expose the same camera through multiple bridges. Explicit YAML `linked_doorbell_sensor` targeting the event entity is still available as a fallback; see [HomeKit Integration](HOMEKIT_INTEGRATION.md).
 
+### Two-way audio via SIP (optional)
+
+This integration does not handle audio, but you can talk to the intercom from a Home Assistant dashboard over SIP, the same way the intercom talks to any SIP phone. It uses two community projects and the intercom's spare SIP account, with no changes to this integration:
+
+- [Asterisk add-on](https://github.com/TECH7Fox/asterisk-hass-addons): a SIP server inside Home Assistant that also creates an extension for every HA person
+- [SIP Core](https://github.com/TECH7Fox/sipcore-hass-integration) (HACS): a browser SIP client with a call popup and a contacts card
+
+Setup outline:
+
+1. Install the Asterisk add-on and add an extension for the intercom in its `custom/pjsip_custom.conf` (in the add-on's config folder). Edit that file rather than the add-on's web UI, which can lose devices and mangle special characters in passwords:
+
+   ```ini
+   [200]
+   type=endpoint
+   context=default
+   disallow=all
+   allow=g722,ulaw,alaw
+   direct_media=no
+   rtp_symmetric=yes
+   force_rport=yes
+   rewrite_contact=yes
+   aors=200
+   auth=200
+   callerid="Front Door" <200>
+
+   [200]
+   type=auth
+   auth_type=userpass
+   username=200
+   password=<a long random password>
+
+   [200]
+   type=aor
+   max_contacts=1
+   remove_existing=yes
+   qualify_frequency=60
+   ```
+
+   Restart the add-on after editing.
+2. On the intercom, configure the unused SIP account (usually **SIP 2**; leave SIP 1 alone if it is used by Control4 or another system): phone number and authentication ID `200`, the password from step 1, and Home Assistant's IP as domain, proxy and registrar (port 5060). Its registration state should change to **REGISTERED**.
+3. Still on the intercom, set **Calling > Call Answering Mode (SIP2)** to **Automatic**. The default **Always Busy** answers every incoming call with busy, so calls from Home Assistant fail right after ringing.
+4. Install SIP Core and configure it under **Settings > Devices & services > SIP Core > Configure**. In `users:`, `ha_username` must exactly match the HA user's **ID** or **display name** (not the login username), and `extension` is that person's Asterisk extension. To show the intercom camera in the call popup, map the extension under `popup_config.extensions` to the camera entity from this integration.
+5. Add a `custom:sip-contacts-card` with the intercom's extension to a dashboard and tap it to call.
+
+Things to know:
+
+- The dashboard must be opened over **HTTPS**. Browsers only allow microphone access on secure pages, so a plain `http://` URL (including the Companion app's internal URL) will not work.
+- Call setup is fast: in testing, the intercom answered and the audio was bridged within the same second, and audio started in about a second, also through a Cloudflare tunnel. Two-way audio over mobile data worked with SIP Core's default STUN server; some networks may need a TURN server.
+- In the Companion app, SIP Core stays connected while the app is in the background. Browser tabs may disconnect when suspended and need a reload. Ringing a locked phone is not supported.
+- Routing a real button press to Home Assistant means changing the intercom's directory or call settings, which can change how calls reach other systems such as Control4. That is not covered here.
+
 ### IO input sensors
 
 Every port with type `input` in `/api/io/caps` and present in `/api/io/status`
@@ -650,7 +701,7 @@ The integration uses two data channels:
 
 ## Known Limitations
 
-- **No two-way audio** — the HA camera platform does not support bi-directional audio; the doorbell ring triggers notifications but audio is device-side only
+- **No two-way audio in the integration** — Home Assistant 2026.11 added two-way audio for cameras, but it sends audio back over the RTSP stream (ONVIF backchannel), and a DS2 Mini on firmware 2.43 rejects that (`551 Option not supported`; firmware 3.x not tested yet). Two-way talk works today over SIP without this integration, see [Two-way audio via SIP](#two-way-audio-via-sip-optional)
 - **RTSP requires a separate license** — the 2N RTSP server is a paid feature; without it, only MJPEG streaming is available
 - **RTSP credentials are independent** — the RTSP server has its own user database; HTTP API credentials do not work for RTSP
 - **No gate position feedback** — the IP Verso has no gate-position sensor; cover entities use optimistic state transitions
