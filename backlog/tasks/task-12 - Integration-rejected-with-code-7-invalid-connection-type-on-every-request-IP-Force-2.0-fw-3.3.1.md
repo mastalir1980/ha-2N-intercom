@@ -3,16 +3,16 @@ id: TASK-12
 title: >-
   Device rejects API calls (codes 7, 10, 12) but the integration reports success
   with empty entities
-status: To Do
-assignee: []
-created_date: 2026-10-11 16:04
-updated_date: '2026-10-24T08:28:00Z'
+status: In Progress
+assignee:
+  - '@claude'
+created_date: '2026-10-11 16:04'
+updated_date: '2026-11-13 19:41'
 labels:
   - e2e
   - api
   - repairs
-  - needs-analysis
-milestone: m-1
+milestone: m-3
 dependencies: []
 priority: high
 type: bug
@@ -42,6 +42,23 @@ Open before ready (analysis): mapping of 2N codes to user messages (7, 8-10 priv
 - [ ] #5 E2E: with the read-only E2E account no Repair issue is open and all entities are available (HA says X <-> 2N API says X) [e2e]
 <!-- AC:END -->
 
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Decisions (analysis 2026-11-13):
+- Essential calls: /api/system/info, /api/phone/status, /api/call/status. Optional features by path prefix: switch (/api/switch/), io (/api/io/), camera (/api/camera/), directory (/api/dir/). /api/system/caps and /api/log/* are neither (they degrade as today).
+- Code mapping: 8, 9, 10 on an optional feature = missing privilege -> Repair issue. Code 1 on an optional feature = not on this model -> feature switched off quietly. Code 7 and everything else only matter through the essential rule (refresh fails with the device error in the message).
+- Reauth path is unchanged: only HTTP 401 counts as an auth failure. A 2N error body never triggers reauth.
+
+Steps:
+1. api.py: the client remembers the last 2N refusal per path (device_errors); a success on the path clears it. A repeated identical refusal is logged at DEBUG, the first at WARNING (code 1 on an optional feature at INFO).
+2. coordinator.py: after a poll, raise UpdateFailed when all three essential paths are refused; create/delete one Repair issue per feature (api_privilege_missing_<entry_id>_<feature>, privilege group as placeholder); skip switch and io polling when the feature answered code 1.
+3. __init__.py: delete the issues on unload.
+4. strings.json + en/de/cs: issues.api_privilege_missing.
+5. Unit tests in tests/test_api.py, test_coordinator.py, test_init.py. E2E: no open Repair issue of the integration, all entities available.
+Must not change: dual auth, event-driven ring detection, the basic_auth_refused issue, behaviour of fake/legacy API objects without device_errors.
+<!-- SECTION:PLAN:END -->
+
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
@@ -52,4 +69,6 @@ Recurred 2026-10-11 (report 20261011-180751), sha ade47bc, HA 2026.9.0, device E
 Recurred 2026-10-11 (report 20261011-201113), sha ade47bc-dirty, HA 2026.9.0, device E2E intercom fw 3.x. NEW DATA POINT: this run deployed the WORKTREE (ref=worktree, ade47bc-dirty) so the security/secure-by-default-connection changes WERE live (previous two occurrences deployed committed ade47bc without them) — code 7 still occurs on every request, so the secure-by-default branch does not resolve this. Failed: test_device_accepts_integration_requests (code=7 'invalid connection type' on phone/switch/io/call status, log/subscribe, system/switch/io caps) and test_camera_snapshot_is_jpeg (camera_proxy -> 500; container log camera/snapshot rejected code=7). ha_system_log count=36 WARNING at api.py:145. system/info still succeeds (device_registry test passed).
 
 2026-10-11 verification: with the working-tree secure-by-default changes (TASK-1, not yet committed) + reset-entry + new API account, report e2e/reports/20261011-201937 is green: test_device_accepts_integration_requests and test_camera_snapshot_is_jpeg pass, zero 'rejected by device' warnings. => code-7 part is fixed by TASK-1 once merged. Still open here: the silent-failure part (AC #2) — coordinator reports success while the device rejects every call.
+
+2026-11-13 (Claude): implemented in worktree branch task-12-visible-device-rejections, stacked on the TASK-73 branch (local commit, not pushed). Change against the plan: the essential calls are /api/phone/status and /api/call/status only. /api/system/info is left out because in the original report (2026-10-11, code 7) it kept answering while everything else was refused, so 'all three refused' would not have caught that case. api.py: device_errors, _record_device_result, feature_for_path, ESSENTIAL_API_PATHS, TWON_ERROR_CODES_PRIVILEGE. coordinator.py: _essential_refusals, _feature_not_supported, _async_sync_privilege_issues, async_delete_api_privilege_issues. Translations: issues.api_privilege_missing in strings.json + en/de/cs. Unit tests: test_coordinator.DeviceRefusalTests (6 tests), test_api (test_refusals_are_remembered_per_path_and_cleared_on_success, test_repeated_refusal_is_logged_as_warning_only_once, test_not_supported_optional_feature_never_logs_a_warning, test_feature_for_path_groups_optional_endpoints), test_init.test_unload_removes_this_entrys_privilege_repairs, test_translations.test_missing_privilege_repair_is_translated. E2E: test_no_repair_issue_when_device_accepts_all_calls in e2e/tests/test_10_entities.py (+ HA.repair_issues). Local run: 845 unit tests green except test_blueprint (jinja2 missing in the local Python, unrelated), validate.py green, mypy not run (not installed locally). Not covered: code 7 gets no Repair issue of its own (it surfaces through the failed refresh and its message); a Repair issue for a privilege the model cannot grant (e.g. Switches on the device from issue #105) stays open until the user ignores it.
 <!-- SECTION:NOTES:END -->
