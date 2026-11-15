@@ -1293,6 +1293,23 @@ class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(entities), 3)
                 hass.entity_registry.async_remove.assert_not_called()
 
+    async def test_get_platforms_adds_media_player_only_with_rtsp_credentials(self) -> None:
+        """The speaker platform needs the complete RTSP credential pair."""
+        init_module = self.init_module
+
+        for options, expected in (
+            ({}, False),
+            ({"rtsp_username": "rtspuser"}, False),
+            ({"rtsp_password": "rtsp-pass"}, False),
+            ({"rtsp_username": "", "rtsp_password": "rtsp-pass"}, False),
+            ({"rtsp_username": "rtspuser", "rtsp_password": "rtsp-pass"}, True),
+        ):
+            with self.subTest(options=sorted(options)):
+                entry = FakeConfigEntry("entry-1", {}, options=options)
+                platforms = init_module._get_platforms(entry)
+                self.assertEqual("media_player" in platforms, expected)
+                self.assertLessEqual(platforms.count("media_player"), 1)
+
     async def test_get_platforms_always_includes_switch(self) -> None:
         """Switch platform is always included for auto-detection."""
         init_module = self.init_module

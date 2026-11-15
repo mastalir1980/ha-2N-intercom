@@ -1,6 +1,7 @@
 {
   "domain": "2n_intercom",
   "name": "2N Intercom",
+  "after_dependencies": ["ffmpeg", "media_source"],
   "codeowners": ["@mastalir1980", "@savek-cc"],
   "config_flow": true,
   "documentation": "https://github.com/savek-cc/ha-2N-intercom",

@@ -258,6 +258,11 @@
       "last_ring": {
         "name": "Poslední zazvonění"
       }
+    },
+    "media_player": {
+      "speaker": {
+        "name": "Reproduktor"
+      }
     }
   },
   "exceptions": {
@@ -311,6 +316,21 @@
     },
     "grant_access_failed": {
       "message": "Udělení přístupu na přístupovém bodu {access_point} selhalo: {error}"
+    },
+    "speaker_auth_failed": {
+      "message": "Interkom odmítl přihlašovací údaje RTSP. Zkontrolujte uživatelské jméno a heslo RTSP v nastavení integrace."
+    },
+    "speaker_backchannel_unsupported": {
+      "message": "Interkom ve svém RTSP streamu nenabízí zpětný zvukový kanál."
+    },
+    "speaker_connection_failed": {
+      "message": "Nepodařilo se otevřít zvukovou relaci RTSP s interkomem."
+    },
+    "speaker_media_failed": {
+      "message": "Médium se nepodařilo dekódovat na zvuk."
+    },
+    "speaker_invalid_media": {
+      "message": "Na interkomu lze přehrát jen média z adres http nebo https a ze zdrojů médií."
     }
   },
   "services": {

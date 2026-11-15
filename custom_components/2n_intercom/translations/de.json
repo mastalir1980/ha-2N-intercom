@@ -258,6 +258,11 @@
       "last_ring": {
         "name": "Letztes Klingeln"
       }
+    },
+    "media_player": {
+      "speaker": {
+        "name": "Lautsprecher"
+      }
     }
   },
   "exceptions": {
@@ -311,6 +316,21 @@
     },
     "grant_access_failed": {
       "message": "Zutrittsfreigabe am Zugangspunkt {access_point} fehlgeschlagen: {error}"
+    },
+    "speaker_auth_failed": {
+      "message": "Die Sprechanlage hat die RTSP-Zugangsdaten abgelehnt. Prüfe RTSP-Benutzername und -Passwort in den Optionen der Integration."
+    },
+    "speaker_backchannel_unsupported": {
+      "message": "Die Sprechanlage bietet in ihrem RTSP-Stream keinen Audio-Rückkanal an."
+    },
+    "speaker_connection_failed": {
+      "message": "Die RTSP-Audiositzung zur Sprechanlage konnte nicht geöffnet werden."
+    },
+    "speaker_media_failed": {
+      "message": "Das Medium konnte nicht zu Audio dekodiert werden."
+    },
+    "speaker_invalid_media": {
+      "message": "Auf der Sprechanlage können nur Medien von http- oder https-URLs und aus Medienquellen abgespielt werden."
     }
   },
   "services": {

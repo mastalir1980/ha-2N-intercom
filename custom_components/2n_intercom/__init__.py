@@ -118,6 +118,13 @@ def _get_platforms(
     platforms.append("sensor")
     platforms.append("update")
 
+    # Speaker over the RTSP audio backchannel: needs the RTSP credential
+    # pair; the platform itself checks that the device offers the track.
+    if _get_option(entry, CONF_RTSP_USERNAME) and _get_option(
+        entry, CONF_RTSP_PASSWORD
+    ):
+        platforms.append("media_player")
+
     return platforms
 
 

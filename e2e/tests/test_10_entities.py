@@ -10,6 +10,10 @@ import pytest
 from conftest import find_by_suffix
 
 
+from conftest import CFG  # noqa: E402
+from e2elib import rtsp  # noqa: E402
+
+
 def enabled(registry):
     return [e for e in registry if not e.get("disabled_by")]
 
@@ -264,3 +268,38 @@ def test_io_input_entities_match_device(ha, registry, entry, twon):
         expected = "on" if _io_port_on(device[port]) else "off"
         state = ha.state(ent["entity_id"])["state"]
         assert state == expected, f"IO input {port}: HA={state} device={expected}"
+
+
+def test_speaker_matches_rtsp_backchannel(ha, entry, registry):
+    """HA has the speaker entity <-> the intercom's RTSP DESCRIBE offers a backchannel.
+
+    Read-only: one DESCRIBE, no RTSP session, no sound on the intercom.
+    """
+    user, password = CFG.get("E2E_RTSP_USER"), CFG.get("E2E_RTSP_PASSWORD")
+    if not user or not password:
+        pytest.skip("E2E_RTSP_USER / E2E_RTSP_PASSWORD not set")
+    cam = find_by_suffix(registry, entry["entry_id"], "camera")
+    if cam is None or cam.get("disabled_by"):
+        pytest.skip("camera entity not enabled")
+    if not ha.state(cam["entity_id"])["attributes"].get("rtsp_available"):
+        pytest.skip("the staging entry has no working RTSP credentials (options flow)")
+
+    host = CFG["INTERCOM_HOST"].split(":")[0]
+    answers: dict[str, int] = {}
+    codecs: list[str] = []
+    for path in rtsp.PATHS:
+        status, sdp = rtsp.describe(
+            host, user, password, port=int(CFG.get("E2E_RTSP_PORT") or 554), path=path
+        )
+        answers[path.split("?")[0]] = status
+        codecs = rtsp.backchannel_codecs(sdp) if status == 200 else []
+        if codecs:
+            break
+
+    speaker = find_by_suffix(registry, entry["entry_id"], "speaker")
+    assert (speaker is not None) == bool(codecs), (
+        f"speaker entity {'exists' if speaker else 'missing'}, "
+        f"RTSP DESCRIBE -> {answers}, backchannel codecs {codecs}"
+    )
+    if speaker and not speaker.get("disabled_by"):
+        assert ha.state(speaker["entity_id"])["state"] == "idle"

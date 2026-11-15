@@ -328,6 +328,47 @@ Zařízení má vlastní plánovač aktualizací. Konfigurace (cesty z UI a ze z
 - Probe: nešifrovaný `OPTIONS`, podle `401` se sestaví **Digest** hlavička
   (`_build_rtsp_digest_auth`, MD5 dle RFC 2069/2617) a ověří se `200 OK`.
 
+### RTSP audio backchannel (reproduktor)
+
+Entita `media_player` (speaker) posílá zvuk do interkomu zpětným zvukovým
+kanálem RTSP serveru podle ONVIF Streaming Specification, kapitola
+„Audio backchannel". Klient je v `backchannel.py`, bez závislosti na HA.
+
+- Každý požadavek nese `Require: www.onvif.org/ver20/backchannel`. Bez něj
+  server zpětný kanál v SDP neuvede.
+- **URL (ověřeno na E2E interkomu, fw 3.x):** klasické cesty `/h264_stream`,
+  `/mjpeg_stream` a `/h265_stream` na tuto hlavičku odpoví
+  `551 Option not supported`. Zpětný kanál nabízí jen ONVIF media URL
+  `rtsp://<host>/onvif/media?transport=unicast&profile=profile_h264_hq`
+  (z Media2 `GetStreamUri`): `200 OK`, v SDP navíc `m=audio 0 RTP/AVP 0`,
+  `PCMU/8000`, `a=sendonly`, control `…/onvif/media/audioback`. `SETUP`
+  (RTP po TCP, interleaved), `PLAY` i `TEARDOWN` vrátily `200` a zařízení
+  přijalo 2 s PCMU. V ONVIF profilu nebylo potřeba nic nastavovat.
+  Integrace proto zkouší nejdřív ONVIF URL a `/h264_stream` až jako zálohu
+  (`get_rtsp_backchannel_endpoint`). Název profilu `profile_h264_hq` je
+  napevno; na jiných modelech a na fw 2.x neověřeno (na jednom zařízení
+  s fw 2.43 vrací `/h264_stream` také `551`, ONVIF URL tam nikdo nezkoušel).
+- `DESCRIBE` → SDP; zpětný kanál je sekce `m=audio` s atributem `a=sendonly`.
+  Klient bere první payload type s kodekem **PCMU nebo PCMA / 8000 Hz**
+  (statické PT 0 a 8, nebo dynamické přes `a=rtpmap`). `a=control` se
+  vyhodnotí proti `Content-Base`.
+- `SETUP <control>` s `Transport: RTP/AVP/TCP;unicast;interleaved=0-1`,
+  z odpovědi se bere `Session` (včetně `timeout`) a číslo interleaved kanálu.
+- `PLAY`, pak RTP pakety po 20 ms (160 bajtů G.711) vložené do RTSP spojení
+  (`$` + kanál + délka). První paket má marker bit, timestamp roste o 160.
+  Tempo určuje klient (reálný čas), za konec se přidá 200 ms ticha.
+- Keep-alive `GET_PARAMETER` každou polovinu `timeout`; na konci `TEARDOWN`
+  (na odpověď se nečeká).
+- Autentizace: jen **Digest (MD5)** s RTSP účtem, `nc` roste s každým
+  požadavkem. Basic se po nešifrovaném RTSP neposílá. Heslo se nikdy
+  nedostane do URL, logu ani textu výjimky.
+- Chyby: `401` po autentizaci → `auth`; `404/415/461/551` nebo SDP bez
+  použitelného tracku → `unsupported`; síť/timeout/jiný status → `connection`.
+- Limit 4 souběžných RTSP streamů podle manuálu 2N zahrnuje i zpětný kanál.
+- **Neověřeno:** klient integrace sám proti zařízení neběžel (handshake výše
+  byl ověřen ručně, kód jen proti simulovanému RTSP serveru v unit testech),
+  slyšitelnost zvuku na reproduktoru a chování při probíhajícím hovoru.
+
 ## Odmítnutá volání (2N chybové tělo, `success: false`)
 
 `api.py` si u každé cesty pamatuje poslední odmítnutí (`TwoNIntercomAPI.device_errors`);

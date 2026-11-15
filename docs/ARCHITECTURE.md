@@ -24,6 +24,8 @@ Diagramy (otevři v [excalidraw.com](https://excalidraw.com) nebo VS Code rozš�
 | `api.py` | `TwoNIntercomAPI` – bezstavový HTTP klient. Parsování chyb 2N, kamera caps/transport, RTSP digest probe, řízení relé, snapshot. |
 | `entity.py` | Sdílená základní entita (`device_info`, `available`, `has_entity_name`). |
 | `camera.py` | `MjpegCamera` – live view (RTSP/MJPEG/JPEG snapshot stream). |
+| `media_player.py` | Reproduktor interkomu – přehrává zvuk přes RTSP audio backchannel; vzniká jen když zařízení zpětný kanál nabízí. |
+| `backchannel.py` | RTSP klient zpětného zvukového kanálu (ONVIF backchannel, Digest, RTP G.711 po TCP). Bez importů z HA. |
 | `binary_sensor.py` | IO inputs, relay-active, motion; no doorbell binary sensor. |
 | `event.py` | Doorbell events (`EventDeviceClass.DOORBELL`) for HomeKit camera auto-linking. |
 | `switch.py` | Door relé – dynamicky objevené z `/api/switch/caps`. |
@@ -280,6 +282,24 @@ probe reuses the API session with a per-request `middlewares=()` override, so
 it sends no credentials and does not alter the session's normal auth path.
 RTSP remains the exception (credentials belong in the URI); its Digest probe
 uses a random client nonce and rejects quotes, CR and LF in usernames or realms.
+
+## Reproduktor (RTSP audio backchannel)
+
+Platforma `media_player` se přidá, jen když jsou v `entry.options` RTSP
+přihlašovací údaje. Při setupu pošle jedno `DESCRIBE` s hlavičkou
+`Require: www.onvif.org/ver20/backchannel`; entita vznikne jen tehdy, když SDP
+obsahuje `sendonly` audio track s PCMU/PCMA. Stav kamery ani koordinátoru to
+neovlivňuje.
+
+`play_media`: médium se převede na URL (media source, TTS, relativní cesta),
+povolené je jen `http`/`https`. Pak `DESCRIBE` → start ffmpeg (HA binárka,
+`-protocol_whitelist http,https,tcp,tls,crypto`, výstup raw G.711 8 kHz mono)
+a čekání na první rámec → `SETUP` + `PLAY`. Služba se vrátí, jakmile hraje;
+zbytek běží v background tasku config entry, který čte výstup ffmpeg po
+rámcích (zpětný tlak, žádné bufferování celého souboru). Chyby před startem
+jdou volajícímu jako přeložená `HomeAssistantError`, chyby během přehrávání
+se zalogují a entita se vrátí do `idle`. Úklid (TEARDOWN, ukončení ffmpeg)
+nezávisí na tom, jestli task stihl naběhnout. Protokol: `docs/API_REFERENCE.md`.
 
 ---
 

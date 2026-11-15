@@ -55,6 +55,7 @@ on Jan's Mac) implement those tasks.
 | `config_flow.py` | User / reauth / reconfigure / options flows, protocol auto-detection (verified HTTPS → unverified HTTPS → HTTP) |
 | `entity.py` | `TwoNIntercomEntity` base class |
 | `camera.py` | `MjpegCamera`-based live view + snapshot |
+| `media_player.py` / `backchannel.py` | Speaker media player; RTSP audio backchannel client (ONVIF backchannel, no HA imports) |
 | `binary_sensor.py` | Doorbell, IO inputs, relay-active, motion |
 | `switch.py` / `cover.py` | Door / gate relays, auto-detected from `/api/switch/caps` |
 | `sensor.py` | SIP registration, call state |

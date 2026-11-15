@@ -34,6 +34,10 @@ _LOGGER = logging.getLogger(__name__)
 
 API_TIMEOUT = 10
 RTSP_PATH = "h264_stream"
+# ONVIF media URL (Media2 GetStreamUri). On firmware 3.x the audio backchannel
+# is offered only here; the classic stream paths answer 551 to the ONVIF
+# backchannel Require header.
+RTSP_ONVIF_PATH = "onvif/media?transport=unicast&profile=profile_h264_hq"
 CAMERA_CAPS_PATH = "/api/camera/caps"
 CAMERA_SNAPSHOT_PATH = "/api/camera/snapshot"
 PHONE_STATUS_PATH = "/api/phone/status"
@@ -2206,6 +2210,20 @@ class TwoNIntercomAPI:
         if self.port in (80, 443):
             return 554
         return self.port
+
+    def get_rtsp_backchannel_endpoint(self) -> tuple[str, int, list[str]]:
+        """Return host, port and credential-free URLs to try for the backchannel.
+
+        The ONVIF media URL comes first because that is where firmware 3.x
+        offers the track; the classic stream path stays as a fallback.
+        """
+        rtsp_port = self._get_rtsp_port()
+        base = f"rtsp://{self.host}:{rtsp_port}"
+        return (
+            self.host,
+            rtsp_port,
+            [f"{base}/{RTSP_ONVIF_PATH}", f"{base}/{RTSP_PATH}"],
+        )
 
     def get_rtsp_url(self) -> str:
         """Return RTSP stream URL with masked credentials for logging."""

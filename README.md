@@ -32,6 +32,13 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 - **Last-ring image** (`image.<intercom>_last_ring`) — a JPEG captured from the configured camera source the moment the doorbell rings, so you can see who rang even after they left. A failed capture keeps the previous image. Created only when the camera is enabled
 - HomeKit-compatible video doorbell
 
+### Speaker (audio to the intercom)
+- **Speaker media player** (`media_player.<intercom>_speaker`) — plays a sound file, a media-source item or a TTS announcement on the intercom's speaker, e.g. "Please wait, somebody is coming" from an automation
+- Uses the **audio backchannel of the RTSP server** (ONVIF backchannel): the integration opens its own RTSP session, Home Assistant's ffmpeg converts the audio to G.711 (8 kHz mono) and the integration sends it in real time
+- Created only when RTSP credentials are configured **and** the intercom offers a backchannel audio track; otherwise there is no speaker entity. Firmware 3.x offers the track on the ONVIF media URL (`/onvif/media?...`), not on `/h264_stream`; the integration tries both
+- Supports `media_player.play_media` (with `announce`), `media_player.media_stop` and the media browser. A new `play_media` replaces the running one. No volume control — set the volume on the intercom
+- The RTSP handshake was checked by hand on a firmware 3.x intercom; the entity itself has not been heard on a real intercom yet; see [Speaker has no entity or no sound](#speaker-has-no-entity-or-no-sound)
+
 ### Doorbell and call lifecycle
 - **Event-driven ring detection** via `/api/log/subscribe` + `/api/log/pull` background loop with automatic re-subscribe and exponential backoff
 - Only calls started by the intercom trigger the doorbell (for example, a visitor button press); calls into the intercom from My2N, Control4, or a SIP phone do not
@@ -87,7 +94,8 @@ the integration does not download, upload, apply or trigger device firmware.
 | Category | Status | Notes |
 |---|---|---|
 | **Done** | JPEG snapshot, native MJPEG live view, RTSP stream source (when licensed), event-driven ring/switch/IO/phone/config state, backup polling safety net, relay switch/cover control with real device state, SIP/call diagnostic sensors, answer/hangup/grant_access services, access-control events, last-ring image, reauth and reconfigure flows, HomeKit bridge mapping | All verified against 2N IP Verso 2.50.0.76.2 |
-| **Out of fork scope** | Two-way audio, multi-tenant directory UX, keypad workflow, lift control, mass-notify | Not needed for a single-family-house deployment |
+| **Not verified on hardware yet** | Speaker media player over the RTSP audio backchannel | Backchannel handshake confirmed by hand on firmware 3.x (ONVIF media URL); the entity is tested against a simulated RTSP server only |
+| **Out of fork scope** | Live two-way talk from the dashboard, multi-tenant directory UX, keypad workflow, lift control, mass-notify | Not needed for a single-family-house deployment |
 | **License-dependent** | Automation API, Audio Test, NFC, Noise Detection, SMTP, FTP, SNMP, TR069, Lift Control | Only available when the device license exposes them; not planned in this fork |
 
 ### Camera Support Baseline
@@ -624,6 +632,7 @@ The integration negotiates Basic vs Digest per request — see the **Authenticat
 | `/api/camera/caps` | Discover MJPEG capability + resolutions |
 | `/api/camera/snapshot` (with/without `fps`) | JPEG snapshot + MJPEG live view |
 | RTSP stream | Optional, only when the device licence exposes it |
+| RTSP audio backchannel (`Require: www.onvif.org/ver20/backchannel`) | Speaker media player: DESCRIBE at setup, DESCRIBE/SETUP/PLAY/TEARDOWN per playback |
 | `https://update.2n.cz/hip/<firmwarePackage>/<track>/?current_ver=<swVersion>&ui_lang=en` | Public firmware availability and release notes (GET, no device credentials; 204 = up to date) |
 
 No device firmware endpoints (`/api/firmware`, apply/reject, `/api/autoupdate/*`)
@@ -650,7 +659,9 @@ The integration uses two data channels:
 
 ## Known Limitations
 
-- **No two-way audio** — the HA camera platform does not support bi-directional audio; the doorbell ring triggers notifications but audio is device-side only
+- **No live talk from the dashboard yet** — Home Assistant sends talk audio over the RTSP ONVIF backchannel of the camera's stream source. 2N rejects that on the classic stream path this integration uses for video (`/h264_stream`, `551 Option not supported`); firmware 3.x offers it on the ONVIF media URL, which the camera does not use yet. The speaker media player plays files and TTS on the intercom (one direction); a live conversation needs a call (SIP, My2N)
+- **Speaker counts as an RTSP stream** — the intercom serves a limited number of RTSP streams at once (4 according to the 2N manual) and the audio return channel is one of them while a sound plays
+- **Speaker needs ffmpeg** — Home Assistant's ffmpeg does the conversion; only `http`/`https` URLs and media sources are accepted
 - **RTSP requires a separate license** — the 2N RTSP server is a paid feature; without it, only MJPEG streaming is available
 - **RTSP credentials are independent** — the RTSP server has its own user database; HTTP API credentials do not work for RTSP
 - **No gate position feedback** — the IP Verso has no gate-position sensor; cover entities use optimistic state transitions
@@ -674,6 +685,22 @@ The integration uses two data channels:
 - Create an RTSP user on the device: **Services → Streaming → RTSP Server → User Database**
 - The entity attributes should show `rtsp_available: true` and `live_view_selected_mode: rtsp` when RTSP is working
 - If RTSP credentials are wrong, the integration logs a warning and falls back to MJPEG
+
+### Speaker has no entity or no sound
+- The speaker entity needs the same RTSP credentials as the RTSP stream (options flow → Camera step) and an active RTSP server on the device
+- The intercom must offer an audio return channel on its RTSP stream. If it does not, no speaker entity is created; with debug logging enabled the log says `Speaker not created: ...`
+- A warning `Speaker not created, the audio backchannel probe failed` means the device did not answer at startup — reload the integration
+- If the entity plays (state `playing`) but nothing is heard, check the speaker volume on the intercom; if the sound is choppy, try the setting **Services → Streaming → RTSP Server → Fix defective audio backchannel** both ways
+- Example:
+  ```yaml
+  action: media_player.play_media
+  target:
+    entity_id: media_player.home_intercom_speaker
+  data:
+    media_content_type: music
+    media_content_id: media-source://tts/tts.home_assistant_cloud?message=Please+wait
+    announce: true
+  ```
 
 ### Doorbell not triggering
 - Ring detection is exclusively event-driven via the log subscription — there is no polling fallback for ring events
@@ -728,6 +755,8 @@ custom_components/2n_intercom/
 ├── const.py                 # Constants
 ├── entity.py                # Shared TwoNIntercomEntity base
 ├── camera.py                # MjpegCamera-based camera platform
+├── media_player.py          # Speaker: plays audio over the RTSP audio backchannel
+├── backchannel.py           # RTSP backchannel client (no HA imports)
 ├── image.py                 # Last-ring snapshot image
 ├── binary_sensor.py         # Input + relay-active + motion sensors
 ├── event.py                 # Doorbell ring events + HomeKit camera auto-linking

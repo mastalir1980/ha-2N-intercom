@@ -60,6 +60,14 @@
       "last_ring": {
         "default": "mdi:doorbell-video"
       }
+    },
+    "media_player": {
+      "speaker": {
+        "default": "mdi:speaker",
+        "state": {
+          "playing": "mdi:speaker-wireless"
+        }
+      }
     }
   },
   "services": {

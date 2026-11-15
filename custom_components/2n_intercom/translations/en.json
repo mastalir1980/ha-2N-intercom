@@ -258,6 +258,11 @@
       "last_ring": {
         "name": "Last ring"
       }
+    },
+    "media_player": {
+      "speaker": {
+        "name": "Speaker"
+      }
     }
   },
   "exceptions": {
@@ -311,6 +316,21 @@
     },
     "grant_access_failed": {
       "message": "Grant access on access point {access_point} failed: {error}"
+    },
+    "speaker_auth_failed": {
+      "message": "The intercom rejected the RTSP credentials. Check the RTSP username and password in the integration options."
+    },
+    "speaker_backchannel_unsupported": {
+      "message": "The intercom does not offer an audio backchannel on its RTSP stream."
+    },
+    "speaker_connection_failed": {
+      "message": "Could not open the RTSP audio session to the intercom."
+    },
+    "speaker_media_failed": {
+      "message": "The media could not be decoded to audio."
+    },
+    "speaker_invalid_media": {
+      "message": "Only media from http or https URLs and media sources can be played on the intercom."
     }
   },
   "services": {
