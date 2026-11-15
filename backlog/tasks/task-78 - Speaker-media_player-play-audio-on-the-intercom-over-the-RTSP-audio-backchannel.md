@@ -3,17 +3,17 @@ id: TASK-78
 title: >-
   Speaker media_player: play audio on the intercom over the RTSP audio
   backchannel
-status: In Progress
+status: To Do
 assignee:
   - '@claude'
 created_date: '2026-11-10 14:30'
-updated_date: '2026-11-11 09:33'
+updated_date: '2026-11-15 18:33'
 labels:
   - audio
   - rtsp
   - media-player
   - manual-close
-milestone: m-1
+  - on-hold
 dependencies: []
 references:
   - custom_components/2n_intercom/camera.py
@@ -74,4 +74,6 @@ Found and fixed while testing: a playback task cancelled before its first step n
 Not done: docs/architecture.excalidraw was not regenerated; mypy was not run (not installed locally).
 
 Update after a manual check on the E2E intercom (fw 3.x): the classic stream paths answer 551 Option not supported to the backchannel Require header; the backchannel (PCMU/8000, a=sendonly, control .../onvif/media/audioback) is offered only on the ONVIF media URL rtsp://<host>/onvif/media?transport=unicast&profile=profile_h264_hq, where SETUP/PLAY/TEARDOWN returned 200 and PCMU RTP was accepted. The speaker now tries the ONVIF media URL first and /h264_stream as fallback (api.get_rtsp_backchannel_endpoint, media_player._async_find_backchannel); the E2E check tries both paths. Unit suite 847 of 848 (same pre-existing jinja2 import error). This replaces the hypothesis in the description about which tracks fw 3.x offers. The profile token profile_h264_hq is hard-coded; other models and fw 2.x are not verified.
+
+2026-11-15: Moved out of milestone v1.6.0 and put on hold (decision by Jan): the intercom audio features (speaker media player and camera live talk, TASK-79) do not ship in v1.6.0. No technical blocker for the speaker itself: its RTSP handshake (Require header on every request) completes on the E2E intercom (fw 3.x). The implementation exists unmerged on branch task-79-camera-two-way-audio (first commit, PR 131) and uncommitted in the TASK-78 worktree. Audibility on the device is still not verified.
 <!-- SECTION:NOTES:END -->
