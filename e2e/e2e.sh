@@ -24,7 +24,9 @@ cmd="${1:-help}"; shift || true
 case "$cmd" in
   setup)
     python3 -m venv "$E2E/.venv"
-    "$E2E/.venv/bin/pip" install -q -r "$E2E/requirements.txt"
+    # The pipeline runs the unit suite with this venv, so it needs the
+    # unit-test requirements too.
+    "$E2E/.venv/bin/pip" install -q -r "$E2E/requirements.txt" -r "$REPO/tests/requirements.txt"
     command -v backlog >/dev/null || npm i -g backlog.md
     if [ ! -f "$E2E/.env" ]; then
       cp "$E2E/.env.example" "$E2E/.env"; chmod 600 "$E2E/.env"; echo "→ vyplň e2e/.env"

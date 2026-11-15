@@ -49,6 +49,7 @@ STAGE="unit"
 echo "==> [1/4] unit tests + validate"
 (
   cd "$REPO_DIR" &&
+  "$PY" "$E2E_DIR/e2elib/unitdeps.py" tests/requirements.txt &&
   "$PY" -m unittest discover -s tests -t tests &&
   "$PY" validate.py &&
   "$PY" -m py_compile custom_components/2n_intercom/*.py
