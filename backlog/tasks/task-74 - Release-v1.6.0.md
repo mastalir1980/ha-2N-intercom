@@ -5,7 +5,7 @@ status: To Do
 assignee:
   - '@copilot'
 created_date: '2026-10-24T08:29:00Z'
-updated_date: '2026-11-15 18:06'
+updated_date: '2026-11-15 18:33'
 labels:
   - release
 milestone: m-1
@@ -47,4 +47,6 @@ Release of milestone v1.6.0 ("works on every 2N device, access and security even
 2026-11-14: TASK-73 and TASK-12 moved to milestone v1.5.2 and ship in TASK-81 (release branch from tag v1.5.1). They stay on main, so 1.6.0 contains them too; the 1.6.0 changelog must not list them again as new fixes.
 
 2026-11-15: TASK-79 (camera live talk) moved out of milestone v1.6.0 and put on hold: go2rtc cannot open the intercom's RTSP audio backchannel on fw 3.x (details in TASK-79). The speaker media player (TASK-78) stays in v1.6.0. The 1.6.0 changelog and README must not announce live talk.
+
+2026-11-15 (update): TASK-78 (speaker media player) is also out of milestone v1.6.0 and on hold (decision by Jan). v1.6.0 ships no audio feature; PR 131 must not be merged for this release.
 <!-- SECTION:NOTES:END -->
