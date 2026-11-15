@@ -551,6 +551,26 @@ The integration uses two data channels:
 - If a specific Called ID does not ring, enable debug logging for `custom_components.2n_intercom`. Every call event records its state, direction/originator, session, canonical peers, configured canonical filter (`all` for All calls) and decision (`rang`, `filtered by peer` or `not a ring`). Only intercom-started calls ring, even with `All calls`
 - If the subscription is down, the listener retries with exponential backoff (up to ~60 s). Ring events during a subscription gap are lost
 
+### Entities are missing or unavailable although the device is reachable
+
+The intercom can answer a request with an error instead of data, for example when
+the HTTP API account lacks a privilege. The integration then reports it instead of
+showing empty entities:
+
+- **Repair issue "HTTP API account … lacks the … privilege"** (Settings > System >
+  Repairs): the device refused a relay, I/O, camera or directory request. Grant the
+  named privilege under **Services > HTTP API** on the intercom (see
+  [HTTP API account privileges](#http-api-account-privileges)); the issue disappears
+  after the next successful request. If your model does not offer that privilege,
+  ignore the issue; the related entities are not available on that model.
+- **All entities unavailable** and the log line `Device refused every essential API
+  call`: the device refused both the phone and the call status request. The message
+  names the 2N error; `code=7 invalid connection type` means the HTTP API service
+  accepts only HTTPS (use **Reconfigure** to switch the protocol), codes 8 to 10 mean
+  the account may not use the Phone/Calls service.
+- A feature the model does not have (2N error code 1, for example no inputs or no
+  camera) is switched off quietly: one informational log line, no Repair issue.
+
 ### Sharing diagnostics
 
 Download diagnostics from the integration's menu in **Settings > Devices & services**

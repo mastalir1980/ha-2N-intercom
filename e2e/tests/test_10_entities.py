@@ -23,6 +23,20 @@ def test_entities_available(ha, registry):
     assert not bad, f"unavailable entities: {bad}"
 
 
+def test_no_repair_issue_when_device_accepts_all_calls(ha, twon):
+    """HA has no open Repair issue <-> the 2N API answers every polled service."""
+    # Ground truth: the same read-only calls succeed for the E2E account
+    # (each raises when the device refuses it).
+    twon.phone_status()
+    twon.switch_status()
+    twon.io_status()
+    twon.camera_caps()
+    issues = ha.repair_issues()
+    assert not issues, "open Repair issues: " + ", ".join(
+        f"{i.get('issue_id')} ({i.get('translation_key')})" for i in issues
+    )
+
+
 def test_camera_snapshot_is_jpeg(ha, entry, registry):
     cam = find_by_suffix(registry, entry["entry_id"], "camera")
     if cam is None or cam.get("disabled_by"):
@@ -31,6 +45,23 @@ def test_camera_snapshot_is_jpeg(ha, entry, registry):
     assert r.status_code == 200, f"camera_proxy -> {r.status_code}"
     assert r.content[:2] == b"\xff\xd8", "snapshot is not a JPEG"
     assert len(r.content) > 5_000, f"snapshot suspiciously small ({len(r.content)} B)"
+
+
+def test_camera_entities_follow_device_camera(entry, registry, twon):
+    """HA has a camera and a last-ring image <-> 2N camera/caps lists a camera."""
+    options = entry.get("options") or {}
+    if not options.get("enable_camera", (entry.get("data") or {}).get("enable_camera", True)):
+        pytest.skip("camera is switched off in the entry options")
+    caps = twon.camera_caps()
+    device_has_camera = bool(caps.get("jpegResolution") or caps.get("sources"))
+    camera = find_by_suffix(registry, entry["entry_id"], "camera")
+    image = find_by_suffix(registry, entry["entry_id"], "last_ring")
+    assert (camera is not None) == device_has_camera, (
+        f"camera entity present={camera is not None}, device camera={device_has_camera}"
+    )
+    assert (image is not None) == device_has_camera, (
+        f"last-ring image present={image is not None}, device camera={device_has_camera}"
+    )
 
 
 def test_doorbell_event_is_available_and_shares_camera_device(ha, entry, registry, twon):

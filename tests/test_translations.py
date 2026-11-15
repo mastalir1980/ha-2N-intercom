@@ -63,6 +63,17 @@ class TranslationConsistencyTests(unittest.TestCase):
         ):
             self.assertIn(instruction, error)
 
+    def test_missing_privilege_repair_is_translated(self) -> None:
+        for name in ("strings.json", "translations/en.json",
+                     "translations/de.json", "translations/cs.json"):
+            with self.subTest(file=name):
+                issue = _load(name)["issues"]["api_privilege_missing"]
+                for field in ("title", "description"):
+                    self.assertTrue(issue[field].strip())
+                self.assertIn("{name}", issue["title"])
+                for placeholder in ("{privilege}", "{error}"):
+                    self.assertIn(placeholder, issue["description"])
+
     def test_all_languages_share_the_same_keys(self) -> None:
         expected = _keys(self.languages["en"])
         for lang, data in self.languages.items():

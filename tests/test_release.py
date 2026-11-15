@@ -35,11 +35,26 @@ class ReleaseDocumentationTests(unittest.TestCase):
         self.assertEqual(self.manifest["version"], version)
         self.assertEqual(date.fromisoformat(released_on).isoformat(), released_on)
 
-    def test_v151_documents_log_subscription_fix(self) -> None:
-        self.assertEqual(self.manifest["version"], "1.5.1")
-        self.assertEqual([version for version, _, _ in self.releases[:2]],
-                         ["1.5.1", "1.5.0"])
+    def test_v152_documents_camera_and_refused_call_fixes(self) -> None:
+        self.assertEqual(self.manifest["version"], "1.5.2")
+        self.assertEqual([version for version, _, _ in self.releases[:3]],
+                         ["1.5.2", "1.5.1", "1.5.0"])
         release = self.releases[0][2]
+        self.assertNotIn("### Features", release)
+        for detail in (
+            "### Fixes", "without a camera", "2N IP Uni", "last-ring image",
+            "Repair issue", "missing privilege", "unavailable",
+            "code=7 invalid connection type", "warning once", "#105",
+        ):
+            with self.subTest(detail=detail):
+                self.assertIn(detail, release)
+        for name in ("README.md",):
+            self.assertIn("lacks the … privilege", self.docs[name])
+
+    def test_v151_documents_log_subscription_fix(self) -> None:
+        self.assertEqual([version for version, _, _ in self.releases[1:3]],
+                         ["1.5.1", "1.5.0"])
+        release = self.releases[1][2]
         for detail in (
             "### Fixes", "log subscriptions", "2N IP Uni",
             "Unsupported events", "doorbell ring detection", "#105",

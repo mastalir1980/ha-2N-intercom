@@ -114,6 +114,11 @@ class HA:
     def system_log(self) -> list[dict[str, Any]]:
         return self.ws({"type": "system_log/list"})
 
+    def repair_issues(self, domain: str = DOMAIN) -> list[dict[str, Any]]:
+        """Open (not ignored) Repair issues raised by *domain*."""
+        issues = self.ws({"type": "repairs/list_issues"}).get("issues", [])
+        return [i for i in issues if i.get("domain") == domain and not i.get("ignored")]
+
     def reload_entry(self, entry_id: str) -> Any:
         return self.post_json(f"/api/config/config_entries/entry/{entry_id}/reload")
 

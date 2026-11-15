@@ -56,6 +56,7 @@ from .const import (
 from .coordinator import (
     TwoNIntercomCoordinator,
     TwoNIntercomRuntimeData,
+    async_delete_api_privilege_issues,
     async_delete_basic_auth_issue,
 )
 
@@ -75,11 +76,21 @@ def _get_option(entry: TwoNIntercomConfigEntry | ConfigEntry, key: str, default:
     return entry.data.get(key, default)
 
 
-def _get_platforms(entry: TwoNIntercomConfigEntry | ConfigEntry) -> list[str]:
-    """Get list of platforms to set up based on configuration."""
+def _get_platforms(
+    entry: TwoNIntercomConfigEntry | ConfigEntry,
+    camera_present: bool | None = None,
+) -> list[str]:
+    """Get list of platforms to set up based on configuration.
+
+    ``camera_present`` is the coordinator's detection result: only a
+    definitive ``False`` (the device reported that it has no camera)
+    drops the camera platforms; ``None`` (unknown) follows the option.
+    """
     platforms: list[str] = []
 
-    if _get_option(entry, CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA):
+    if camera_present is not False and _get_option(
+        entry, CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA
+    ):
         platforms.append("camera")
         # "Last ring" snapshot image — needs the camera, so it follows it.
         platforms.append("image")
@@ -562,8 +573,24 @@ async def async_setup_entry(
         )
     )
 
-    # Clean up even when doorbell is off and binary_sensor is not forwarded.
     registry = er.async_get(hass)
+    camera_present = coordinator.camera_present
+    if camera_present is False:
+        # The device answered that it has no camera: entities created by an
+        # earlier version can never work, so drop them from the registry.
+        # An unknown result (failed request) never gets here.
+        for domain, unique_id in (
+            ("camera", f"{entry.entry_id}_camera"),
+            ("image", f"{entry.entry_id}_last_ring"),
+        ):
+            stale_entity = registry.async_get_entity_id(domain, DOMAIN, unique_id)
+            if stale_entity:
+                registry.async_remove(stale_entity)
+                _LOGGER.info(
+                    "Removed %s: the device reports no camera", stale_entity
+                )
+
+    # Clean up even when doorbell is off and binary_sensor is not forwarded.
     legacy_doorbell = registry.async_get_entity_id(
         "binary_sensor", DOMAIN, f"{entry.entry_id}_doorbell"
     )
@@ -571,7 +598,7 @@ async def async_setup_entry(
         registry.async_remove(legacy_doorbell)
         _LOGGER.info("Removed legacy doorbell binary sensor %s", legacy_doorbell)
 
-    platforms = _get_platforms(entry)
+    platforms = _get_platforms(entry, camera_present)
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
     # Remember exactly which platforms were forwarded so unload tears down the
     # same set even if the user later changes options that would shift
@@ -613,6 +640,7 @@ async def async_unload_entry(
 
     if unload_ok:
         async_delete_basic_auth_issue(hass, entry.entry_id)
+        async_delete_api_privilege_issues(hass, entry.entry_id)
 
     unload_result: bool = unload_ok
     return unload_result

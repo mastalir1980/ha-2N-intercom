@@ -31,7 +31,7 @@ Basic**, pokud zařízení vrátí `401` s `WWW-Authenticate: Basic`.
 | `/api/io/caps` | GET | `async_get_io_caps` | physical ports; one binary sensor per input also present in io/status, including module and tamper ports |
 | `/api/io/status` | GET | `async_get_io_status` | cached input/output states, patched by InputChanged/OutputChanged events |
 | `/api/io/ctrl` | GET | `async_io_control` | `port`, `action=on\|off`; latching output control, requires I/O control privilege and bypasses logical-switch timing |
-| `/api/camera/caps` | GET | `async_get_camera_caps` | rozlišení JPEG, zdroje (internal/external) |
+| `/api/camera/caps` | GET | `async_get_camera_caps` | rozlišení JPEG, zdroje (internal/external); zároveň detekce kamery: chyba `code 1` nebo úspěch bez rozlišení a zdrojů = zařízení nemá kameru (žádná entita `camera`/`image`, žádné nastavení kamery ve flow). Timeout, HTTP chyba nebo jiný 2N kód = neznámo, nic se nemění |
 | `/api/camera/snapshot` | GET | `async_get_snapshot` / MJPEG | `source`, `width`, `height`, (`fps` for MJPEG); snapshot sizes map to supported JPEG resolutions from `camera/caps` |
 | `/api/log/caps` | GET | `async_get_log_caps` | `events` = supported events; filters every subscribed event when non-empty |
 | `/api/log/subscribe` | GET | `async_subscribe_log` | `filter` = seznam událostí → vrací `id` |
@@ -308,6 +308,19 @@ Zařízení má vlastní plánovač aktualizací. Konfigurace (cesty z UI a ze z
   zvlášť v options flow, nepoužívají se HTTP API účty.
 - Probe: nešifrovaný `OPTIONS`, podle `401` se sestaví **Digest** hlavička
   (`_build_rtsp_digest_auth`, MD5 dle RFC 2069/2617) a ověří se `200 OK`.
+
+## Odmítnutá volání (2N chybové tělo, `success: false`)
+
+`api.py` si u každé cesty pamatuje poslední odmítnutí (`TwoNIntercomAPI.device_errors`);
+úspěšná odpověď záznam smaže. První odmítnutí se loguje jako WARNING, stejné odmítnutí
+při dalších pollech jen jako DEBUG. Koordinátor z toho po každém pollu vyvodí:
+
+| Situace | Chování |
+|---|---|
+| Odmítnuté `/api/phone/status` i `/api/call/status` (jakýkoli kód, typicky 7) | Refresh selže (`UpdateFailed`, entity nedostupné), zpráva obsahuje 2N chybu. `/api/system/info` se nepočítá: odpovídá i na zařízení, které odmítá vše ostatní |
+| Kód 8, 9 nebo 10 na volitelné funkci (`/api/switch/`, `/api/io/`, `/api/camera/`, `/api/dir/`) | Jedna Repair issue na funkci (`api_privilege_missing_<entry_id>_<funkce>`) s názvem chybějící skupiny oprávnění; zmizí po úspěšném volání nebo při unloadu |
+| Kód 1 na volitelné funkci | Funkce se tiše vypne (switch a io se přestanou pollovat), jeden řádek INFO, žádná Repair issue |
+| HTTP 401 | Beze změny: jen 401 počítá do reauth (tři neúspěšné polly) |
 
 ## Zvláštnosti firmwaru (zachytit při údržbě)
 

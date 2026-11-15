@@ -2131,6 +2131,127 @@ class AdditionalApiMethodTests(unittest.IsolatedAsyncioTestCase):
         caps = await api.async_get_camera_caps()
         self.assertEqual(caps, self.api_module.CameraCapabilities())
 
+    async def test_camera_present_is_unknown_before_camera_caps(self) -> None:
+        self.assertIsNone(self._make_api().camera_present)
+
+    async def test_camera_present_true_when_caps_list_a_camera(self) -> None:
+        api = self._make_api({
+            "success": True,
+            "result": {"jpegResolution": [{"width": 640, "height": 480}]},
+        })
+        await api.async_get_camera_caps()
+        self.assertIs(api.camera_present, True)
+
+    async def test_camera_absent_on_definitive_camera_caps_answers(self) -> None:
+        """Code 1 or an empty successful answer prove there is no camera."""
+        for payload in (
+            {"success": False,
+             "error": {"code": 1, "description": "function is not supported"}},
+            {"success": True, "result": {}},
+            {"success": True, "result": {"jpegResolution": [], "sources": []}},
+        ):
+            with self.subTest(payload=payload):
+                api = self._make_api(payload)
+                await api.async_get_camera_caps()
+                self.assertIs(api.camera_present, False)
+
+    async def test_camera_presence_stays_unknown_when_caps_are_refused(self) -> None:
+        """Privilege, auth and other 2N errors never mean 'no camera'."""
+        for payload in (
+            {"success": False,
+             "error": {"code": 10, "description": "insufficient privileges"}},
+            {"success": False,
+             "error": {"code": 8, "description": "invalid authentication method"}},
+            {"success": False, "error": {"code": 12, "description": "invalid"}},
+            {"success": False},
+            {"result": {}},
+        ):
+            with self.subTest(payload=payload):
+                api = self._make_api(payload)
+                await api.async_get_camera_caps()
+                self.assertIsNone(api.camera_present)
+
+    async def test_camera_presence_survives_transient_failures(self) -> None:
+        """A timeout, HTTP 5xx or 401 changes nothing: unknown stays unknown
+        and a camera seen earlier stays present."""
+        for seen_before in (None, True):
+            for failure in (TimeoutError(), RuntimeError("HTTP 503"),
+                            self.api_module.TwoNAuthenticationError("401")):
+                with self.subTest(seen_before=seen_before, failure=failure):
+                    api = self._make_api()
+                    api._camera_present = seen_before
+
+                    @asynccontextmanager
+                    async def failing_request(*args, _failure=failure, **kwargs):
+                        raise _failure
+                        yield  # pragma: no cover
+
+                    api._async_request = failing_request
+                    await api.async_get_camera_caps(force_refresh=True)
+                    self.assertIs(api.camera_present, seen_before)
+
+    async def test_refusals_are_remembered_per_path_and_cleared_on_success(self) -> None:
+        refusal = {"success": False,
+                   "error": {"code": 10, "description": "insufficient privileges"}}
+        api = self._make_api(refusal)
+        with self.assertLogs(self.api_module._LOGGER, level="WARNING"):
+            self.assertEqual(await api.async_get_switch_status(), {})
+            self.assertEqual(await api.async_get_call_status(), {})
+            self.assertEqual(await api.async_get_system_info(), {})
+        errors = api.device_errors
+        self.assertEqual(
+            set(errors),
+            {"/api/switch/status", "/api/call/status", "/api/system/info"},
+        )
+        self.assertEqual(errors["/api/switch/status"].code, 10)
+
+        api.response._payload = {"success": True, "result": {"switches": []}}
+        await api.async_get_switch_status()
+        await api.async_get_call_status()
+        self.assertEqual(set(api.device_errors), {"/api/system/info"})
+
+    async def test_repeated_refusal_is_logged_as_warning_only_once(self) -> None:
+        api = self._make_api({
+            "success": False,
+            "error": {"code": 10, "description": "insufficient privileges"},
+        })
+        with self.assertLogs(self.api_module._LOGGER, level="DEBUG") as logs:
+            for _poll in range(4):
+                await api.async_get_switch_status()
+        levels = [record.levelname for record in logs.records]
+        self.assertEqual(levels, ["WARNING", "DEBUG", "DEBUG", "DEBUG"])
+
+        # A different refusal on the same path is news again.
+        api.response._payload = {
+            "success": False, "error": {"code": 7, "description": "invalid connection type"},
+        }
+        with self.assertLogs(self.api_module._LOGGER, level="WARNING") as logs:
+            await api.async_get_switch_status()
+        self.assertIn("code=7", logs.output[0])
+
+    async def test_not_supported_optional_feature_never_logs_a_warning(self) -> None:
+        api = self._make_api({
+            "success": False,
+            "error": {"code": 1, "description": "function is not supported"},
+        })
+        with self.assertNoLogs(self.api_module._LOGGER, level="WARNING"):
+            with self.assertLogs(self.api_module._LOGGER, level="DEBUG") as logs:
+                for _poll in range(3):
+                    await api.async_get_io_caps()
+        self.assertEqual(
+            [record.levelname for record in logs.records], ["INFO", "DEBUG", "DEBUG"]
+        )
+        self.assertEqual(api.device_errors["/api/io/caps"].code, 1)
+
+    async def test_feature_for_path_groups_optional_endpoints(self) -> None:
+        feature_for_path = self.api_module.feature_for_path
+        self.assertEqual(feature_for_path("/api/switch/caps"), "switch")
+        self.assertEqual(feature_for_path("/api/io/status"), "io")
+        self.assertEqual(feature_for_path("/api/camera/snapshot"), "camera")
+        self.assertEqual(feature_for_path("/api/dir/query"), "directory")
+        for path in ("/api/system/info", "/api/call/status", "/api/log/subscribe"):
+            self.assertIsNone(feature_for_path(path))
+
     async def test_get_snapshot_success(self) -> None:
         api = self._make_api(None, content_type="image/jpeg")
         api.response._body = b"\xff\xd8\xff"
