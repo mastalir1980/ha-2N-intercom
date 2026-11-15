@@ -4,12 +4,13 @@ title: 'Camera: opt-in two-way audio (live talk) through the ONVIF media RTSP UR
 status: To Do
 assignee: []
 created_date: '2026-11-11 09:33'
+updated_date: '2026-11-15 18:06'
 labels:
   - audio
   - rtsp
   - camera
   - manual-close
-milestone: m-1
+  - on-hold
 dependencies:
   - TASK-78
 references:
@@ -53,3 +54,15 @@ Not known (hypotheses to be checked by Jan on the device): whether go2rtc negoti
 - [ ] #7 E2E, when RTSP credentials are set in the E2E environment and the toggle is on: the HA camera stream source is the ONVIF media URL <-> the RTSP DESCRIBE of that URL offers a sendonly audio track [e2e]
 - [ ] #8 With the toggle on, the dashboard camera shows the microphone and speech is audible on the real intercom; the live video still works [jan]
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-15: Moved out of milestone v1.6.0 and put on hold (decision by Jan). Live talk through go2rtc does not work on fw 3.x.
+Evidence, measured on the E2E intercom (fw 3.x) against the ONVIF media URL, the only difference between the two runs being where the header `Require: www.onvif.org/ver20/backchannel` is sent:
+- Require on DESCRIBE only (what go2rtc does): DESCRIBE 200 with the sendonly audio track, SETUP video 200, SETUP backchannel 400, PLAY 454, no RTP.
+- Require on every request (what the integration's own backchannel client does): DESCRIBE 200, SETUP video 200, SETUP backchannel 200, PLAY 200, video RTP received.
+go2rtc (master, pkg/rtsp/client.go) sets Require only in Describe(); when a microphone is added it reconnects the RTSP producer and SETUPs the backchannel without the header.
+Seen in Home Assistant 2026.11 with the option on: the microphone button appears, the WebRTC session connects (ICE and DTLS connected, microphone sent as PCMU), but after pressing it the video stops, no audio reaches the intercom and the button keeps spinning (the frontend waits for the first video frame).
+The integration side behaves as specified (ONVIF URL returned, capability declared). The implementation exists on branch task-79-camera-two-way-audio (PR 131, stacked on TASK-78). Unblocked by: go2rtc sending the Require header on SETUP and PLAY, in the go2rtc version bundled with Home Assistant. AC #8 cannot pass until then. Not checked: fw 2.x, other models.
+<!-- SECTION:NOTES:END -->
