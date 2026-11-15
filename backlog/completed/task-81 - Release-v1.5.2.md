@@ -1,11 +1,11 @@
 ---
 id: TASK-81
 title: Release v1.5.2
-status: To Test
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-11-14 09:58'
-updated_date: '2026-11-15 11:47'
+updated_date: '2026-11-15 11:59'
 labels:
   - release
   - manual-path
@@ -41,7 +41,7 @@ The headless coder cannot run this task (it only branches from main), hence manu
 - [x] #3 CHANGELOG.md has a "## 1.5.2 - <date>" section above 1.5.1 written for users, with a Fixes entry for each of the two bugs; published sections are unchanged [unit]
 - [x] #4 Full unit suite, validate.py and py_compile are green on the release branch [unit]
 - [x] #5 E2E on the release branch build is green on the E2E intercom (e2e.sh run on the branch or PR check e2e-pi) [e2e]
-- [ ] #6 Jan creates the GitHub release and tag v1.5.2 from release-1.5 and archives the milestone [jan]
+- [x] #6 Jan creates the GitHub release and tag v1.5.2 from release-1.5 and archives the milestone [jan]
 <!-- AC:END -->
 
 ## Implementation Plan
