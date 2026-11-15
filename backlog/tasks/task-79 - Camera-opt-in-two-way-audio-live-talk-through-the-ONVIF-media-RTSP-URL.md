@@ -1,11 +1,11 @@
 ---
 id: TASK-79
 title: 'Camera: opt-in two-way audio (live talk) through the ONVIF media RTSP URL'
-status: In Progress
+status: To Test
 assignee:
   - '@claude'
 created_date: '2026-11-11 09:33'
-updated_date: '2026-11-15 12:14'
+updated_date: '2026-11-15 12:15'
 labels:
   - audio
   - rtsp
@@ -46,12 +46,12 @@ Not known (hypotheses to be checked by Jan on the device): whether go2rtc negoti
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The camera step of the options flow has a two-way audio toggle, default off, stored in entry.options, with label and description in strings.json and translations en/de/cs [unit]
-- [ ] #2 With the toggle on, RTSP selected and a backchannel offered on the ONVIF media URL, stream_source() returns the ONVIF media URL with URL-encoded RTSP credentials and the entity declares CameraEntityCapabilities(two_way_audio=True) [unit]
-- [ ] #3 With the toggle off, or no backchannel on the ONVIF media URL, or a non-RTSP transport, stream_source() and the declared capabilities are identical to the behaviour before this task [unit]
-- [ ] #4 When homeassistant.components.camera has no CameraEntityCapabilities (Home Assistant older than 2026.11) the camera platform still sets up and the toggle has no effect [unit]
-- [ ] #5 The camera and the speaker media player use one shared backchannel probe result per setup; the RTSP password appears in no log record or diagnostics output [unit]
-- [ ] #6 README.md documents the toggle and the user-side requirements (Labs preview feature, HTTPS, WebRTC), replaces the "No live talk" limitation, and docs/API_REFERENCE.md and docs/ARCHITECTURE.md describe the stream source switch [unit]
+- [x] #1 The camera step of the options flow has a two-way audio toggle, default off, stored in entry.options, with label and description in strings.json and translations en/de/cs [unit]
+- [x] #2 With the toggle on, RTSP selected and a backchannel offered on the ONVIF media URL, stream_source() returns the ONVIF media URL with URL-encoded RTSP credentials and the entity declares CameraEntityCapabilities(two_way_audio=True) [unit]
+- [x] #3 With the toggle off, or no backchannel on the ONVIF media URL, or a non-RTSP transport, stream_source() and the declared capabilities are identical to the behaviour before this task [unit]
+- [x] #4 When homeassistant.components.camera has no CameraEntityCapabilities (Home Assistant older than 2026.11) the camera platform still sets up and the toggle has no effect [unit]
+- [x] #5 The camera and the speaker media player use one shared backchannel probe result per setup; the RTSP password appears in no log record or diagnostics output [unit]
+- [x] #6 README.md documents the toggle and the user-side requirements (Labs preview feature, HTTPS, WebRTC), replaces the "No live talk" limitation, and docs/API_REFERENCE.md and docs/ARCHITECTURE.md describe the stream source switch [unit]
 - [ ] #7 E2E, when RTSP credentials are set in the E2E environment and the toggle is on: the HA camera stream source is the ONVIF media URL <-> the RTSP DESCRIBE of that URL offers a sendonly audio track [e2e]
 - [ ] #8 With the toggle on, the dashboard camera shows the microphone and speech is audible on the real intercom; the live video still works [jan]
 <!-- AC:END -->
@@ -69,3 +69,26 @@ Not known (hypotheses to be checked by Jan on the device): whether go2rtc negoti
 8. Unit tests (camera, probe, config flow, api, diagnostics, coordinator, translations) and a read-only E2E check.
 Must not change: transport resolver, MJPEG path, dual HTTP auth, no secrets in logs/diagnostics (RTSP URL is the documented exception).
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built on the TASK-78 working tree (not merged yet): the branch carries it as its first commit, rebased onto main. The backchannel search moved from media_player.py to backchannel.BackchannelProbe, owned by the coordinator.
+Decisions: the camera switches only when the probe found the track on the ONVIF media URL (a track only on the classic path keeps the old source); the capabilities attribute is not set at all when two-way audio is inactive; new camera state attribute two_way_audio and diagnostics block audio_backchannel make the state visible (used by the E2E check).
+Validation: unit suite 892 tests green in the E2E venv (locally one pre-existing import error, jinja2 missing for test_blueprint); validate.py green; e2e.sh wip passed (25 passed, 6 skipped). The two RTSP checks were skipped because the E2E environment has no RTSP account (E2E_RTSP_USER / E2E_RTSP_PASSWORD), so AC #7 is not proven. mypy and ruff are not installed locally and were not run. docs/architecture.excalidraw was not regenerated.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Opt-in two-way audio for the camera: option camera_two_way_audio (camera step, default off); with RTSP selected and the audio backchannel offered on the ONVIF media URL the camera streams from that URL and declares CameraEntityCapabilities(two_way_audio=True). Speaker and camera share one backchannel probe per setup (coordinator.backchannel_probe).
+
+AC #1: proven - tests/test_config_flow.py test_camera_step_two_way_audio_toggle_defaults_off_and_is_saved, tests/test_translations.py test_camera_two_way_audio_option_is_translated (plus the existing key-consistency tests).
+AC #2: proven - tests/test_camera.py test_toggle_on_with_backchannel_uses_onvif_url_and_declares_it, tests/test_api.py test_onvif_media_rtsp_urls.
+AC #3: proven - tests/test_camera.py test_everything_else_keeps_the_previous_behaviour (toggle off/missing, no backchannel, backchannel only on the classic path, mjpeg, jpeg only, unresolved).
+AC #4: proven - tests/test_camera.py test_module_loads_without_camera_entity_capabilities, test_old_home_assistant_ignores_the_toggle.
+AC #5: proven - tests/test_backchannel.py BackchannelProbeTests (one DESCRIBE round for concurrent callers, password in no log record), tests/test_coordinator.py test_coordinator_owns_one_backchannel_probe_for_its_api, tests/test_camera.py test_setup_never_logs_the_rtsp_password, tests/test_diagnostics.py test_diagnostics_describe_backchannel_probe_without_credentials.
+AC #6: proven - README.md (section Two-way audio (live talk), options table, Known Limitations), docs/API_REFERENCE.md and docs/ARCHITECTURE.md in the PR diff.
+AC #7: unproven - e2e/tests/test_10_entities.py test_camera_two_way_audio_matches_rtsp_backchannel exists but was skipped: the E2E environment has no RTSP account and the staging entry has the toggle off.
+AC #8: manual - Jan, on the real intercom.
+<!-- SECTION:FINAL_SUMMARY:END -->
