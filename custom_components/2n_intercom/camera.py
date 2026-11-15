@@ -8,12 +8,19 @@ from typing import TYPE_CHECKING
 
 from homeassistant.components.camera import CameraEntityFeature
 from homeassistant.components.mjpeg import MjpegCamera
+
+try:
+    from homeassistant.components.camera import CameraEntityCapabilities
+except ImportError:  # Home Assistant older than 2026.11: no two-way audio
+    CameraEntityCapabilities = None  # type: ignore[assignment,misc]
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import CameraTransportInfo, TwoNIntercomAPI
 from .const import (
+    CONF_CAMERA_TWO_WAY_AUDIO,
+    DEFAULT_CAMERA_TWO_WAY_AUDIO,
     LIVE_VIEW_MODE_MJPEG,
     LIVE_VIEW_MODE_RTSP,
 )
@@ -83,6 +90,45 @@ def get_supported_features_for_transport(
     return CameraEntityFeature(0)
 
 
+async def async_two_way_audio_available(
+    coordinator: TwoNIntercomCoordinator,
+    config_entry: TwoNIntercomConfigEntry,
+) -> bool:
+    """Return whether the camera can offer two-way audio (live talk).
+
+    All of these must hold: Home Assistant knows camera capabilities
+    (2026.11+), the user turned the option on, the live view runs over RTSP
+    and the device offers the audio backchannel on the ONVIF media URL.
+    The backchannel probe is the coordinator's shared one, so the speaker
+    and the camera cost a single DESCRIBE per setup.
+    """
+    if not config_entry.options.get(
+        CONF_CAMERA_TWO_WAY_AUDIO, DEFAULT_CAMERA_TWO_WAY_AUDIO
+    ):
+        return False
+    if CameraEntityCapabilities is None:
+        _LOGGER.debug(
+            "Two-way audio needs Home Assistant 2026.11 or newer; option ignored"
+        )
+        return False
+    transport_info = coordinator.camera_transport_info
+    if not (
+        transport_info.resolved
+        and transport_info.selected_mode == LIVE_VIEW_MODE_RTSP
+    ):
+        _LOGGER.debug("Two-way audio not offered: the live view is not RTSP")
+        return False
+    probe = await coordinator.backchannel_probe.async_result()
+    if probe.url is None or probe.url != coordinator.api.get_rtsp_onvif_url():
+        _LOGGER.debug(
+            "Two-way audio not offered: no audio backchannel on the ONVIF "
+            "media URL (%s)",
+            probe.error,
+        )
+        return False
+    return True
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: TwoNIntercomConfigEntry,
@@ -92,8 +138,9 @@ async def async_setup_entry(
     runtime: TwoNIntercomRuntimeData = config_entry.runtime_data
     coordinator: TwoNIntercomCoordinator = runtime.coordinator
 
+    two_way_audio = await async_two_way_audio_available(coordinator, config_entry)
     async_add_entities(
-        [TwoNIntercomCamera(coordinator, config_entry)],
+        [TwoNIntercomCamera(coordinator, config_entry, two_way_audio=two_way_audio)],
         True,
     )
 
@@ -119,8 +166,13 @@ class TwoNIntercomCamera(
         self,
         coordinator: TwoNIntercomCoordinator,
         config_entry: TwoNIntercomConfigEntry,
+        *,
+        two_way_audio: bool = False,
     ) -> None:
-        """Initialize the camera."""
+        """Initialize the camera.
+
+        ``two_way_audio`` is the result of ``async_two_way_audio_available``.
+        """
         api = coordinator.api
         transport_info = coordinator.camera_transport_info
 
@@ -162,6 +214,14 @@ class TwoNIntercomCamera(
 
         self._config_entry = config_entry
         self._transport_info = transport_info
+        # Two-way audio: the stream source becomes the ONVIF media URL, the
+        # only one with the audio backchannel. Without it the attribute stays
+        # unset so the entity keeps Home Assistant's default capabilities.
+        self._two_way_audio = two_way_audio and CameraEntityCapabilities is not None
+        if self._two_way_audio:
+            self._attr_camera_entity_capabilities = CameraEntityCapabilities(
+                two_way_audio=True
+            )
 
         name = config_entry.options.get(
             "name",
@@ -187,6 +247,7 @@ class TwoNIntercomCamera(
             "live_view_selected_mode": transport_info.selected_mode,
             "live_view_resolved": transport_info.resolved,
             "live_view_available": transport_info.live_view_available,
+            "two_way_audio": self._two_way_audio,
             "rtsp_available": transport_info.rtsp_available,
             "mjpeg_available": transport_info.mjpeg_available,
             "mjpeg_public_url_available": transport_info.mjpeg_public_url_available,
@@ -229,9 +290,16 @@ class TwoNIntercomCamera(
         MJPEG transports are served by ``MjpegCamera`` directly without
         ffmpeg, so we only return a stream URL when the resolved transport
         is RTSP. The URL is read from the coordinator's cached transport
-        info (resolved once at setup) — no per-call probe.
+        info (resolved once at setup) — no per-call probe. With two-way
+        audio it is the ONVIF media URL (same video, plus the backchannel).
         """
         transport_info = self.coordinator.camera_transport_info
         if transport_info.selected_mode != LIVE_VIEW_MODE_RTSP:
             return None
+        if self._two_way_audio and _transport_has_live_view(transport_info):
+            onvif_url: str | None = (
+                self.coordinator.api.get_rtsp_onvif_url_with_credentials()
+            )
+            if onvif_url is not None:
+                return onvif_url
         return get_stream_source_for_transport(self.coordinator.api, transport_info)

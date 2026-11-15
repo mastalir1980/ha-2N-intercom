@@ -125,6 +125,18 @@ class TranslationConsistencyTests(unittest.TestCase):
                     data["options"]["step"]["device"]["data"],
                 )
 
+    def test_camera_two_way_audio_option_is_translated(self) -> None:
+        strings = json.loads(
+            (INTEGRATION_DIR / "strings.json").read_text(encoding="utf-8")
+        )
+        for lang, data in {**self.languages, "strings": strings}.items():
+            with self.subTest(lang=lang):
+                step = data["options"]["step"]["camera"]
+                self.assertTrue(step["data"]["camera_two_way_audio"].strip())
+                self.assertTrue(
+                    step["data_description"]["camera_two_way_audio"].strip()
+                )
+
     def test_icons_cover_new_entities_and_services(self) -> None:
         icons = _load("icons.json")
         self.assertEqual(icons["entity"]["image"]["last_ring"]["default"], "mdi:doorbell-video")

@@ -23,7 +23,7 @@ Diagramy (otevři v [excalidraw.com](https://excalidraw.com) nebo VS Code rozš�
 | `coordinator.py` | `TwoNIntercomCoordinator` (rozšiřuje `DataUpdateCoordinator`). Drží cache stavů, zpracovává log-události, řídí ring/motion detekci, background long-poll task. |
 | `api.py` | `TwoNIntercomAPI` – bezstavový HTTP klient. Parsování chyb 2N, kamera caps/transport, RTSP digest probe, řízení relé, snapshot. |
 | `entity.py` | Sdílená základní entita (`device_info`, `available`, `has_entity_name`). |
-| `camera.py` | `MjpegCamera` – live view (RTSP/MJPEG/JPEG snapshot stream). |
+| `camera.py` | `MjpegCamera` – live view (RTSP/MJPEG/JPEG snapshot stream); volitelně obousměrný zvuk (zdroj streamu = ONVIF media URL). |
 | `media_player.py` | Reproduktor interkomu – přehrává zvuk přes RTSP audio backchannel; vzniká jen když zařízení zpětný kanál nabízí. |
 | `backchannel.py` | RTSP klient zpětného zvukového kanálu (ONVIF backchannel, Digest, RTP G.711 po TCP). Bez importů z HA. |
 | `binary_sensor.py` | IO inputs, relay-active, motion; no doorbell binary sensor. |
@@ -286,10 +286,27 @@ uses a random client nonce and rejects quotes, CR and LF in usernames or realms.
 ## Reproduktor (RTSP audio backchannel)
 
 Platforma `media_player` se přidá, jen když jsou v `entry.options` RTSP
-přihlašovací údaje. Při setupu pošle jedno `DESCRIBE` s hlavičkou
-`Require: www.onvif.org/ver20/backchannel`; entita vznikne jen tehdy, když SDP
-obsahuje `sendonly` audio track s PCMU/PCMA. Stav kamery ani koordinátoru to
-neovlivňuje.
+přihlašovací údaje. Při setupu se zeptá sdílené sondy
+`coordinator.backchannel_probe` (`BackchannelProbe` v `backchannel.py`): ta
+pošle `DESCRIBE` s hlavičkou `Require: www.onvif.org/ver20/backchannel` na
+kandidátní URL (ONVIF media URL, pak `/h264_stream`) a výsledek si pamatuje do
+dalšího setupu. Entita vznikne jen tehdy, když SDP obsahuje `sendonly` audio
+track s PCMU/PCMA. Stav koordinátoru to neovlivňuje.
+
+## Obousměrný zvuk kamery (live talk)
+
+Volba `camera_two_way_audio` v `entry.options` (chování, ne identita spojení),
+výchozí vypnuto. `camera.py::async_two_way_audio_available` při setupu
+platformy vyhodnotí: volba zapnutá → HA má `CameraEntityCapabilities`
+(import je hlídaný, na HA starším než 2026.11 je `None`) → vybraný transport
+je RTSP → sdílená sonda našla zpětný kanál na ONVIF media URL. Když vše platí,
+kamera nastaví `_attr_camera_entity_capabilities` s `two_way_audio=True` a
+`stream_source()` vrací ONVIF media URL místo `/h264_stream`. V ostatních
+případech se kamera chová jako dřív (atribut capabilities se vůbec nenastaví).
+Kamera i reproduktor čtou tutéž sondu, takže setup stojí jedno `DESCRIBE`
+kolo; resolver transportu ani MJPEG cesta se nemění. Zvuk z mikrofonu posílá
+Home Assistant (WebRTC/go2rtc), integrace žádný vlastní RTSP session
+neotevírá.
 
 `play_media`: médium se převede na URL (media source, TTS, relativní cesta),
 povolené je jen `http`/`https`. Pak `DESCRIBE` → start ffmpeg (HA binárka,

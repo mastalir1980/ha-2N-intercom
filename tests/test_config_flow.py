@@ -2389,6 +2389,45 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["data"]["live_view_mode"], "auto")
         self.assertEqual(result["data"]["mjpeg_width"], 640)
 
+    async def test_camera_step_two_way_audio_toggle_defaults_off_and_is_saved(self) -> None:
+        """TASK-79: the toggle is off by default and lands in entry.options."""
+        entry = FakeConfigEntry(
+            "entry-1",
+            {"host": "192.0.2.20", "port": 443, "username": "u", "password": "p"},
+        )
+        flow = self._make_options_flow(entry)
+        flow._data = {"relay_count": 0}
+        form = await flow.async_step_camera(None)
+        marker = _form_field_marker(form, "camera_two_way_audio")
+        self.assertIs(marker.default, False)
+        self.assertIs(form["data_schema"].schema[marker], bool)
+
+        camera_input = {
+            "live_view_mode": "rtsp",
+            "camera_source": "internal",
+            "mjpeg_width": 640,
+            "mjpeg_height": 480,
+            "mjpeg_fps": 5,
+        }
+        for value in (True, False):
+            with self.subTest(value=value):
+                flow = self._make_options_flow(entry)
+                flow._data = {"relay_count": 0}
+                result = await flow.async_step_camera(
+                    {**camera_input, "camera_two_way_audio": value}
+                )
+                self.assertEqual(result["type"], "create_entry")
+                self.assertIs(result["data"]["camera_two_way_audio"], value)
+
+        # A saved choice is offered back as the default.
+        saved = FakeConfigEntry(
+            "entry-2",
+            {"host": "192.0.2.20", "port": 443, "username": "u", "password": "p"},
+            options={"camera_two_way_audio": True},
+        )
+        form = await self._make_options_flow(saved).async_step_camera(None)
+        self.assertIs(_form_field_marker(form, "camera_two_way_audio").default, True)
+
     async def test_camera_step_coerces_floats_to_ints(self) -> None:
         entry = FakeConfigEntry(
             "entry-1",

@@ -1,9 +1,11 @@
 ---
 id: TASK-79
 title: 'Camera: opt-in two-way audio (live talk) through the ONVIF media RTSP URL'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-11 09:33'
+updated_date: '2026-11-15 12:14'
 labels:
   - audio
   - rtsp
@@ -53,3 +55,17 @@ Not known (hypotheses to be checked by Jan on the device): whether go2rtc negoti
 - [ ] #7 E2E, when RTSP credentials are set in the E2E environment and the toggle is on: the HA camera stream source is the ONVIF media URL <-> the RTSP DESCRIBE of that URL offers a sendonly audio track [e2e]
 - [ ] #8 With the toggle on, the dashboard camera shows the microphone and speech is audible on the real intercom; the live video still works [jan]
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. backchannel.py: BackchannelProbe (HA-free) runs the DESCRIBE search over the candidate URLs once and caches the result (url, track or error); the coordinator owns one instance (coordinator.backchannel_probe), so the speaker and the camera share it per setup.
+2. media_player.py: setup reads the shared probe instead of its own search.
+3. api.py: get_rtsp_onvif_url() (credential-free) and get_rtsp_onvif_url_with_credentials() (URL-encoded).
+4. const.py + config_flow.py: option camera_two_way_audio (default off) in the camera step of the options flow, stored in entry.options; removed with the other camera options when the camera is disabled.
+5. camera.py: guarded import of CameraEntityCapabilities; async_two_way_audio_available() = option on, capabilities class present, RTSP selected and resolved, probe found the track on the ONVIF media URL. Only then stream_source() returns the ONVIF media URL and the entity sets _attr_camera_entity_capabilities; otherwise nothing changes. New state attribute two_way_audio.
+6. diagnostics.py: audio_backchannel block (credential-free URL, codec, error reason).
+7. strings.json + translations en/de/cs, README, docs/API_REFERENCE.md, docs/ARCHITECTURE.md.
+8. Unit tests (camera, probe, config flow, api, diagnostics, coordinator, translations) and a read-only E2E check.
+Must not change: transport resolver, MJPEG path, dual HTTP auth, no secrets in logs/diagnostics (RTSP URL is the documented exception).
+<!-- SECTION:PLAN:END -->

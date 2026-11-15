@@ -241,6 +241,52 @@ class DiagnosticsTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("call_state", result)
         self.assertIn("camera_transport", result)
 
+    async def test_diagnostics_describe_backchannel_probe_without_credentials(self) -> None:
+        diag_module = self.diag_module
+        coordinator_module = sys.modules["custom_components.2n_intercom.coordinator"]
+        backchannel = sys.modules["custom_components.2n_intercom.backchannel"]
+        url = "rtsp://192.0.2.20:554/onvif/media?transport=unicast&profile=profile_h264_hq"
+        cases = [
+            (None, {"probed": False}),
+            (
+                backchannel.BackchannelProbeResult(
+                    url=url,
+                    track=backchannel.BackchannelTrack(url + "/audioback", 0, "PCMU"),
+                ),
+                {"probed": True, "url": url, "codec": "PCMU", "error": None},
+            ),
+            (
+                backchannel.BackchannelProbeResult(
+                    error=backchannel.BackchannelError("auth", "rejected")
+                ),
+                {"probed": True, "url": None, "codec": None, "error": "auth"},
+            ),
+        ]
+        for probe_result, expected in cases:
+            with self.subTest(expected=expected):
+                coordinator = FakeCoordinator()
+                coordinator.backchannel_probe = types.SimpleNamespace(
+                    result=probe_result
+                )
+                entry = FakeConfigEntry()
+                entry.options = {
+                    "camera_two_way_audio": True,
+                    "rtsp_username": "rtspuser",
+                    "rtsp_password": "rtsp-secret-79",
+                }
+                entry.runtime_data = coordinator_module.TwoNIntercomRuntimeData(
+                    coordinator=coordinator,
+                    api=types.SimpleNamespace(),
+                    loaded_platforms=["camera"],
+                )
+                result = await diag_module.async_get_config_entry_diagnostics(
+                    None, entry
+                )
+                self.assertEqual(result["audio_backchannel"], expected)
+                self.assertIs(result["entry"]["options"]["camera_two_way_audio"], True)
+                self.assertNotIn("rtsp-secret-79", repr(result))
+                self.assertNotIn("rtspuser", repr(result))
+
     async def test_diagnostics_redacts_credentials(self) -> None:
         diag_module = self.diag_module
         coordinator_module = sys.modules["custom_components.2n_intercom.coordinator"]

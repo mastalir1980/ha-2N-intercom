@@ -30,6 +30,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 - **RTSP stream source** when the device exposes it — requires separate RTSP credentials configured in the options flow (the 2N RTSP server has its own user database independent of the HTTP API accounts)
 - **HTTP API credentials stay in the integration's authenticated request path** — they are not passed to `MjpegCamera` or embedded in HTTP camera URLs exposed to logs, diagnostics, or dashboards
 - **Last-ring image** (`image.<intercom>_last_ring`) — a JPEG captured from the configured camera source the moment the doorbell rings, so you can see who rang even after they left. A failed capture keeps the previous image. Created only when the camera is enabled
+- **Two-way audio (live talk), opt-in** — with the option **Two-way audio (live talk)** in the camera options step turned on, the camera card shows a microphone button and you can talk to the visitor. See [Two-way audio (live talk)](#two-way-audio-live-talk)
 - HomeKit-compatible video doorbell
 
 ### Speaker (audio to the intercom)
@@ -94,8 +95,8 @@ the integration does not download, upload, apply or trigger device firmware.
 | Category | Status | Notes |
 |---|---|---|
 | **Done** | JPEG snapshot, native MJPEG live view, RTSP stream source (when licensed), event-driven ring/switch/IO/phone/config state, backup polling safety net, relay switch/cover control with real device state, SIP/call diagnostic sensors, answer/hangup/grant_access services, access-control events, last-ring image, reauth and reconfigure flows, HomeKit bridge mapping | All verified against 2N IP Verso 2.50.0.76.2 |
-| **Not verified on hardware yet** | Speaker media player over the RTSP audio backchannel | Backchannel handshake confirmed by hand on firmware 3.x (ONVIF media URL); the entity is tested against a simulated RTSP server only |
-| **Out of fork scope** | Live two-way talk from the dashboard, multi-tenant directory UX, keypad workflow, lift control, mass-notify | Not needed for a single-family-house deployment |
+| **Not verified on hardware yet** | Speaker media player over the RTSP audio backchannel; two-way audio (live talk) on the camera | Backchannel handshake confirmed by hand on firmware 3.x (ONVIF media URL); the entities are tested against a simulated RTSP server only |
+| **Out of fork scope** | Multi-tenant directory UX, keypad workflow, lift control, mass-notify | Not needed for a single-family-house deployment |
 | **License-dependent** | Automation API, Audio Test, NFC, Noise Detection, SMTP, FTP, SNMP, TR069, Lift Control | Only available when the device license exposes them; not planned in this fork |
 
 ### Camera Support Baseline
@@ -324,6 +325,7 @@ Saved relay names, door/gate types, and pulse durations are preserved for relays
 | Camera | `live_view_mode` | `auto` \| `rtsp` \| `mjpeg` \| `jpeg_only` | `auto` | Camera live view transport. `auto` picks RTSP if licensed and RTSP credentials are set, then MJPEG, then snapshots |
 | Camera | `rtsp_username` | string | *(empty)* | Optional. RTSP server username — created on the intercom under Services → Streaming → RTSP Server → User Database; the HTTP API account does **not** work here. Empty = RTSP is never tried, MJPEG is used |
 | Camera | `rtsp_password` | string | *(empty)* | Optional. RTSP server password (masked field, never shown when the dialog is reopened — leave empty to keep the stored password; clear the username to remove the credential pair) |
+| Camera | `camera_two_way_audio` | bool | `false` | Two-way audio (live talk): the camera declares two-way audio and streams from the ONVIF media RTSP URL, which carries the audio return channel. Only takes effect when the live view is RTSP and the intercom offers the return channel there; see [Two-way audio (live talk)](#two-way-audio-live-talk) |
 | Camera | `camera_source` | `internal` \| `external` | `internal` | Which camera sensor to stream (external = secondary module) |
 | Camera | `mjpeg_width` | 160-2592 (px) | 1280 | MJPEG stream width |
 | Camera | `mjpeg_height` | 160-2592 (px) | 960 | MJPEG stream height |
@@ -659,7 +661,8 @@ The integration uses two data channels:
 
 ## Known Limitations
 
-- **No live talk from the dashboard yet** — Home Assistant sends talk audio over the RTSP ONVIF backchannel of the camera's stream source. 2N rejects that on the classic stream path this integration uses for video (`/h264_stream`, `551 Option not supported`); firmware 3.x offers it on the ONVIF media URL, which the camera does not use yet. The speaker media player plays files and TTS on the intercom (one direction); a live conversation needs a call (SIP, My2N)
+- **Live talk is opt-in and has requirements outside the integration** — two-way audio needs Home Assistant 2026.11 or newer, the RTSP live view, an intercom that offers the audio return channel on its ONVIF media URL (seen on firmware 3.x; firmware 2.x not verified), the Home Assistant preview feature **Two-way audio**, a WebRTC stream and HTTPS. Not yet heard on a real intercom. See [Two-way audio (live talk)](#two-way-audio-live-talk)
+- **Live talk and the speaker share the audio return channel** — what happens when the speaker media player plays while somebody talks is not verified; both count towards the intercom's RTSP stream limit
 - **Speaker counts as an RTSP stream** — the intercom serves a limited number of RTSP streams at once (4 according to the 2N manual) and the audio return channel is one of them while a sound plays
 - **Speaker needs ffmpeg** — Home Assistant's ffmpeg does the conversion; only `http`/`https` URLs and media sources are accepted
 - **RTSP requires a separate license** — the 2N RTSP server is a paid feature; without it, only MJPEG streaming is available
@@ -685,6 +688,22 @@ The integration uses two data channels:
 - Create an RTSP user on the device: **Services → Streaming → RTSP Server → User Database**
 - The entity attributes should show `rtsp_available: true` and `live_view_selected_mode: rtsp` when RTSP is working
 - If RTSP credentials are wrong, the integration logs a warning and falls back to MJPEG
+
+### Two-way audio (live talk)
+
+Talk to the visitor with the microphone button on the camera card. Off by default.
+
+1. Use the RTSP live view: RTSP credentials in the camera options step and `live_view_selected_mode: rtsp` on the camera entity.
+2. Turn on **Two-way audio (live talk)** in Settings → Devices & Services → 2N Intercom → Configure → Camera step.
+3. In Home Assistant (2026.11 or newer) enable the preview feature **Two-way audio** under Settings → System → Labs.
+4. Open Home Assistant over **HTTPS** (browsers only give microphone access to secure pages) and make sure the camera plays over **WebRTC** (Home Assistant's built-in go2rtc provides it; HLS carries no talk audio).
+
+What the option changes: when the intercom offers an audio return channel on its ONVIF media RTSP URL (`rtsp://<host>/onvif/media?transport=unicast&profile=profile_h264_hq`), the camera's stream source becomes that URL instead of `/h264_stream` and the camera declares two-way audio. The classic path refuses the return channel (`551 Option not supported`), which is why the URL changes. In every other case (option off, MJPEG or snapshots only, no return channel, older Home Assistant) the camera behaves exactly as without the option.
+
+Checks when the microphone does not appear:
+- The camera attribute `two_way_audio` is `true` when the integration's side is active. If it is `false` with the option on, enable debug logging: the log says `Two-way audio not offered: ...` with the reason
+- If the attribute is `true`, the missing piece is on the Home Assistant side (Labs preview feature, HTTPS, WebRTC)
+- Not verified on a device yet: whether go2rtc negotiates the return channel with this URL, and whether the picture on the ONVIF media URL is the same as on `/h264_stream`. If the video gets worse with the option on, turn it off
 
 ### Speaker has no entity or no sound
 - The speaker entity needs the same RTSP credentials as the RTSP stream (options flow → Camera step) and an active RTSP server on the device

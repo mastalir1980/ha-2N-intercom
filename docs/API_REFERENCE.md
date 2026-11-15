@@ -328,6 +328,25 @@ Zařízení má vlastní plánovač aktualizací. Konfigurace (cesty z UI a ze z
 - Probe: nešifrovaný `OPTIONS`, podle `401` se sestaví **Digest** hlavička
   (`_build_rtsp_digest_auth`, MD5 dle RFC 2069/2617) a ověří se `200 OK`.
 
+### Zdroj streamu kamery a obousměrný zvuk (TASK-79)
+
+- Výchozí zdroj (`stream_source()`): `/h264_stream`. Beze změny.
+- S volbou `camera_two_way_audio` (options flow, krok Camera, výchozí vypnuto)
+  se zdroj přepne na ONVIF media URL
+  `rtsp://<user>:<pass>@<host>:<rtsp_port>/onvif/media?transport=unicast&profile=profile_h264_hq`
+  (`get_rtsp_onvif_url_with_credentials`, údaje URL-enkódované) a kamera
+  deklaruje `CameraEntityCapabilities(two_way_audio=True)`. Důvod: HA posílá
+  zvuk z mikrofonu zpětným kanálem zdroje streamu a klasické cesty ho odmítají
+  (`551`, viz níže).
+- Podmínky přepnutí (všechny): volba zapnutá, HA zná `CameraEntityCapabilities`
+  (2026.11+), vybraný transport je RTSP, sdílená sonda zpětného kanálu
+  (`coordinator.backchannel_probe`, jedna na setup, společná s reproduktorem)
+  našla track právě na ONVIF media URL. Jinak se nic nemění.
+- Stav je vidět v atributu kamery `two_way_audio` a v diagnostice
+  (`audio_backchannel`: URL bez přihlašovacích údajů, kodek, důvod chyby).
+- **Neověřeno na zařízení:** zda go2rtc zpětný kanál s touto URL vyjedná, zda
+  je obraz na ONVIF URL stejný jako na `/h264_stream`, souběh s reproduktorem.
+
 ### RTSP audio backchannel (reproduktor)
 
 Entita `media_player` (speaker) posílá zvuk do interkomu zpětným zvukovým

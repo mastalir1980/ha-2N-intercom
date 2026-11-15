@@ -1934,6 +1934,29 @@ class PureHelperTests(unittest.TestCase):
         self.assertIn("user%40example.com", url)
         self.assertIn("p%40ss", url)
 
+    def test_onvif_media_rtsp_urls(self) -> None:
+        """ONVIF media URL: credential-free for the probe, encoded for streams."""
+        api = self.api_module.TwoNIntercomAPI(
+            host="x", username="u", password="p", port=443,
+            rtsp_username="rtsp user", rtsp_password="p@ss/word:1",
+        )
+        onvif = "rtsp://x:554/onvif/media?transport=unicast&profile=profile_h264_hq"
+        self.assertEqual(api.get_rtsp_onvif_url(), onvif)
+        self.assertEqual(
+            api.get_rtsp_onvif_url_with_credentials(),
+            "rtsp://rtsp%20user:p%40ss%2Fword%3A1@x:554"
+            "/onvif/media?transport=unicast&profile=profile_h264_hq",
+        )
+        # The probe candidates stay credential-free, ONVIF URL first.
+        self.assertEqual(
+            api.get_rtsp_backchannel_endpoint(),
+            ("x", 554, [onvif, "rtsp://x:554/h264_stream"]),
+        )
+        no_creds = self.api_module.TwoNIntercomAPI(
+            host="x", username="u", password="p", port=443
+        )
+        self.assertIsNone(no_creds.get_rtsp_onvif_url_with_credentials())
+
     def test_get_rtsp_port(self) -> None:
         api443 = self.api_module.TwoNIntercomAPI(
             host="x", username="u", password="p", port=443

@@ -130,7 +130,8 @@
           "mjpeg_height": "MJPEG-Höhe (Pixel)",
           "mjpeg_fps": "MJPEG-Bildrate (fps)",
           "rtsp_username": "RTSP-Benutzername",
-          "rtsp_password": "RTSP-Passwort"
+          "rtsp_password": "RTSP-Passwort",
+          "camera_two_way_audio": "Zwei-Wege-Audio (Gegensprechen)"
         },
         "data_description": {
           "live_view_mode": "Auto wählt RTSP wenn RTSP-Zugangsdaten konfiguriert und gültig sind, dann MJPEG, dann nur JPEG-Schnappschüsse",
@@ -139,7 +140,8 @@
           "mjpeg_height": "Höhe des MJPEG-Streams vom Gerät (z. B. 480)",
           "mjpeg_fps": "Bilder pro Sekunde für den MJPEG-Stream (1-15)",
           "rtsp_username": "Optional — wird nur für den RTSP-(H.264)-Videostream verwendet. Das Konto legen Sie am Gerät unter Services > Streaming > RTSP Server > User Database an; das API-Konto funktioniert hier nicht. Leer lassen, um MJPEG statt RTSP zu verwenden.",
-          "rtsp_password": "Optional — Passwort des RTSP-Kontos. Es wird hier nie angezeigt: leer lassen, um das gespeicherte Passwort zu behalten. Zum vollständigen Entfernen der RTSP-Zugangsdaten auch den Benutzernamen leeren; ohne sie verwendet die Integration MJPEG."
+          "rtsp_password": "Optional — Passwort des RTSP-Kontos. Es wird hier nie angezeigt: leer lassen, um das gespeicherte Passwort zu behalten. Zum vollständigen Entfernen der RTSP-Zugangsdaten auch den Benutzernamen leeren; ohne sie verwendet die Integration MJPEG.",
+          "camera_two_way_audio": "Ermöglicht das Sprechen mit dem Besucher über die Mikrofontaste der Kamerakarte. Funktioniert nur, wenn die Live-Ansicht RTSP verwendet und die Sprechanlage einen Audio-Rückkanal anbietet; sonst bleibt die Option ohne Wirkung. Erfordert außerdem Home Assistant 2026.11 oder neuer mit aktivierter Vorschaufunktion \"Two-way audio\" (Einstellungen > System > Labs), einen WebRTC-Kamerastream und den Aufruf von Home Assistant über HTTPS."
         }
       },
       "relay": {

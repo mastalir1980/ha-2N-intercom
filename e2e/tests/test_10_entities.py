@@ -303,3 +303,42 @@ def test_speaker_matches_rtsp_backchannel(ha, entry, registry):
     )
     if speaker and not speaker.get("disabled_by"):
         assert ha.state(speaker["entity_id"])["state"] == "idle"
+
+
+def test_camera_two_way_audio_matches_rtsp_backchannel(ha, entry, registry):
+    """HA camera streams from the ONVIF media URL <-> its DESCRIBE offers a sendonly audio track.
+
+    Read-only: one DESCRIBE, no RTSP session, no sound on the intercom. Needs the
+    RTSP account in the E2E environment and the staging entry option
+    "Two-way audio (live talk)" turned on.
+    """
+    user, password = CFG.get("E2E_RTSP_USER"), CFG.get("E2E_RTSP_PASSWORD")
+    if not user or not password:
+        pytest.skip("E2E_RTSP_USER / E2E_RTSP_PASSWORD not set")
+    if not (entry.get("options") or {}).get("camera_two_way_audio"):
+        pytest.skip("the staging entry has two-way audio turned off (options flow)")
+    cam = find_by_suffix(registry, entry["entry_id"], "camera")
+    if cam is None or cam.get("disabled_by"):
+        pytest.skip("camera entity not enabled")
+    attributes = ha.state(cam["entity_id"])["attributes"]
+    if attributes.get("live_view_selected_mode") != "rtsp":
+        pytest.skip("the staging camera does not use the RTSP live view")
+
+    onvif_path = rtsp.PATHS[0]
+    port = int(CFG.get("E2E_RTSP_PORT") or 554)
+    host = CFG["INTERCOM_HOST"].split(":")[0]
+    status, sdp = rtsp.describe(host, user, password, port=port, path=onvif_path)
+    codecs = rtsp.backchannel_codecs(sdp) if status == 200 else []
+
+    # The camera uses the ONVIF media URL exactly when the device offers the
+    # backchannel there (attribute two_way_audio; unit tests tie it to stream_source()).
+    assert attributes.get("two_way_audio") is bool(codecs), (
+        f"camera two_way_audio={attributes.get('two_way_audio')}, "
+        f"RTSP DESCRIBE of the ONVIF media URL -> {status}, backchannel codecs {codecs}"
+    )
+    diagnostics = ha.get_json(f"/api/diagnostics/config_entry/{entry['entry_id']}")
+    probe = diagnostics["data"]["audio_backchannel"]
+    if codecs:
+        assert probe["probed"] and probe["url"].endswith("/" + onvif_path), probe
+        assert probe["codec"] in codecs, probe
+        assert user not in probe["url"] and password not in probe["url"]

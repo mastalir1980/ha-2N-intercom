@@ -97,6 +97,21 @@ def _redact_identifier_values(data: Any, pattern: re.Pattern[str]) -> Any:
     return data
 
 
+def _backchannel_diagnostics(coordinator: Any) -> dict[str, Any]:
+    """Describe the shared audio backchannel probe (no credentials)."""
+    probe = getattr(coordinator, "backchannel_probe", None)
+    result = probe.result if probe is not None else None
+    if result is None:
+        return {"probed": False}
+    return {
+        "probed": True,
+        # The probe URL is built without credentials.
+        "url": result.url,
+        "codec": result.track.codec if result.track is not None else None,
+        "error": result.error.reason if result.error is not None else None,
+    }
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: TwoNIntercomConfigEntry
 ) -> dict[str, Any]:
@@ -188,6 +203,7 @@ async def async_get_config_entry_diagnostics(
             "mjpeg_fps": transport.mjpeg_fps,
             "available_sources": list(transport.capabilities.sources),
         },
+        "audio_backchannel": _backchannel_diagnostics(coordinator),
     }
     diagnostics = async_redact_data(diagnostics, TO_REDACT)
     identifiers = {

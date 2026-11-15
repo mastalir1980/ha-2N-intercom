@@ -559,6 +559,19 @@ class SessionButtonTests(unittest.IsolatedAsyncioTestCase):
             types.SimpleNamespace(), types.SimpleNamespace()
         )
 
+    async def test_coordinator_owns_one_backchannel_probe_for_its_api(self) -> None:
+        """Speaker and camera read the same probe object (TASK-79)."""
+        api = types.SimpleNamespace()
+        coordinator = self.coordinator_module.TwoNIntercomCoordinator(
+            types.SimpleNamespace(), api
+        )
+        backchannel = sys.modules["custom_components.2n_intercom.backchannel"]
+        probe = coordinator.backchannel_probe
+        self.assertIsInstance(probe, backchannel.BackchannelProbe)
+        self.assertIs(probe, coordinator.backchannel_probe)
+        self.assertIs(probe._api, api)
+        self.assertIsNone(probe.result)
+
     async def test_captured_button_sequences_store_integer_for_first_ring(self) -> None:
         for info in ("1", "2", "12"):
             with self.subTest(info=info):

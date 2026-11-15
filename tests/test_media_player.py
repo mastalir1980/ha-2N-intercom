@@ -163,6 +163,8 @@ class FakeCoordinator:
             ),
         )
         self.camera_transport_info = types.SimpleNamespace(rtsp_available=rtsp)
+        backchannel = sys.modules[f"{PACKAGE}.backchannel"]
+        self.backchannel_probe = backchannel.BackchannelProbe(self.api)
 
     def get_device_info(self, entry_id, name):
         return {"entry_id": entry_id, "name": name}

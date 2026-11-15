@@ -35,6 +35,7 @@ CONF_MJPEG_FPS = "mjpeg_fps"
 CONF_CAMERA_SOURCE = "camera_source"
 CONF_RTSP_USERNAME = "rtsp_username"
 CONF_RTSP_PASSWORD = "rtsp_password"
+CONF_CAMERA_TWO_WAY_AUDIO = "camera_two_way_audio"
 
 # Relay configuration keys
 CONF_RELAY_NAME = "relay_name"
@@ -91,6 +92,7 @@ LIVE_VIEW_MODES = [
 
 # Camera transport defaults
 DEFAULT_LIVE_VIEW_MODE = LIVE_VIEW_MODE_AUTO
+DEFAULT_CAMERA_TWO_WAY_AUDIO = False
 DEFAULT_CAMERA_MJPEG_WIDTH = 1280
 DEFAULT_CAMERA_MJPEG_HEIGHT = 960
 DEFAULT_CAMERA_MJPEG_FPS = 10

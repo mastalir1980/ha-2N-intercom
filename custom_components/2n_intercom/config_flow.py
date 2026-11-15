@@ -40,6 +40,7 @@ from .const import (
     CONF_ALLOW_INSECURE,
     CONF_CALLED_ID,
     CONF_CAMERA_SOURCE,
+    CONF_CAMERA_TWO_WAY_AUDIO,
     CONF_ENABLE_CAMERA,
     CONF_ENABLE_DOORBELL,
     CONF_RING_ON_KEYPRESS,
@@ -66,6 +67,7 @@ from .const import (
     DEFAULT_CAMERA_MJPEG_HEIGHT,
     DEFAULT_CAMERA_MJPEG_WIDTH,
     DEFAULT_CAMERA_SOURCE,
+    DEFAULT_CAMERA_TWO_WAY_AUDIO,
     DEFAULT_ENABLE_CAMERA,
     DEFAULT_ENABLE_DOORBELL,
     DEFAULT_RING_ON_KEYPRESS,
@@ -1039,6 +1041,7 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlowWithReload):  # type: ig
                 CONF_MJPEG_FPS,
                 CONF_RTSP_USERNAME,
                 CONF_RTSP_PASSWORD,
+                CONF_CAMERA_TWO_WAY_AUDIO,
             ):
                 self._data.pop(camera_key, None)
 
@@ -1244,6 +1247,16 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlowWithReload):  # type: ig
                         type=selector.TextSelectorType.PASSWORD
                     )
                 ),
+                # Live talk from the dashboard; only takes effect with RTSP
+                # and a device that offers the audio backchannel.
+                vol.Required(
+                    CONF_CAMERA_TWO_WAY_AUDIO,
+                    default=bool(
+                        self._session_option(
+                            CONF_CAMERA_TWO_WAY_AUDIO, DEFAULT_CAMERA_TWO_WAY_AUDIO
+                        )
+                    ),
+                ): bool,
                 vol.Required(
                     CONF_CAMERA_SOURCE,
                     default=self._session_option(

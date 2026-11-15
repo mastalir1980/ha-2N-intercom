@@ -19,6 +19,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.util import dt as dt_util
 
+from .backchannel import BackchannelProbe
 from .api import (
     API_FEATURES,
     ESSENTIAL_API_PATHS,
@@ -271,6 +272,9 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
             coordinator_kwargs.pop("config_entry", None)
             super().__init__(hass, _LOGGER, **coordinator_kwargs)
         self.api = api
+        # One audio backchannel probe per setup, shared by the speaker and
+        # the camera (two-way audio); it runs on first use.
+        self.backchannel_probe = BackchannelProbe(api)
         self.config_entry = config_entry
         self._device_id: str | None = None
         self._bus_events_fired: dict[str, int] = {}

@@ -2218,11 +2218,13 @@ class TwoNIntercomAPI:
         offers the track; the classic stream path stays as a fallback.
         """
         rtsp_port = self._get_rtsp_port()
-        base = f"rtsp://{self.host}:{rtsp_port}"
         return (
             self.host,
             rtsp_port,
-            [f"{base}/{RTSP_ONVIF_PATH}", f"{base}/{RTSP_PATH}"],
+            [
+                self.get_rtsp_onvif_url(),
+                f"rtsp://{self.host}:{rtsp_port}/{RTSP_PATH}",
+            ],
         )
 
     def get_rtsp_url(self) -> str:
@@ -2246,6 +2248,28 @@ class TwoNIntercomAPI:
             f"rtsp://{quote(self.rtsp_username, safe='')}:"
             f"{quote(self.rtsp_password, safe='')}@"
             f"{self.host}:{rtsp_port}/{RTSP_PATH}"
+        )
+
+    def get_rtsp_onvif_url(self) -> str:
+        """Return the credential-free ONVIF media RTSP URL.
+
+        This is the URL on which firmware 3.x offers the audio backchannel.
+        """
+        return f"rtsp://{self.host}:{self._get_rtsp_port()}/{RTSP_ONVIF_PATH}"
+
+    def get_rtsp_onvif_url_with_credentials(self) -> str | None:
+        """Return the ONVIF media RTSP URL with real credentials.
+
+        Same video as ``get_rtsp_url_with_credentials()`` plus the audio
+        backchannel, used as the camera stream source for two-way audio.
+        Returns ``None`` when no RTSP credentials are configured.
+        """
+        if not self.rtsp_username or not self.rtsp_password:
+            return None
+        return (
+            f"rtsp://{quote(self.rtsp_username, safe='')}:"
+            f"{quote(self.rtsp_password, safe='')}@"
+            f"{self.host}:{self._get_rtsp_port()}/{RTSP_ONVIF_PATH}"
         )
 
 

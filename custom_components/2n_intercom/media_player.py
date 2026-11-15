@@ -72,29 +72,6 @@ def _create_client(
     )
 
 
-async def _async_find_backchannel(
-    coordinator: TwoNIntercomCoordinator,
-) -> tuple[str, BackchannelTrack]:
-    """Return the first RTSP URL on which the device offers the backchannel.
-
-    Raises the ``BackchannelError`` of the last URL tried; a failure other
-    than "unsupported" (credentials, network) ends the search at once.
-    """
-    _, _, urls = coordinator.api.get_rtsp_backchannel_endpoint()
-    last_error = BackchannelError(REASON_UNSUPPORTED, "No RTSP URL to try")
-    for url in urls:
-        client = _create_client(coordinator, url)
-        try:
-            return url, await client.async_describe()
-        except BackchannelError as err:
-            if err.reason != REASON_UNSUPPORTED:
-                raise
-            last_error = err
-        finally:
-            await client.async_close()
-    raise last_error
-
-
 def _ffmpeg_binary(hass: HomeAssistant) -> str:
     """Return the ffmpeg binary configured in Home Assistant."""
     try:
@@ -126,10 +103,10 @@ async def async_setup_entry(
         _LOGGER.debug("Speaker not created: RTSP is not available")
         return
 
-    try:
-        url, track = await _async_find_backchannel(coordinator)
-    except BackchannelError as err:
-        if err.reason == REASON_UNSUPPORTED:
+    probe = await coordinator.backchannel_probe.async_result()
+    if probe.url is None or probe.track is None:
+        err = probe.error
+        if err is None or err.reason == REASON_UNSUPPORTED:
             _LOGGER.debug("Speaker not created: %s", err)
         else:
             _LOGGER.warning(
@@ -139,8 +116,8 @@ async def async_setup_entry(
             )
         return
 
-    _LOGGER.debug("Audio backchannel available (codec %s)", track.codec)
-    async_add_entities([TwoNIntercomSpeaker(coordinator, config_entry, url)])
+    _LOGGER.debug("Audio backchannel available (codec %s)", probe.track.codec)
+    async_add_entities([TwoNIntercomSpeaker(coordinator, config_entry, probe.url)])
 
 
 class TwoNIntercomSpeaker(TwoNIntercomEntity, MediaPlayerEntity):  # type: ignore[misc]

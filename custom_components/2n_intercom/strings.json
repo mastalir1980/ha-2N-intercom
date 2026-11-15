@@ -134,7 +134,8 @@
           "mjpeg_height": "MJPEG height (pixels)",
           "mjpeg_fps": "MJPEG frame rate (fps)",
           "rtsp_username": "RTSP username",
-          "rtsp_password": "RTSP password"
+          "rtsp_password": "RTSP password",
+          "camera_two_way_audio": "Two-way audio (live talk)"
         },
         "data_description": {
           "live_view_mode": "auto picks RTSP when RTSP credentials are configured and valid, then MJPEG, then JPEG snapshots only",
@@ -143,7 +144,8 @@
           "mjpeg_height": "Height of the MJPEG stream requested from the device (e.g. 480)",
           "mjpeg_fps": "Frames per second for the MJPEG stream (1-15)",
           "rtsp_username": "Optional — only used for the RTSP (H.264) video stream. Create the account on the intercom under Services > Streaming > RTSP Server > User Database; your API account does not work here. Leave empty to use MJPEG instead of RTSP.",
-          "rtsp_password": "Optional — password of the RTSP account. It is never shown here: leave empty to keep the stored password. To remove the RTSP credentials completely, clear the username too; without them the integration uses MJPEG."
+          "rtsp_password": "Optional — password of the RTSP account. It is never shown here: leave empty to keep the stored password. To remove the RTSP credentials completely, clear the username too; without them the integration uses MJPEG.",
+          "camera_two_way_audio": "Lets you talk to the visitor with the microphone button on the camera card. Only works when the live view uses RTSP and the intercom offers an audio return channel; otherwise the option does nothing. Also needs Home Assistant 2026.11 or newer with the \"Two-way audio\" preview feature enabled (Settings > System > Labs), a WebRTC camera stream and Home Assistant opened over HTTPS."
         }
       },
       "relay": {

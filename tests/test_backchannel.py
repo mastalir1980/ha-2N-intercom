@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import struct
+import types
 import unittest
 
 from _rtsp_fake import SDP_WITHOUT_BACKCHANNEL, FakeRtspServer
@@ -264,6 +265,83 @@ class BackchannelClientTests(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaises(self.module.BackchannelError):
             await client.async_send_stream(_reader(b""))
+
+
+class BackchannelProbeTests(unittest.IsolatedAsyncioTestCase):
+    """The probe shared by the speaker and the camera (TASK-79)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.module = load_backchannel_module()
+
+    def _api(self, server: FakeRtspServer, *, username=None, password=None):
+        return types.SimpleNamespace(
+            rtsp_username=username or server.username,
+            rtsp_password=password or server.password,
+            get_rtsp_backchannel_endpoint=lambda: (
+                "127.0.0.1",
+                server.port,
+                [server.onvif_url, server.url],
+            ),
+        )
+
+    async def test_concurrent_callers_share_one_probe(self) -> None:
+        async with FakeRtspServer(onvif_only=True) as server:
+            probe = self.module.BackchannelProbe(self._api(server))
+            self.assertIsNone(probe.result)
+            with self.assertLogs(LOGGER_NAME, level="DEBUG") as logs:
+                self.module._LOGGER.debug("marker")
+                first, second = await asyncio.gather(
+                    probe.async_result(), probe.async_result()
+                )
+                third = await probe.async_result()
+            # One unauthenticated and one authenticated DESCRIBE in total.
+            self.assertEqual(server.methods(), ["DESCRIBE", "DESCRIBE"])
+        self.assertIs(first, second)
+        self.assertIs(first, third)
+        self.assertIs(probe.result, first)
+        self.assertEqual(first.url, server.onvif_url)
+        self.assertEqual(first.track.codec, "PCMU")
+        self.assertIsNone(first.error)
+        self.assertNotIn(server.password, first.url)
+        self.assertNotIn(server.password, "\n".join(logs.output))
+
+    async def test_unsupported_on_every_url_is_cached_as_an_error(self) -> None:
+        async with FakeRtspServer(sdp=SDP_WITHOUT_BACKCHANNEL) as server:
+            probe = self.module.BackchannelProbe(self._api(server))
+            result = await probe.async_result()
+            requests = len(server.requests)
+            self.assertIs(await probe.async_result(), result)
+            self.assertEqual(len(server.requests), requests)
+        self.assertIsNone(result.url)
+        self.assertIsNone(result.track)
+        self.assertEqual(result.error.reason, self.module.REASON_UNSUPPORTED)
+        # Both candidate URLs were asked before giving up.
+        self.assertEqual(
+            {uri for _, uri, _ in server.requests}, {server.onvif_url, server.url}
+        )
+
+    async def test_auth_failure_ends_the_search_without_the_password(self) -> None:
+        async with FakeRtspServer() as server:
+            probe = self.module.BackchannelProbe(
+                self._api(server, password="wrong-pass-123")
+            )
+            with self.assertLogs(LOGGER_NAME, level="DEBUG") as logs:
+                self.module._LOGGER.debug("marker")
+                result = await probe.async_result()
+            self.assertTrue(
+                all(uri == server.onvif_url for _, uri, _ in server.requests)
+            )
+        self.assertEqual(result.error.reason, self.module.REASON_AUTH)
+        self.assertNotIn("wrong-pass-123", str(result.error))
+        self.assertNotIn("wrong-pass-123", "\n".join(logs.output))
+
+    async def test_invalid_username_is_reported_not_raised(self) -> None:
+        async with FakeRtspServer() as server:
+            probe = self.module.BackchannelProbe(self._api(server, username='a"b'))
+            result = await probe.async_result()
+            self.assertEqual(server.requests, [])
+        self.assertEqual(result.error.reason, self.module.REASON_AUTH)
 
 
 if __name__ == "__main__":

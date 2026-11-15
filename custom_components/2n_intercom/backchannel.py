@@ -19,6 +19,7 @@ import re
 import secrets
 import struct
 from dataclasses import dataclass
+from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -545,3 +546,70 @@ class RtspBackchannelClient:
         return BackchannelError(
             reason, f"RTSP {method} answered {response.status} {response.reason}"
         )
+
+
+@dataclass(frozen=True)
+class BackchannelProbeResult:
+    """Outcome of the backchannel probe: a URL with its track, or the error."""
+
+    url: str | None = None
+    track: BackchannelTrack | None = None
+    error: BackchannelError | None = None
+
+
+class BackchannelProbe:
+    """Find the RTSP URL that offers the backchannel, once per setup.
+
+    The speaker and the camera both need the answer; the first caller runs
+    the DESCRIBE requests and every later caller gets the cached result.
+    ``api`` supplies ``get_rtsp_backchannel_endpoint()``, ``rtsp_username``
+    and ``rtsp_password``. The password is only used for Digest responses.
+    """
+
+    def __init__(self, api: Any) -> None:
+        """Remember where the endpoint and the credentials come from."""
+        self._api = api
+        self._lock = asyncio.Lock()
+        self._result: BackchannelProbeResult | None = None
+
+    @property
+    def result(self) -> BackchannelProbeResult | None:
+        """Return the cached result, ``None`` when the probe has not run."""
+        return self._result
+
+    async def async_result(self) -> BackchannelProbeResult:
+        """Return the probe result, running the probe on the first call."""
+        async with self._lock:
+            if self._result is None:
+                self._result = await self._async_probe()
+            return self._result
+
+    async def _async_probe(self) -> BackchannelProbeResult:
+        """Try the candidate URLs in order.
+
+        A failure other than "unsupported" (credentials, network) ends the
+        search at once; otherwise the error of the last URL is kept.
+        """
+        host, port, urls = self._api.get_rtsp_backchannel_endpoint()
+        error = BackchannelError(REASON_UNSUPPORTED, "No RTSP URL to try")
+        for url in urls:
+            client: RtspBackchannelClient | None = None
+            try:
+                client = RtspBackchannelClient(
+                    host,
+                    port,
+                    url,
+                    self._api.rtsp_username or "",
+                    self._api.rtsp_password or "",
+                )
+                return BackchannelProbeResult(
+                    url=url, track=await client.async_describe()
+                )
+            except BackchannelError as err:
+                error = err
+                if err.reason != REASON_UNSUPPORTED:
+                    break
+            finally:
+                if client is not None:
+                    await client.async_close()
+        return BackchannelProbeResult(error=error)
