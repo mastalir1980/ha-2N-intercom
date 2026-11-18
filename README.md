@@ -410,13 +410,14 @@ Setup outline:
 
    Restart the add-on after editing.
 2. On the intercom, configure the unused SIP account (usually **SIP 2**; leave SIP 1 alone if it is used by Control4 or another system): phone number and authentication ID `200`, the password from step 1, and Home Assistant's IP as domain, proxy and registrar (port 5060). Its registration state should change to **REGISTERED**.
-3. Still on the intercom, set **Calling > Call Answering Mode (SIP2)** to **Automatic**. The default **Always Busy** answers every incoming call with busy, so calls from Home Assistant fail right after ringing.
+3. Still on the intercom, set **Calling > Call Answering Mode (SIP2)** to **Automatic**. The default **Always Busy** answers every incoming call with busy, so calls from Home Assistant fail right after ringing. On firmware 3.x the field is labelled **Call Answering Mode (SIP)** and can be set per SIP account.
 4. Install SIP Core and configure it under **Settings > Devices & services > SIP Core > Configure**. In `users:`, `ha_username` must exactly match the HA user's **ID** or **display name** (not the login username), and `extension` is that person's Asterisk extension. To show the intercom camera in the call popup, map the extension under `popup_config.extensions` to the camera entity from this integration.
 5. Add a `custom:sip-contacts-card` with the intercom's extension to a dashboard and tap it to call.
 
 Things to know:
 
 - The dashboard must be opened over **HTTPS**. Browsers only allow microphone access on secure pages, so a plain `http://` URL (including the Companion app's internal URL) will not work.
+- Tested on firmware 2.43. The 3.x configuration manual has the same answering mode options, but this setup has not been tried on a 3.x unit yet.
 - Call setup is fast: in testing, the intercom answered and the audio was bridged within the same second, and audio started in about a second, also through a Cloudflare tunnel. Two-way audio over mobile data worked with SIP Core's default STUN server; some networks may need a TURN server.
 - In the Companion app, SIP Core stays connected while the app is in the background. Browser tabs may disconnect when suspended and need a reload. Ringing a locked phone is not supported.
 - Routing a real button press to Home Assistant means changing the intercom's directory or call settings, which can change how calls reach other systems such as Control4. That is not covered here.
@@ -701,7 +702,7 @@ The integration uses two data channels:
 
 ## Known Limitations
 
-- **No two-way audio in the integration** — Home Assistant 2026.11 added two-way audio for cameras, but it sends audio back over the RTSP stream (ONVIF backchannel), and a DS2 Mini on firmware 2.43 rejects that (`551 Option not supported`; firmware 3.x not tested yet). Two-way talk works today over SIP without this integration, see [Two-way audio via SIP](#two-way-audio-via-sip-optional)
+- **No two-way audio in the integration** — Home Assistant 2026.11 added two-way audio for cameras as a Labs preview feature. It sends audio back over the RTSP stream (ONVIF backchannel) through go2rtc, which does not work with 2N intercoms yet. Firmware 2.43 rejects the backchannel (`551 Option not supported`). Firmware 3.x offers it on the ONVIF media URL, but it expects the backchannel `Require` header on SETUP and PLAY as well, as the ONVIF Streaming Specification describes (section 5.3), while go2rtc only sends it on DESCRIBE, so the talk button never connects. Two-way talk works today over SIP without this integration, see [Two-way audio via SIP](#two-way-audio-via-sip-optional)
 - **RTSP requires a separate license** — the 2N RTSP server is a paid feature; without it, only MJPEG streaming is available
 - **RTSP credentials are independent** — the RTSP server has its own user database; HTTP API credentials do not work for RTSP
 - **No gate position feedback** — the IP Verso has no gate-position sensor; cover entities use optimistic state transitions
