@@ -35,11 +35,42 @@ class ReleaseDocumentationTests(unittest.TestCase):
         self.assertEqual(self.manifest["version"], version)
         self.assertEqual(date.fromisoformat(released_on).isoformat(), released_on)
 
-    def test_v152_documents_camera_and_refused_call_fixes(self) -> None:
-        self.assertEqual(self.manifest["version"], "1.5.2")
-        self.assertEqual([version for version, _, _ in self.releases[:3]],
-                         ["1.5.2", "1.5.1", "1.5.0"])
+    def test_v160_documents_features_fixes_and_docs(self) -> None:
+        self.assertEqual(self.manifest["version"], "1.6.0")
+        self.assertEqual([version for version, _, _ in self.releases[:4]],
+                         ["1.6.0", "1.5.2", "1.5.1", "1.5.0"])
         release = self.releases[0][2]
+        for detail in (
+            "### Features", "### Fixes", "### Docs",
+            "2n_intercom_event", "recorder.exclude.event_types",
+            "Save event pictures", "Keep pictures for (days)", "has no default",
+            "access-granted", "access-denied", "backups include them",
+            "`button` attribute", "ring_on_keypress", "off by default",
+            "once instead of twice", "switch/caps", "random client nonce",
+        ):
+            with self.subTest(detail=detail):
+                self.assertIn(detail, release)
+        # 1.5.2 fixes are on main too, but must not be announced again.
+        for repeated in ("2N IP Uni", "missing privilege", "#105"):
+            with self.subTest(repeated=repeated):
+                self.assertNotIn(repeated, release)
+        # No audio feature ships in 1.6.0.
+        for unreleased in ("live talk", "two-way audio", "media player"):
+            with self.subTest(unreleased=unreleased):
+                self.assertNotIn(unreleased, release.lower())
+        for name, text in self.docs.items():
+            for option in (
+                "ring_on_keypress", "save_event_pictures",
+                "event_picture_retention_days", "2n_intercom_event", "button",
+                "Media → My media → 2n_intercom",
+            ):
+                with self.subTest(doc=name, option=option):
+                    self.assertIn(option, text)
+
+    def test_v152_documents_camera_and_refused_call_fixes(self) -> None:
+        self.assertEqual([version for version, _, _ in self.releases[1:4]],
+                         ["1.5.2", "1.5.1", "1.5.0"])
+        release = self.releases[1][2]
         self.assertNotIn("### Features", release)
         for detail in (
             "### Fixes", "without a camera", "2N IP Uni", "last-ring image",
@@ -52,9 +83,9 @@ class ReleaseDocumentationTests(unittest.TestCase):
             self.assertIn("lacks the … privilege", self.docs[name])
 
     def test_v151_documents_log_subscription_fix(self) -> None:
-        self.assertEqual([version for version, _, _ in self.releases[1:3]],
+        self.assertEqual([version for version, _, _ in self.releases[2:4]],
                          ["1.5.1", "1.5.0"])
-        release = self.releases[1][2]
+        release = self.releases[2][2]
         for detail in (
             "### Fixes", "log subscriptions", "2N IP Uni",
             "Unsupported events", "doorbell ring detection", "#105",

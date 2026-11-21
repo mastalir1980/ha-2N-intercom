@@ -344,7 +344,7 @@ Pictures appear in **Media → My media → 2n_intercom** as JPEG files:
 
 Dates and times use Home Assistant's local time. The entry title is converted to a safe folder name. The kinds are `ring`, `access-granted` and `access-denied`: rings and card, keypad-code, mobile-key or fingerprint access attempts use the configured camera source. API-triggered access is not photographed. Filenames do not contain credential or user identifiers.
 
-The media root is `hass.config.media_dirs["local"]`, or the only configured media directory if there is exactly one and no `local` entry. It must already exist and be writable; an unavailable media root prevents enabling saving. With several directories and no `local` entry, no root is selected.
+The media root is `hass.config.media_dirs["local"]`, or the only configured media directory if there is exactly one and no `local` entry. It must already exist and be writable; an unavailable media root prevents enabling saving. A media root whose path contains a symbolic link (the folder itself or any parent folder) is treated as unavailable. With several directories and no `local` entry, no root is selected.
 
 At most one picture is saved per entry every **10 seconds**, across all three kinds. A ring within this throttle window still updates the last-ring image in memory even though no additional file is saved. Retention cleanup runs at setup and every **24 hours**, deleting expired pictures and then empty date folders **only inside this entry's own folder**.
 

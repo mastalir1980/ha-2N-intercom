@@ -65,7 +65,7 @@ After setup you should see:
 
 - `camera.<name>_camera` — JPEG snapshots and a native MJPEG live view (no ffmpeg)
 - `image.<name>_last_ring` — snapshot captured at the last ring, created when the camera is enabled; a failed capture keeps the previous image
-- `event.<name>_doorbell` — one `ring` event per intercom-started ring
+- `event.<name>_doorbell` — one `ring` event per intercom-started ring, with the `button` attribute (call-button number) when the device reports it
 - `binary_sensor.<name>_input_1` — real device input state
 - Additional input and tamper binary sensors for the ports reported by the device, including extension modules (enabled by default)
 - `binary_sensor.<name>_relay_1_active` — real cached relay state
@@ -89,6 +89,7 @@ If you run the HA HomeKit Bridge, include only the camera in **Accessory** mode.
 - **Door relay** — call `switch.turn_on` (the relay self-resets after the configured pulse duration)
 - **Gate relay** — call `cover.open_cover` / `cover.close_cover`
 - **Last-ring image** — use the image entity on a dashboard or in notifications to show who rang, rather than the current camera view
+- **Event bus** — trigger automations on `2n_intercom_event` for rings and access-control events (see [Event bus](#event-bus-2n_intercom_event))
 
 Upgrading to v1.5.0 removes the old doorbell binary sensor and its registry entry
 automatically, without a deprecation period. Update existing automations,
@@ -114,6 +115,20 @@ and one step per detected relay. New Device-step options in v1.5.0:
 |---|---|---|
 | **Firmware channel** (`firmware_channel`) | Active track (`active_track`) | Check Active track, LTS (`lts`) or Beta (`beta`) firmware; never changes the device's AutoUpdate settings |
 | **Default user for grant access** (`grant_access_user`) | Empty | Directory user for `2n_intercom.grant_access` when a service call omits `user`; clear the selection to require a user in every call |
+
+Options added in v1.6.0, all off by default:
+
+| Step | Option | Default | Purpose |
+|---|---|---|---|
+| Device | **Ring on call-button press** (`ring_on_keypress`) | Off | Also ring when a call button is pressed but starts no call (`KeyPressed`), for example a button with no call destination. Keypad keys never ring and the Called ID filter does not apply to button presses. Takes effect only when the device lists `KeyPressed` in `/api/log/caps` |
+| Camera | **Save event pictures** (`save_event_pictures`) | Off | Save a JPEG for every ring and every card, keypad-code, mobile-key or fingerprint access attempt to **Media → My media → 2n_intercom** |
+| Camera | **Keep pictures for (days)** (`event_picture_retention_days`) | *(none)* | Required before saving can be enabled: 1-365 days, older pictures are deleted automatically |
+
+Saved pictures show people: every Home Assistant user with media access can see
+them and Home Assistant backups include them. The local media folder must exist
+and be writable, otherwise the form refuses to enable saving. See
+[Event picture history](README.md#event-picture-history) for file names, the
+10-second limit, retention cleanup and the last-ring image after a restart.
 
 The grant-access selector shows directory names instead of UUIDs, including the
 saved selection. If directory lookup fails, a warning is shown and the saved
@@ -214,6 +229,30 @@ user names when **System - Control** is granted. Enable **Logging** and the
 feature-specific account privileges listed in the
 [HTTP API account privileges table](README.md#http-api-account-privileges).
 
+### Event bus: `2n_intercom_event`
+
+Since v1.6.0 every accepted access-control event and every counted ring also
+fires `2n_intercom_event` on the Home Assistant event bus. Listen in
+**Developer tools → Events** or use an event trigger; the `type` field tells the
+events apart (`ring`, `card_entered`, `code_entered`, `user_authenticated`,
+`user_rejected`, …). Access events carry the credential type, access point,
+direction, `granted` and, when known, `user_uuid` and `user_name`. PINs, card
+numbers and mobile-key IDs are never included.
+
+```yaml
+trigger:
+  - platform: event
+    event_type: 2n_intercom_event
+    event_data:
+      type: code_entered
+      granted: false
+```
+
+Home Assistant's recorder stores these events, including user names and UUIDs,
+unless you add `2n_intercom_event` to `recorder.exclude.event_types`. The full
+type list, payload table and more examples are in the
+[README](README.md#event-bus-2n_intercom_event).
+
 ## Troubleshooting
 
 ### Integration not appearing
@@ -281,6 +320,9 @@ Implemented:
 - Extension-module input/tamper sensors and disabled-by-default direct output switches
 - `grant_access` service, directory-user option and supported access-control events
 - Informational firmware update entity with Active track / LTS / Beta channel option
+- `2n_intercom_event` bus events for rings and access-control events with person attribution
+- Opt-in event picture history in the media browser with mandatory retention
+- Call-button number on the doorbell event and opt-in ring on call-button press
 
 Downstream HA automations (mobile actionable notifications, KNX door opening, etc.) consume the entities and services above; they're not part of the fork itself.
 
