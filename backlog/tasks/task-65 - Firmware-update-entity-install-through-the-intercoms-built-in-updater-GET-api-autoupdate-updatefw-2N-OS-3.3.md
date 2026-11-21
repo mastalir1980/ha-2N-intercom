@@ -5,14 +5,14 @@ title: >-
   /api/autoupdate/updatefw, 2N OS 3.3+)
 status: To Do
 assignee: []
-created_date: 2026-10-19 14:57
-updated_date: '2026-10-24T08:29:00Z'
+created_date: '2026-10-19 14:57'
+updated_date: '2026-11-21 12:37'
 labels:
   - firmware
   - update-entity
   - manual-close
   - on-hold
-milestone: m-1
+milestone: m-4
 dependencies:
   - TASK-51
   - TASK-66
@@ -51,4 +51,6 @@ Open question (blocks this task, answered by TASK-66): when a newer firmware exi
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-24 (Jan, v1.6.0 planning): TASK-65/66 stay in v1.6.0 but do not block its release. If 2N has not published a newer firmware for the E2E intercom (so TASK-66 cannot run) when every other v1.6.0 task is Done, both move to the next milestone.
+
+2026-11-21: moved from milestone v1.6.0 to v1.7.0. v1.6.0 is released without this task (release prepared in TASK-74 on Jan's request).
 <!-- SECTION:NOTES:END -->

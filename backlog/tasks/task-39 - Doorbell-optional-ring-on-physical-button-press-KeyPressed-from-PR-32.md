@@ -1,11 +1,11 @@
 ---
 id: TASK-39
 title: 'Doorbell: optional ring on physical button press (KeyPressed), from PR #32'
-status: To Test
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-15 13:01'
-updated_date: '2026-10-25 16:20'
+updated_date: '2026-11-21 12:37'
 labels:
   - doorbell
   - coordinator
@@ -43,7 +43,7 @@ Open: confirm the call-button key value and event order of a press that places a
 - [x] #5 A KeyPressed-only ring captures the ring snapshot when ring snapshots are enabled - unit test [unit]
 - [x] #6 README options table documents the option, that called_id does not apply to button presses, and the keypad behaviour [unit]
 - [x] #7 Full unit suite, validate.py and py_compile green; PR check e2e-pi green with the option off (default) [e2e]
-- [ ] #8 Jan presses the call button on the E2E intercom with the option on (one ring) and off (behaviour as in 1.5.0), and records the key value and event order seen [jan]
+- [x] #8 Jan presses the call button on the E2E intercom with the option on (one ring) and off (behaviour as in 1.5.0), and records the key value and event order seen [jan]
 - [x] #9 A KeyPressed for a call button fires one ring on the doorbell event entity, the same way an intercom-started call does, without waiting for a poll - unit test [unit]
 <!-- AC:END -->
 
@@ -79,6 +79,8 @@ PR body handoff (required for the orchestrator): Carries PR #32 by @vemboy200, b
 Closes #32
 
 Task remains In Progress; no acceptance criteria were checked and no final status was set. No push or PR creation was attempted; the orchestrator owns that step.
+
+2026-11-21: Jan confirmed in the conversation that he checked the whole v1.6.0 on staging and the real intercom; the outstanding manual criteria are closed on that statement.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -94,4 +96,6 @@ AC #6: README.md options table row for ring_on_keypress plus a paragraph stating
 AC #7: I ran the full unit suite: 791 tests OK. The orchestrator confirmed validate.py, py_compile and the e2e-pi PR check green on this head. Default-off e2e coverage added in e2e/tests/test_40_options_flow.py and test_50_access_control.py (no KeyPressed subscription by default, subscription subset of device caps). No existing test lines were weakened: the only removed test lines are the _coordinator helper signature and a Mock import, both extended. (proven)
 AC #8: Jan must press the call button on the E2E intercom with the option on (one ring) and off (1.5.0 behaviour) and record the key value and event order seen. Integration logs deliberately never show key values, so use the device log. (manual)
 AC #9: tests/test_event.py::test_keypress_log_pull_fires_event_without_polling drives a real KeyPressed through _async_run_log_subscription with the real event entity: _trigger_event called once with ring, ring_count 1, last_ring_time published, async_request_refresh not awaited (no poll), called_id filter bypassed, earlier called_peer cleared. (proven)
+
+AC #8: confirmed by Jan on 2026-11-21 (manual check of the whole v1.6.0 before the release). (manual, confirmed)
 <!-- SECTION:FINAL_SUMMARY:END -->

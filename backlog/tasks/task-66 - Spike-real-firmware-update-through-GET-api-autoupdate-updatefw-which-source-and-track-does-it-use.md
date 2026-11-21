@@ -5,13 +5,13 @@ title: >-
   source and track does it use
 status: To Do
 assignee: []
-created_date: 2026-10-19 19:15
-updated_date: '2026-10-24T08:29:00Z'
+created_date: '2026-10-19 19:15'
+updated_date: '2026-11-21 12:37'
 labels:
   - firmware
   - investigation
   - manual-close
-milestone: m-1
+milestone: m-4
 dependencies: []
 references:
   - docs/API_REFERENCE.md
@@ -39,4 +39,6 @@ Run only with Jan present and on his explicit go, when the 2N update server offe
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-24 (Jan): does not block the v1.6.0 release; see TASK-65 note.
+
+2026-11-21: moved from milestone v1.6.0 to v1.7.0. v1.6.0 is released without this task (release prepared in TASK-74 on Jan's request).
 <!-- SECTION:NOTES:END -->
