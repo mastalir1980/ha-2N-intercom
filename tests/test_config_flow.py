@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 from copy import deepcopy
 import json
 import logging
+from pathlib import Path
 import sys
 import types
 import unittest
@@ -46,15 +47,17 @@ class _FormResult(dict):
 
 def _install_voluptuous_stub() -> None:
     voluptuous = types.ModuleType("voluptuous")
+    undefined = object()
 
     class Schema:
         def __init__(self, schema):
             self.schema = schema
 
     class Required:
-        def __init__(self, key, default=None, description=None):
+        def __init__(self, key, default=undefined, description=None):
             self.key = key
-            self.default = default
+            self.default = None if default is undefined else default
+            self.has_default = default is not undefined
             self.description = description
 
         def __hash__(self) -> int:
@@ -381,7 +384,7 @@ class FakeConfigEntries:
 class FakeHass:
     def __init__(self, entries) -> None:
         self.config_entries = FakeConfigEntries(entries)
-        self.config = types.SimpleNamespace(language="en")
+        self.config = types.SimpleNamespace(language="en", media_dirs={})
         self.data = {}
 
     async def async_add_executor_job(self, func, *args):
@@ -2419,6 +2422,179 @@ class OptionsFlowTests(unittest.IsolatedAsyncioTestCase):
         result = await flow.async_step_camera(None)
         self.assertEqual(result["type"], "form")
         self.assertEqual(result["step_id"], "camera")
+
+    async def test_event_picture_fields_default_off_and_retention_has_no_default(self) -> None:
+        for saved in ({}, {"save_event_pictures": True, "event_picture_retention_days": 30}):
+            with self.subTest(options=saved):
+                entry = FakeConfigEntry("entry-1", {"host": "example.invalid"}, saved)
+                flow = self._make_options_flow(entry)
+                form = await flow.async_step_camera()
+                enabled = _form_field_marker(form, "save_event_pictures")
+                retention = _form_field_marker(form, "event_picture_retention_days")
+                vol = sys.modules["voluptuous"]
+                self.assertIs(type(enabled), vol.Required)
+                self.assertIs(enabled.default, saved.get("save_event_pictures", False))
+                self.assertIs(form["data_schema"].schema[enabled], bool)
+                self.assertIs(type(retention), vol.Optional)
+                self.assertFalse(retention.has_default)
+                self.assertEqual(
+                    retention.description,
+                    {"suggested_value": saved.get("event_picture_retention_days")},
+                )
+                config = form["data_schema"].schema[retention].config
+                self.assertEqual(
+                    (config.min, config.max, config.step, config.mode, config.unit_of_measurement),
+                    (1, 365, 1, "box", "d"),
+                )
+
+    async def test_event_picture_fields_only_on_camera_step_and_removed_when_skipped(self) -> None:
+        for enabled, present in ((False, True), (True, False)):
+            with self.subTest(enabled=enabled, present=present):
+                saved = {
+                    "enable_camera": enabled,
+                    "save_event_pictures": True,
+                    "event_picture_retention_days": 30,
+                    "mjpeg_width": 800,
+                }
+                entry = FakeConfigEntry("entry-1", {"host": "example.invalid"}, saved)
+                entry.runtime_data = _make_runtime([])
+                entry.runtime_data.coordinator.camera_present = present
+                flow = self._make_options_flow(entry)
+                flow._data = dict(saved)
+                form = await flow.async_step_device()
+                fields = {marker.key for marker in form["data_schema"].schema}
+                self.assertNotIn("save_event_pictures", fields)
+                self.assertNotIn("event_picture_retention_days", fields)
+                payload = {
+                    "name": "Intercom", "enable_doorbell": True,
+                    "scan_interval": 60,
+                }
+                if present:
+                    payload["enable_camera"] = enabled
+                with patch.object(flow.hass, "async_add_executor_job") as executor:
+                    result = await flow.async_step_device(payload)
+                self.assertEqual(result["type"], "create_entry")
+                for key in ("save_event_pictures", "event_picture_retention_days", "mjpeg_width"):
+                    self.assertNotIn(key, result["data"])
+                self.assertEqual(entry.options, saved)
+                self.assertEqual(entry.data, {"host": "example.invalid"})
+                executor.assert_not_called()
+
+    async def test_disabling_event_pictures_removes_retention_without_media_check(self) -> None:
+        entry = FakeConfigEntry(
+            "entry-1", {"host": "example.invalid"},
+            {"save_event_pictures": True, "event_picture_retention_days": 30},
+        )
+        flow = self._make_options_flow(entry)
+        flow._data = {"event_picture_retention_days": 30}
+        with (
+            patch.object(self.config_flow_module, "resolve_media_root") as resolve,
+            patch.object(flow.hass, "async_add_executor_job") as executor,
+        ):
+            result = await flow.async_step_camera({
+                "save_event_pictures": False, "event_picture_retention_days": 0,
+            })
+        self.assertEqual(result["type"], "create_entry")
+        self.assertIs(result["data"]["save_event_pictures"], False)
+        self.assertNotIn("event_picture_retention_days", result["data"])
+        resolve.assert_not_called()
+        executor.assert_not_called()
+
+    async def test_retention_error_precedes_media_check_and_never_saves(self) -> None:
+        for retention in (None, 0, 366, 1.5, "30", True):
+            with self.subTest(retention=retention):
+                saved = {"save_event_pictures": False}
+                entry = FakeConfigEntry("entry-1", {"host": "example.invalid"}, saved)
+                flow = self._make_options_flow(entry)
+                flow._data = {"enable_camera": True}
+                payload = {"save_event_pictures": True}
+                if retention is not None:
+                    payload["event_picture_retention_days"] = retention
+                with (
+                    patch.object(self.config_flow_module, "resolve_media_root") as resolve,
+                    patch.object(self.config_flow_module, "is_writable") as writable,
+                    patch.object(flow.hass, "async_add_executor_job") as executor,
+                    patch.object(flow, "async_create_entry") as create,
+                ):
+                    result = await flow.async_step_camera(payload)
+                self.assertEqual(result["type"], "form")
+                self.assertEqual(result["step_id"], "camera")
+                self.assertEqual(
+                    result["errors"], {"event_picture_retention_days": "retention_required"},
+                )
+                self.assertIs(_form_default(result, "save_event_pictures"), True)
+                resolve.assert_not_called()
+                writable.assert_not_called()
+                executor.assert_not_called()
+                create.assert_not_called()
+                self.assertEqual(flow._data, {"enable_camera": True})
+                self.assertEqual(entry.options, saved)
+                self.assertEqual(entry.data, {"host": "example.invalid"})
+
+    async def test_valid_retention_boundaries_save_only_options_and_check_in_executor(self) -> None:
+        for retention in (1, 365, 1.0, 365.0):
+            with self.subTest(retention=retention):
+                data = {"host": "example.invalid", "username": "api"}
+                entry = FakeConfigEntry("entry-1", dict(data))
+                hass = FakeHass([entry])
+                hass.config.media_dirs = {"local": "media"}
+                flow = self._make_options_flow(entry, hass)
+                with (
+                    patch.object(self.config_flow_module, "is_writable", return_value=True) as writable,
+                    patch.object(
+                        hass, "async_add_executor_job", wraps=hass.async_add_executor_job,
+                    ) as executor,
+                ):
+                    result = await flow.async_step_camera({
+                        "save_event_pictures": True,
+                        "event_picture_retention_days": retention,
+                    })
+                self.assertEqual(result["type"], "create_entry")
+                self.assertIs(result["data"]["save_event_pictures"], True)
+                self.assertEqual(result["data"]["event_picture_retention_days"], int(retention))
+                self.assertIsInstance(result["data"]["event_picture_retention_days"], int)
+                executor.assert_awaited_once_with(writable, Path("media"))
+                writable.assert_called_once_with(Path("media"))
+                self.assertEqual(entry.options, {})
+                self.assertEqual(entry.data, data)
+                hass.config_entries.async_update_entry(entry, options=result["data"])
+                self.assertEqual(entry.options["event_picture_retention_days"], int(retention))
+                self.assertEqual(entry.data, data)
+
+    async def test_missing_or_unwritable_media_root_never_saves(self) -> None:
+        for media_dirs in ({}, {"first": "one", "second": "two"}, {"local": "media"}):
+            with self.subTest(media_dirs=media_dirs):
+                entry = FakeConfigEntry("entry-1", {"host": "example.invalid"})
+                hass = FakeHass([entry])
+                hass.config.media_dirs = media_dirs
+                flow = self._make_options_flow(entry, hass)
+                with (
+                    patch.object(self.config_flow_module, "is_writable", return_value=False) as writable,
+                    patch.object(
+                        hass, "async_add_executor_job", wraps=hass.async_add_executor_job,
+                    ) as executor,
+                    patch.object(flow, "async_create_entry") as create,
+                ):
+                    result = await flow.async_step_camera({
+                        "save_event_pictures": True, "event_picture_retention_days": 30,
+                    })
+                self.assertEqual(result["type"], "form")
+                self.assertEqual(result["step_id"], "camera")
+                self.assertEqual(result["errors"], {"base": "media_dir_unavailable"})
+                self.assertEqual(
+                    _form_field_marker(result, "event_picture_retention_days").description,
+                    {"suggested_value": 30},
+                )
+                create.assert_not_called()
+                self.assertEqual(flow._data, {})
+                self.assertEqual(entry.options, {})
+                self.assertEqual(entry.data, {"host": "example.invalid"})
+                if "local" in media_dirs:
+                    executor.assert_awaited_once_with(writable, Path("media"))
+                    writable.assert_called_once_with(Path("media"))
+                else:
+                    executor.assert_not_called()
+                    writable.assert_not_called()
 
     async def test_device_step_with_detected_relays_advances_to_relay(self) -> None:
         """When coordinator reports enabled relays, options flow shows relay step."""

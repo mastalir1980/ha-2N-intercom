@@ -24,6 +24,7 @@ Diagramy (otevři v [excalidraw.com](https://excalidraw.com) nebo VS Code rozš�
 | `api.py` | `TwoNIntercomAPI` – bezstavový HTTP klient. Parsování chyb 2N, kamera caps/transport, RTSP digest probe, řízení relé, snapshot. |
 | `entity.py` | Sdílená základní entita (`device_info`, `available`, `has_entity_name`). |
 | `camera.py` | `MjpegCamera` – live view (RTSP/MJPEG/JPEG snapshot stream). |
+| `event_pictures.py` | Opt-in local-media JPEG history: executor-only file IO, shared 10-second capture throttle, retention and last-ring restore. |
 | `binary_sensor.py` | IO inputs, relay-active, motion; no doorbell binary sensor. |
 | `event.py` | Doorbell events (`EventDeviceClass.DOORBELL`) for HomeKit camera auto-linking. |
 | `switch.py` | Door relé – dynamicky objevené z `/api/switch/caps`. |
@@ -77,6 +78,16 @@ also checks before its initial state is added and on `homeassistant.update_entit
 It never uses the device session, downloads firmware, or calls device firmware
 endpoints. Failures keep cached versions/notes and log once per failure streak,
 without changing coordinator availability or the log listener.
+
+Optional event picture history is separate from the in-RAM last-ring cache.
+The coordinator reserves one storage capture slot every ten seconds across
+rings and credential attempts; a throttled ring still refreshes the image cache.
+Only ring and card/code/mobile-key/fingerprint events save JPEGs. API requests
+and follow-up access events never capture a second image. The store writes,
+scans, checks writability and applies retention in the executor, confined to the
+entry-title folder in local media and without following symlinks. Setup restores
+the newest saved ring before forwarding the image platform, then schedules
+cleanup immediately and every 24 hours with entry-owned unload cancellation.
 
 ### Rozdělení `entry.data` vs `entry.options`
 

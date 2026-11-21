@@ -9,6 +9,7 @@ API and checks it against the 2N ground truth (switch caps):
 * saved options stay unchanged at each intermediate step and after aborting
   the final form without submitting it
 * grant-access user options show the names returned by the device directory
+* event picture saving requires retention, without saving the options draft
 
 Read-only: no relay is ever switched (flow REST calls only).
 """
@@ -16,6 +17,8 @@ Read-only: no relay is ever switched (flow REST calls only).
 from __future__ import annotations
 
 from typing import Any
+
+import pytest
 
 
 def _defaults_payload(step: dict[str, Any]) -> dict[str, Any]:
@@ -25,7 +28,7 @@ def _defaults_payload(step: dict[str, Any]) -> dict[str, Any]:
         name = field.get("name")
         if field.get("required") and "default" in field:
             payload[name] = field["default"]
-        elif name == "rtsp_username":
+        elif name in ("rtsp_username", "event_picture_retention_days"):
             suggested = (field.get("description") or {}).get("suggested_value")
             if suggested:
                 payload[name] = suggested
@@ -38,6 +41,11 @@ def _field_names(step: dict[str, Any]) -> set[str]:
 
 def _current_options(entry: dict) -> dict:
     return dict(entry.get("options") or {})
+
+
+def _assert_options_unchanged(ha, options_before: dict) -> None:
+    unchanged = _current_options(ha.entries()[0]) == options_before
+    assert unchanged, "The options draft must not be saved"
 
 
 def test_options_flow_last_step_and_forward_only_navigation(ha, twon, entry) -> None:
@@ -91,6 +99,48 @@ def test_options_flow_last_step_and_forward_only_navigation(ha, twon, entry) -> 
         ha.options_flow_abort(flow_id)
 
     assert _current_options(ha.entries()[0]) == options_before
+
+
+def test_options_flow_event_picture_retention_required(ha, entry) -> None:
+    """Camera options reject saving pictures without retention, without saving."""
+    options_before = _current_options(entry)
+    data = entry.get("data") or {}
+    if not options_before.get("enable_camera", data.get("enable_camera", True)):
+        pytest.skip("camera is switched off in the entry options")
+    flow = ha.options_flow_start(entry["entry_id"])
+    flow_id = flow["flow_id"]
+    try:
+        assert flow["type"] == "form" and flow["step_id"] == "device", (
+            "Expected the options Device form"
+        )
+        if "enable_camera" not in _field_names(flow):
+            pytest.skip("device reports no camera")
+        assert flow["last_step"] is False, "Never submit a final saving step"
+        flow = ha.options_flow_submit(flow_id, _defaults_payload(flow))
+        assert flow["type"] == "form" and flow["step_id"] == "camera", (
+            "Expected the options Camera form"
+        )
+        assert {
+            "save_event_pictures", "event_picture_retention_days"
+        } <= _field_names(flow)
+        _assert_options_unchanged(ha, options_before)
+        assert flow["last_step"] is False, "Never submit a final saving step"
+
+        payload = _defaults_payload(flow)
+        payload["save_event_pictures"] = True
+        payload.pop("event_picture_retention_days", None)
+        flow = ha.options_flow_submit(flow_id, payload)
+        assert flow["type"] == "form" and flow["step_id"] == "camera", (
+            "Invalid retention must stay on the Camera form"
+        )
+        assert flow.get("errors", {}).get("event_picture_retention_days") == (
+            "retention_required"
+        )
+        _assert_options_unchanged(ha, options_before)
+    finally:
+        ha.options_flow_abort(flow_id)
+
+    _assert_options_unchanged(ha, options_before)
 
 
 def test_grant_access_user_labels_match_directory(ha, twon, entry) -> None:

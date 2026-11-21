@@ -61,6 +61,7 @@ from .web import device_web_url
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
+    from .event_pictures import EventPictureStore
 
 # ConfigEntryAuthFailed lives in homeassistant.exceptions but the test stubs
 # don't ship it. Import lazily so module load works in any HA shape; raising
@@ -254,6 +255,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         config_entry: ConfigEntry | None = None,
         ring_snapshot_enabled: bool = False,
         ring_on_keypress: bool = False,
+        picture_store: EventPictureStore | None = None,
     ) -> None:
         """Initialize the coordinator."""
         # HA 2024.10+ accepts config_entry kwarg; pass when available so log
@@ -327,6 +329,7 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         self._ring_snapshot_enabled = ring_snapshot_enabled
         self._ring_snapshot: bytes | None = None
         self._ring_snapshot_time: datetime | None = None
+        self.picture_store = picture_store
         # Optional ring on a physical call-button press (KeyPressed)
         self._ring_on_keypress = ring_on_keypress
         self._keypress_clear_handle: asyncio.TimerHandle | None = None
@@ -883,6 +886,15 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         self._fire_bus_event(
             ACCESS_BUS_EVENT_TYPES[event_name], self._last_access_event.timestamp, data
         )
+        if (
+            event_name in {"CardEntered", "CodeEntered", "MobKeyEntered", "FingerEntered"}
+            and granted is not None
+            and self.picture_store is not None
+            and self.camera_present is not False
+            and self.picture_store.try_reserve()
+        ):
+            kind = "access-granted" if granted else "access-denied"
+            self.hass.async_create_task(self._async_capture_event_picture(kind))
         return True
 
     def _resolve_user_name(
@@ -972,13 +984,15 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         Bypasses the 1 s live-view cache so the frame is from the ring. On
         failure the previous ring image is kept.
         """
+        store = self.picture_store
+        reserved = store is not None and store.try_reserve()
         transport_info = self._camera_transport_info
         source = transport_info.source if transport_info is not None else None
         try:
             snapshot = await self.api.async_get_snapshot(source=source)
-        except Exception as err:  # pylint: disable=broad-except
+        except Exception:  # pylint: disable=broad-except
             _LOGGER.warning(
-                "Failed to capture ring snapshot; keeping previous image: %s", err
+                "Failed to capture ring snapshot; keeping previous image"
             )
             return
         if not snapshot:
@@ -989,6 +1003,25 @@ class TwoNIntercomCoordinator(DataUpdateCoordinator[TwoNIntercomData]):  # type:
         self._ring_snapshot = snapshot
         self._ring_snapshot_time = dt_util.utcnow()
         self._publish_event_state()
+        if reserved and store is not None:
+            self.hass.async_create_task(store.async_save("ring", snapshot))
+
+    async def _async_capture_event_picture(self, kind: str) -> None:
+        """Capture a credential attempt without changing the last-ring image."""
+        store = self.picture_store
+        if store is None:
+            return
+        transport_info = self._camera_transport_info
+        source = transport_info.source if transport_info is not None else None
+        try:
+            snapshot = await self.api.async_get_snapshot(source=source)
+        except Exception:  # pylint: disable=broad-except
+            _LOGGER.debug("Failed to capture an access event picture")
+            return
+        if not snapshot:
+            _LOGGER.debug("Device returned no access event picture")
+            return
+        await store.async_save(kind, snapshot)
 
     def _publish_event_state(self) -> None:
         """Push event-driven state into ``self.data`` and notify listeners."""

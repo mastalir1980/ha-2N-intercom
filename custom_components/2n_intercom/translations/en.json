@@ -124,6 +124,8 @@
         "title": "2N Intercom Options - Camera",
         "description": "Tune how Home Assistant streams video from the 2N camera. Lower MJPEG resolution and frame rate dramatically reduce bandwidth on continuously visible dashboards.",
         "data": {
+          "save_event_pictures": "Save event pictures",
+          "event_picture_retention_days": "Keep pictures for (days)",
           "live_view_mode": "Live view mode",
           "camera_source": "Camera source",
           "mjpeg_width": "MJPEG width (pixels)",
@@ -133,6 +135,8 @@
           "rtsp_password": "RTSP password"
         },
         "data_description": {
+          "save_event_pictures": "Save doorbell and access-granted or access-denied JPEG pictures under Media > My media > 2n_intercom. Off by default; pictures may contain personal data.",
+          "event_picture_retention_days": "Required when saving event pictures: choose 1-365 days. Older pictures are deleted automatically. No retention period is selected by default.",
           "live_view_mode": "auto picks RTSP when RTSP credentials are configured and valid, then MJPEG, then JPEG snapshots only",
           "camera_source": "Which sensor on the device to stream — internal is the built-in lens; external is a secondary camera module if fitted",
           "mjpeg_width": "Width of the MJPEG stream requested from the device (e.g. 640)",
@@ -160,6 +164,8 @@
       }
     },
     "error": {
+      "retention_required": "Choose a whole number of days from 1 to 365 before enabling event pictures.",
+      "media_dir_unavailable": "The local media folder is missing or not writable. Configure a writable media folder in Home Assistant before enabling event pictures.",
       "directory_unavailable": "The user list could not be loaded from the intercom; the stored user is kept."
     }
   },
