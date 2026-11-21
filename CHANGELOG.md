@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.6.0 - 2026-11-21
+
+### Features
+
+- **Automation event bus (`2n_intercom_event`):** every access-control event the intercom reports (card, PIN code, mobile key, fingerprint, authenticated or rejected user, access taken, blocked or limited, API access) and every counted ring now fires `2n_intercom_event` on the Home Assistant event bus. Access events carry the credential type, access point, direction, whether access was granted and, when known, the user's name and UUID, so an automation can react to a specific person arriving or to a rejected PIN. PINs, card numbers and mobile-key IDs are never included. **Privacy:** Home Assistant's recorder stores these events, including user names and UUIDs, unless you add `2n_intercom_event` to `recorder.exclude.event_types`. See [Event bus](README.md#event-bus-2n_intercom_event) for the payload and examples.
+- **Event picture history (opt-in):** the new **Save event pictures** option on the Camera step of Configure saves a JPEG for every ring and every card, keypad-code, mobile-key or fingerprint access attempt to **Media → My media → 2n_intercom**, named `ring`, `access-granted` or `access-denied`. It is off by default and **Keep pictures for (days)** (1-365) has no default: you must choose a retention period before saving can be enabled, and older pictures are deleted automatically. At most one picture is saved every 10 seconds. With saving on, the last-ring image shows the newest saved ring picture after a restart instead of starting empty. **Privacy:** the pictures show people, every Home Assistant user with media access can see them, and Home Assistant backups include them. See [Event picture history](README.md#event-picture-history).
+- **Call-button number on the doorbell event:** `event.<intercom>_doorbell` now has a `button` attribute with the number of the pressed call button, so one automation can tell several buttons apart without changing the Called ID filter. Only button 1 has been verified on real hardware; firmware that does not report the button simply omits the attribute. See [Filter a doorbell ring by call-button number](README.md#filter-a-doorbell-ring-by-call-button-number).
+- **Ring on call-button press (opt-in):** the new **Ring on call-button press** option (`ring_on_keypress`, off by default) also rings the doorbell when a call button is pressed but starts no call, for example a button with no call destination. Keypad keys never ring, so entering a PIN does not ring, and the Called ID filter does not apply to button presses ([#32](https://github.com/mastalir1980/ha-2N-intercom/pull/32)).
+
+### Fixes
+
+- Reauthentication, Reconfigure and an automatic IP-address update now reload the integration once instead of twice, which removes a possible race during the reload and keeps the integration compatible with upcoming Home Assistant releases.
+- The backup poll no longer requests the relay list (`switch/caps`) from the intercom on every cycle. Relay changes are still picked up from device events, after every log re-subscription and by a refresh at most every 10 minutes.
+- Hardening: the HTTP API user name and password are no longer handed to Home Assistant's MJPEG camera component, RTSP Digest authentication uses a random client nonce and refuses user names containing quotes or line breaks, and the camera stream probe reuses the integration's HTTP session instead of opening a new one for each check.
+
+### Docs
+
+- The [README](README.md) documents the `2n_intercom_event` payload with automation examples for a person arriving and a rejected PIN, the event picture history with its storage and privacy rules, and filtering doorbell rings by call-button number.
+- The [installation guide](INSTALLATION.md) lists the options added in this version.
+
 ## 1.5.2 - 2026-11-14
 
 ### Fixes
