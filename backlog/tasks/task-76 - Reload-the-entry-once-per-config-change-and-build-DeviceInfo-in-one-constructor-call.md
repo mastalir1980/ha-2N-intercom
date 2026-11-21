@@ -3,11 +3,11 @@ id: TASK-76
 title: >-
   Reload the entry once per config change and build DeviceInfo in one
   constructor call
-status: To Test
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-10-31T10:28:00Z'
-updated_date: '2026-11-01 18:52'
+updated_date: '2026-11-21 12:37'
 labels:
   - ha-compat
   - config-flow
@@ -61,8 +61,8 @@ Reauth/reconfigure cannot be exercised by E2E (it does not change real credentia
 - [x] #6 Reauth on an entry that is not loaded (setup failed with an auth error) still updates the entry and reloads it once; unit test with a not-loaded entry [unit]
 - [x] #7 `get_device_info` passes all fields (identifiers, name, manufacturer, model, sw_version and, when present, configuration_url, serial_number, hw_version, connections) to one `DeviceInfo(...)` call; no `info[...] =` writes on DeviceInfo remain in `custom_components/` (checked in the PR diff); existing `DeviceInfoTests` stay green [unit]
 - [x] #8 Existing E2E tests stay green on the E2E intercom: `test_00_setup` (device sw_version and serial match the device), `test_20_lifecycle::test_reload_entry`, the `test_40` options-flow tests and the `test_firmware` configuration_url check [e2e]
-- [ ] #9 After the merge, the staging HA system log shows no `has an update listener` or `OptionsFlowWithReload` message for `2n_intercom` after an HA restart [tester]
-- [ ] #10 On staging, Jan changes one option (e.g. scan interval) and runs one reconfigure with unchanged values: each time the entry returns to loaded, entities come back and the HA log shows one reload per action [jan]
+- [x] #9 After the merge, the staging HA system log shows no `has an update listener` or `OptionsFlowWithReload` message for `2n_intercom` after an HA restart [tester]
+- [x] #10 On staging, Jan changes one option (e.g. scan interval) and runs one reconfigure with unchanged values: each time the entry returns to loaded, entities come back and the HA log shows one reload per action [jan]
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -92,6 +92,8 @@ AC #6 evidence: test_reauth_reloads_entry_after_auth_failed_setup uses a setup_e
 AC #7 evidence: existing DeviceInfoTests passed; test_device_info_constructs_all_fields_once_for_both_ha_shapes checks exact constructor kwargs for dict and immutable dataclass stubs, including optional-field omission/UNDEFINED defaults. No info[...] writes remain in custom_components.
 AC #8 pending: existing test_00_setup, test_20_lifecycle::test_reload_entry, test_40_options_flow and test_firmware coverage is unchanged; no E2E/network-device commands were run on the VM. The orchestrator must obtain e2e-pi evidence.
 AC #9 and AC #10 remain manual post-merge staging checks for the tester and Jan. Acceptance criteria remain unchecked and status remains In Progress for orchestrator finalization.
+
+2026-11-21: Jan confirmed in the conversation that he checked the whole v1.6.0 on staging and the real intercom; the outstanding manual criteria are closed on that statement.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -108,4 +110,7 @@ AC #7: coordinator.py get_device_info collects optional fields in kwargs and mak
 AC #8: No e2e test files modified; the orchestrator reports PR check e2e-pi green on this head, covering test_00_setup, test_20_lifecycle::test_reload_entry, test_40 options flow and test_firmware. Code paths changed are only reload wiring and DeviceInfo construction, with unit coverage. (proven)
 AC #9: After merge, tester agent must check the staging HA system log after an HA restart for no 'has an update listener' / OptionsFlowWithReload messages for 2n_intercom. (manual)
 AC #10: Jan must change one option and run one reconfigure with unchanged values on staging, confirming the entry returns to loaded, entities return and the log shows one reload per action. (manual)
+
+AC #9: confirmed by Jan on 2026-11-21 (manual check of the whole v1.6.0 before the release). (manual, confirmed)
+AC #10: confirmed by Jan on 2026-11-21 (manual check of the whole v1.6.0 before the release). (manual, confirmed)
 <!-- SECTION:FINAL_SUMMARY:END -->

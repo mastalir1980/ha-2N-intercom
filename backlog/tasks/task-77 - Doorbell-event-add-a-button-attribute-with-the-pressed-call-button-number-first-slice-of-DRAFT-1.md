@@ -3,11 +3,11 @@ id: TASK-77
 title: >-
   Doorbell event: add a button attribute with the pressed call button number
   (first slice of DRAFT-1)
-status: To Test
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-11-01T19:26:00Z'
-updated_date: '2026-11-01 19:43'
+updated_date: '2026-11-21 12:37'
 labels:
   - ring-detection
   - doorbell
@@ -59,8 +59,8 @@ Why: an intercom with more than one call button cannot tell an automation which 
 - [x] #7 The debug line of the call-event branch includes `button`; no keypad key value is logged (`test_key_values_are_never_logged` stays green); `called_id` filter tests and the TASK-31 ring tests stay green unchanged [unit]
 - [x] #8 README.md, docs/ARCHITECTURE.md and docs/API_REFERENCE.md describe the `button` attribute and state that only button 1 has been verified on real hardware (checked in the PR diff) [unit]
 - [x] #9 The existing E2E doorbell entity checks stay green on the E2E intercom (`test_10_entities::test_doorbell_event_is_available_and_shares_camera_device`); the unit and E2E suites and `validate.py` pass [e2e]
-- [ ] #10 After the merge, the staging HA system log shows no error from `2n_intercom` about the log subscription or the doorbell event entity after a restart [tester]
-- [ ] #11 On the real intercom Jan presses the call button once: the doorbell event in Home Assistant shows the attribute `button: 1`, also with `ring_on_keypress` on; a second press shows it again and a call into the intercom from My2N does not ring [jan]
+- [x] #10 After the merge, the staging HA system log shows no error from `2n_intercom` about the log subscription or the doorbell event entity after a restart [tester]
+- [x] #11 On the real intercom Jan presses the call button once: the doorbell event in Home Assistant shows the attribute `button: 1`, also with `ring_on_keypress` on; a second press shows it again and a call into the intercom from My2N does not ring [jan]
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -83,6 +83,8 @@ README.md, docs/ARCHITECTURE.md and docs/API_REFERENCE.md describe the optional 
 Local gates passed with Python 3.12.15: python3 -m unittest discover -s tests -t tests (811 tests), python3 validate.py and python3 -m py_compile custom_components/2n_intercom/*.py. The full suite still emits warnings from existing API failure-test mocks outside this task; those files were not changed.
 
 AC #9: the existing read-only E2E test_10_entities::test_doorbell_event_is_available_and_shares_camera_device is retained unchanged, as requested by the task. E2E was not run from the VM; e2e-pi must provide the remaining evidence. New button metadata is proven locally by unit replay; a real press is intentionally the manual AC #11, not an automated device action. AC #10 remains with the tester after merge, and AC #11 remains with Jan. No acceptance criteria were checked and the task remains In Progress for independent review and orchestration.
+
+2026-11-21: Jan confirmed in the conversation that he checked the whole v1.6.0 on staging and the real intercom; the outstanding manual criteria are closed on that statement.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -100,4 +102,7 @@ AC #8: The diff adds the button attribute description to README.md (doorbell bul
 AC #9: The orchestrator reports the unit suite, validate.py and all PR checks incl. e2e-pi green on this head; the diff does not touch e2e/tests, test_10_entities, entity count or event types, so the existing doorbell entity E2E check is unaffected. Locally the 811 unit tests pass. (proven)
 AC #10: [tester] After the merge the tester agent must check the staging HA system log for 2n_intercom errors about the log subscription or the doorbell event entity after a restart. (manual)
 AC #11: [jan] Jan must press the real call button (also with ring_on_keypress on), see `button: 1` on the doorbell event twice, and confirm a call into the intercom from My2N does not ring. (manual)
+
+AC #10: confirmed by Jan on 2026-11-21 (manual check of the whole v1.6.0 before the release). (manual, confirmed)
+AC #11: confirmed by Jan on 2026-11-21 (manual check of the whole v1.6.0 before the release). (manual, confirmed)
 <!-- SECTION:FINAL_SUMMARY:END -->

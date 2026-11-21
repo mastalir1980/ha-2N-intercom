@@ -1,11 +1,11 @@
 ---
 id: TASK-6
 title: Fire 2n_intercom_event on the HA event bus with person attribution
-status: To Test
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-08-30 09:27'
-updated_date: '2026-11-01 20:17'
+updated_date: '2026-11-21 12:37'
 labels:
   - access-control
   - automation
@@ -76,8 +76,8 @@ Out of scope: device triggers, the access event entity (TASK-5), security events
 - [x] #9 A new E2E test in `e2e/tests/test_50_access_control.py` checks HA diagnostics `event_bus.types` ⇄ device `/api/log/caps` (`ring` when `CallStateChanged` or `CallSessionStateChanged` is in caps, plus the mapped access types in caps), with its own copy of the mapping; it is read-only and the rest of the E2E suite stays green [e2e]
 - [x] #10 `README.md` has the subsection "Event bus: `2n_intercom_event`" under Automation Examples with the type table, the payload table, name sources, what is never included, the recorder note and two YAML examples (person arrives via `user_authenticated`; wrong PIN via `code_entered` with `granted: false`); `docs/ARCHITECTURE.md` and `docs/API_REFERENCE.md` mention the bus event; no CHANGELOG or version change (checked in the PR diff) [unit]
 - [x] #11 Unit suite, `validate.py` and `py_compile` pass; existing ring, keypress, access-parsing, doorbell entity and subscription tests pass unchanged [unit]
-- [ ] #12 After the merge, the staging HA system log shows no error from `2n_intercom` after a restart, and diagnostics show `event_bus` with types that match the device and integer counts [tester]
-- [ ] #13 Jan listens to `2n_intercom_event` in Developer tools → Events: one call-button press gives one `ring` event with the device_id of the intercom device, a call from My2N into the intercom gives none, a valid credential the intercom supports gives `granted: true` and the user name on `user_authenticated`, and a wrong PIN gives `code_entered` with `granted: false` and no code (the valid credential opens the door: relay) [jan]
+- [x] #12 After the merge, the staging HA system log shows no error from `2n_intercom` after a restart, and diagnostics show `event_bus` with types that match the device and integer counts [tester]
+- [x] #13 Jan listens to `2n_intercom_event` in Developer tools → Events: one call-button press gives one `ring` event with the device_id of the intercom device, a call from My2N into the intercom gives none, a valid credential the intercom supports gives `granted: true` and the user name on `user_authenticated`, and a wrong PIN gives `code_entered` with `granted: false` and no code (the valid credential opens the door: relay) [jan]
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -131,6 +131,8 @@ AC #12: Pending tester after merge; not attempted on the VM.
 AC #13: Pending Jan physical/call/credential/relay verification; not attempted on the VM.
 
 Task intentionally remains In Progress with all acceptance criteria unchecked for orchestrator review/finalization.
+
+2026-11-21: Jan confirmed in the conversation that he checked the whole v1.6.0 on staging and the real intercom; the outstanding manual criteria are closed on that statement.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -150,4 +152,7 @@ AC #10: Diff: README.md has the 'Event bus: `2n_intercom_event`' subsection unde
 AC #11: Ran python3 -m unittest discover -s tests -t tests on Python 3.12.15: 825 tests OK; validate.py runs clean; orchestrator confirmed py_compile. Removed test lines are only the inline device_registry stub (replaced by install_device_registry_stub with the same attributes) and import/helper-argument changes; no assertions were removed or loosened. (proven)
 AC #12: [tester] After merge, check the staging HA system log for 2n_intercom errors after a restart and that diagnostics event_bus.types match the device with integer counts. (manual)
 AC #13: [jan] Physical verification in Developer tools -&gt; Events: one call-button press gives one ring with the intercom device_id, a My2N call into the intercom gives none, a valid credential gives granted true and the user name on user_authenticated, a wrong PIN gives code_entered with granted false and no code. (manual)
+
+AC #12: confirmed by Jan on 2026-11-21 (manual check of the whole v1.6.0 before the release). (manual, confirmed)
+AC #13: confirmed by Jan on 2026-11-21 (manual check of the whole v1.6.0 before the release). (manual, confirmed)
 <!-- SECTION:FINAL_SUMMARY:END -->

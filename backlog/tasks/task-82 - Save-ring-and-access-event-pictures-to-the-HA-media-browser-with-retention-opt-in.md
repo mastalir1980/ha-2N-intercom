@@ -3,11 +3,11 @@ id: TASK-82
 title: >-
   Save ring and access-event pictures to the HA media browser with retention
   (opt-in)
-status: To Test
+status: Done
 assignee:
   - '@copilot'
 created_date: '2026-11-21T10:11:00Z'
-updated_date: '2026-11-21 11:01'
+updated_date: '2026-11-21 12:37'
 labels:
   - camera
   - access-control
@@ -84,8 +84,8 @@ Why: the integration keeps only the picture of the last ring, in RAM. `coordinat
 - [x] #10 After setup with the option on and saved pictures present, the last-ring image returns the newest saved ring picture with `image_last_updated` from its file time; with the option off it starts empty as today; access pictures are never used for it [unit]
 - [x] #11 All file IO (write, cleanup, newest-ring lookup, writable check) goes through `hass.async_add_executor_job` (checked in the diff and by the tests); strings.json and translations en/de/cs contain the new option labels, descriptions and both errors with the same keys (`tests/test_translations.py` green); README.md has the two option rows, the event picture section and the privacy note; CHANGELOG.md and the version are not changed (checked in the PR diff) [unit]
 - [x] #12 On the E2E intercom, an E2E test in `e2e/tests/test_40_options_flow.py` opens the options flow over the HA REST API, sees both new fields on the Camera step, submits `save_event_pictures` on without retention and gets the field error `retention_required` on the same step, then aborts the flow; the saved options are unchanged and no ring, call or relay is triggered [e2e]
-- [ ] #13 After the merge on staging the tester agent sees the new option and retention field on the Camera options step, and the HA system log shows no error from `2n_intercom` after enabling it and restarting [tester]
-- [ ] #14 On the real intercom, one ring plus one valid and one wrong card or keypad code: Media → My media → 2n_intercom shows a ring picture and access-granted / access-denied pictures with the expected names; after a restart the last-ring image shows the last ring picture [jan]
+- [x] #13 After the merge on staging the tester agent sees the new option and retention field on the Camera options step, and the HA system log shows no error from `2n_intercom` after enabling it and restarting [tester]
+- [x] #14 On the real intercom, one ring plus one valid and one wrong card or keypad code: Media → My media → 2n_intercom shows a ring picture and access-granted / access-denied pictures with the expected names; after a restart the last-ring image shows the last ring picture [jan]
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -144,6 +144,8 @@ AC #13: pending tester-agent verification after merge.
 AC #14: pending maintainer physical-event/media/restart verification.
 
 Task left In Progress for the orchestrator; no acceptance criteria or terminal status changed.
+
+2026-11-21: Jan confirmed in the conversation that he checked the whole v1.6.0 on staging and the real intercom; the outstanding manual criteria are closed on that statement.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -164,4 +166,7 @@ AC #11: tests/test_event_pictures.py test_all_file_io_is_in_executor_and_not_eve
 AC #12: e2e/tests/test_40_options_flow.py::test_options_flow_event_picture_retention_required walks Device -&gt; Camera, asserts both fields, submits save_event_pictures=True without retention, asserts the 'retention_required' field error on the camera step, aborts in finally and asserts options unchanged; never submits the final step, no ring/call/relay. Skips if the camera is off or absent. e2e-pi reported green by the orchestrator. (proven)
 AC #13: Needs the tester agent on staging after merge: see the new option and retention field on the Camera options step and confirm no 2n_intercom error in the HA system log after enabling it and restarting. (manual)
 AC #14: Needs Jan on the real intercom: one ring, one valid and one wrong card/code; check Media &gt; My media &gt; 2n_intercom file names and that the last-ring image shows the last ring picture after a restart. (manual)
+
+AC #13: confirmed by Jan on 2026-11-21 (manual check of the whole v1.6.0 before the release). (manual, confirmed)
+AC #14: confirmed by Jan on 2026-11-21 (manual check of the whole v1.6.0 before the release). (manual, confirmed)
 <!-- SECTION:FINAL_SUMMARY:END -->
