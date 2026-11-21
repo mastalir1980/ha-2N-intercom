@@ -29,7 +29,7 @@ Home Assistant custom integration for 2N IP Intercom systems with camera, doorbe
 - **Native MJPEG live view** via `/api/camera/snapshot?...&fps=<n>` — served through Home Assistant's `MjpegCamera`, no ffmpeg/HLS round-trip
 - **RTSP stream source** when the device exposes it — requires separate RTSP credentials configured in the options flow (the 2N RTSP server has its own user database independent of the HTTP API accounts)
 - **HTTP API credentials stay in the integration's authenticated request path** — they are not passed to `MjpegCamera` or embedded in HTTP camera URLs exposed to logs, diagnostics, or dashboards
-- **Last-ring image** (`image.<intercom>_last_ring`) — a JPEG captured from the configured camera source the moment the doorbell rings, so you can see who rang even after they left. A failed capture keeps the previous image. Created only when the camera is enabled
+- **Last-ring image** (`image.<intercom>_last_ring`) — a JPEG captured from the configured camera source the moment the doorbell rings, so you can see who rang even after they left. A failed capture keeps the previous image. Created only when the camera is enabled. After a restart, the newest saved ring picture is restored when event picture saving is opted into; otherwise the image starts empty
 - HomeKit-compatible video doorbell
 
 ### Doorbell and call lifecycle
@@ -296,7 +296,7 @@ After initial setup, open the integration's **Options** (Settings → Devices & 
 The options flow has three kinds of steps:
 
 1. **Device** — name, feature toggles, backup polling interval, firmware channel, ringing account, default grant-access user
-2. **Camera** *(only when camera is enabled)* — live view mode, RTSP credentials, MJPEG resolution/fps, camera source
+2. **Camera** *(only when camera is enabled and the device has a camera)* — live view mode, RTSP credentials, MJPEG resolution/fps, camera source, event picture saving and retention
 3. **Relay** *(one per auto-detected relay)* — name, device type (door/gate), pulse duration
 
 Intermediate steps show **Next**; the last step shows **Submit**. The flow only moves forward: to change values from an earlier step, close the dialog and start again. Values entered in this session — camera settings and each relay's override — stay in the draft and are saved only when you submit the last step. Closing the dialog discards the draft.
@@ -320,6 +320,8 @@ Saved relay names, door/gate types, and pulse durations are preserved for relays
 | Camera | `mjpeg_width` | 160-2592 (px) | 1280 | MJPEG stream width |
 | Camera | `mjpeg_height` | 160-2592 (px) | 960 | MJPEG stream height |
 | Camera | `mjpeg_fps` | 1-15 | 10 | MJPEG frame rate. Lower values reduce bandwidth |
+| Camera | `save_event_pictures` | bool | `false` | Opt into saving ring and credential access pictures in HA's local media folder. See [Event picture history](#event-picture-history) for privacy and storage requirements |
+| Camera | `event_picture_retention_days` | int (days), 1-365 | *(no default)* | Mandatory when saving is enabled; choose how many days pictures are kept |
 | Relay | `relay_name` | string | `Relay N` | Display name for this relay |
 | Relay | `relay_device_type` | `door` \| `gate` | `door` | Door → switch entity, Gate → cover entity |
 | Relay | `relay_pulse_duration` | int (ms) | *(from device)* | How long the relay stays triggered. Default is the device's switchOnDuration |
@@ -329,6 +331,26 @@ For Called ID (`called_id`), the part after `/` is ignored when matching peers, 
 **Ring on call-button press** (`ring_on_keypress`, off by default): a call button with no call destination only reports `KeyPressed` and never starts a call, so without this option it never rings. With it on, a press of a call button (reported as `%1`, `%2`, …) rings the doorbell once, also when the press starts a call. Keypad keys (digits, `*`, `#`) never ring, so entering a PIN does not ring. Called ID (`called_id`) does not apply to button presses, because a press has no peer: with a specific Called ID, every call-button press rings. The option only takes effect when the device lists `KeyPressed` in `/api/log/caps`. A ring from a button press carries `button` (for example, `%2` gives the integer `2`) but no `called_peer` attribute. When a press also places a call, the ring can fire on the press before the call is known, so that ring has no `called_peer` either; leave the option off if your automations rely on it. The first event that counts the ring determines its button; later events of the same press do not change it.
 
 The default grant-access user is displayed by directory name, even when the stored UUID uses different letter case. Unnamed directory entries and unknown stored users have explicit localized labels. If the directory cannot be loaded, the form shows a warning; the stored user remains selected and you can still submit the options without changing it.
+
+### Event picture history
+
+**Save event pictures** is off by default and requires an enabled camera on a device that has one. Opt in on the **Camera** options step and choose **Keep pictures for (days)** (`event_picture_retention_days`, integer 1-365). Retention has **no default** and must be entered before saving can be enabled.
+
+Pictures appear in **Media → My media → 2n_intercom** as JPEG files:
+
+```text
+<media dir>/2n_intercom/<slugified entry title>/<YYYY-MM-DD>/<HHMMSS>-<kind>.jpg
+```
+
+Dates and times use Home Assistant's local time. The entry title is converted to a safe folder name. The kinds are `ring`, `access-granted` and `access-denied`: rings and card, keypad-code, mobile-key or fingerprint access attempts use the configured camera source. API-triggered access is not photographed. Filenames do not contain credential or user identifiers.
+
+The media root is `hass.config.media_dirs["local"]`, or the only configured media directory if there is exactly one and no `local` entry. It must already exist and be writable; an unavailable media root prevents enabling saving. With several directories and no `local` entry, no root is selected.
+
+At most one picture is saved per entry every **10 seconds**, across all three kinds. A ring within this throttle window still updates the last-ring image in memory even though no additional file is saved. Retention cleanup runs at setup and every **24 hours**, deleting expired pictures and then empty date folders **only inside this entry's own folder**.
+
+After a restart with saving on, the last-ring image restores the newest saved `ring` picture until the next ring; access pictures are never used for it. With saving off, the last-ring image starts empty after a restart as before. Renaming the integration entry creates a new folder: the old folder is no longer cleaned automatically and must be deleted manually.
+
+**Privacy:** these pictures show people. Opting in stores them on the Home Assistant disk, where **every Home Assistant user with media access can see them**, and **Home Assistant backups include them**. Choose a retention period appropriate for your household and account for any copies retained in backups.
 
 ### Example: single-family house (door + gate)
 

@@ -3,11 +3,11 @@ id: TASK-82
 title: >-
   Save ring and access-event pictures to the HA media browser with retention
   (opt-in)
-status: To Do
+status: In Progress
 assignee:
   - '@copilot'
 created_date: '2026-11-21T10:11:00Z'
-updated_date: '2026-11-21T10:11:00Z'
+updated_date: '2026-11-21 10:56'
 labels:
   - camera
   - access-control
@@ -114,10 +114,34 @@ Why: the integration keeps only the picture of the last ring, in RAM. `coordinat
 9. Size: one PR. The new module holds the file logic, the other files get small hooks, and the strings/README changes are short; splitting storage, access events and options would leave intermediate PRs with an option that does nothing or files without cleanup.
 
 Must not change: architecture rules in CLAUDE.md (event-driven ring detection, dual auth, `entry.data` vs `entry.options`, no secrets in logs, tz-aware time via `homeassistant.util.dt`, broad `except Exception` only for logged degradation).
+
+Execution: implement the approved nine-step plan without changing its design. Build executor-only storage and coordinator/setup hooks; add Camera options validation and en/de/cs translations; document privacy and add the non-saving REST options-flow E2E check. Cover path safety, retention, restore, throttle, event payloads and failure degradation with unit tests, run the required local gates, and commit locally without changing acceptance criteria or terminal status.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Approved by the maintainer on 2026-11-21. Decisions: storage as JPEG files in the HA local media folder (no own media source); retention required when the option is on (1..365 days, no default); pictures for rings and for credential access events; 10 s throttle; no max-files cap (retention plus throttle bound the size). Out of scope: own media_source platform, video clips, pictures for motion events.
+
+Implemented executor-only local-media storage, sanitised JPEG paths with atomic writes and symlink rejection, entry-owned daily retention cleanup, and restoration of the newest saved ring before image platform forwarding. Coordinator hooks share a capture-start monotonic reservation across ring and credential events; ring RAM updates are independent of saving and access captures leave the ring cache untouched. Capture and filesystem degradation logs deliberately omit exception text and paths to avoid exposing user or credential data. Existing access payload and ring snapshot tests remain unchanged.
+
+Local validation on Python 3.12: all 900 unit tests passed; validate.py, integration py_compile, E2E-test syntax compilation and git diff --check passed. No Home Assistant/intercom or E2E run was attempted on the VM.
+
+Evidence for review (criteria remain unchecked):
+AC #1: tests/test_config_flow.py covers Camera-only fields, default-off saving, retention without a default, option removal and entry.options/data separation.
+AC #2: options tests cover missing/0/366/non-integer retention, accepted 1/365 boundaries, retention-first error ordering and unavailable media roots.
+AC #3: tests/test_event_pictures.py covers root selection, ASCII title sanitisation, local-time layout, collision suffixes, rejected kinds and symlink confinement.
+AC #4: tests/test_coordinator_event_pictures.py proves counted call/button rings save the captured bytes after RAM publication; off/no-store behaviour and existing ring tests are unchanged.
+AC #5: credential/result matrix tests cover the four supported event kinds, all excluded events, unchanged last-ring cache and exact baseline bus payload equality.
+AC #6: replay tests assert that ring and access file paths exclude synthetic credential and user/peer identities.
+AC #7: fake monotonic-clock tests cover every capture-kind pair, the 10-second boundary, simultaneous reservations, pending requests and unthrottled ring RAM captures.
+AC #8: snapshot/empty-image/OSError/unavailable-media tests prove event and cache isolation, safe logs and one unavailable-folder warning per setup.
+AC #9: helper retention tests cover old/new/boundary files, empty folders, sibling entries and symlinks; setup tests prove executor cleanup, immediate/daily scheduling and entry unload cancellation. The cleanup walk streams paths rather than retaining all JPEG paths in memory.
+AC #10: setup tests restore the newest saved ring with UTC file time before forwarding, exercise the image entity, exclude access images and preserve an already captured ring. Off/camera-off/no-camera setups start empty without filesystem jobs.
+AC #11: executor-thread/call assertions cover all file IO; translation consistency tests cover new labels/descriptions/errors in en/de/cs; README and architecture docs updated. No CHANGELOG or manifest version change.
+AC #12: e2e/tests/test_40_options_flow.py adds the REST Camera retention-error check, aborts its draft and verifies unchanged options without dumping private option values. It skips camera-off/no-camera entries and retains the existing never-submit-final-step safety guard. Execution awaits e2e-pi.
+AC #13: pending tester-agent verification after merge.
+AC #14: pending maintainer physical-event/media/restart verification.
+
+Task left In Progress for the orchestrator; no acceptance criteria or terminal status changed.
 <!-- SECTION:NOTES:END -->

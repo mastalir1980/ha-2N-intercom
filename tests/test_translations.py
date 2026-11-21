@@ -80,6 +80,30 @@ class TranslationConsistencyTests(unittest.TestCase):
             with self.subTest(lang=lang):
                 self.assertEqual(_keys(data), expected)
 
+    def test_event_picture_options_and_errors_are_translated(self) -> None:
+        fields = {"save_event_pictures", "event_picture_retention_days"}
+        errors = {"retention_required", "media_dir_unavailable"}
+        for lang, data in {"strings": self.strings, **self.languages}.items():
+            with self.subTest(lang=lang):
+                camera = data["options"]["step"]["camera"]
+                for section in ("data", "data_description"):
+                    self.assertTrue(fields <= set(camera[section]))
+                    for field in fields:
+                        self.assertTrue(camera[section][field].strip())
+                        if lang in ("de", "cs"):
+                            self.assertNotEqual(
+                                camera[section][field],
+                                self.strings["options"]["step"]["camera"][section][field],
+                            )
+                self.assertTrue(errors <= set(data["options"]["error"]))
+                for error in errors:
+                    text = data["options"]["error"][error]
+                    self.assertTrue(text.strip())
+                    if lang in ("de", "cs"):
+                        self.assertNotEqual(text, self.strings["options"]["error"][error])
+                for step in ("device", "relay"):
+                    self.assertTrue(fields.isdisjoint(data["options"]["step"][step]["data"]))
+
     def test_placeholders_match_across_languages(self) -> None:
         placeholder = re.compile(r"\{(\w+)\}")
         english = self.languages["en"]["exceptions"]

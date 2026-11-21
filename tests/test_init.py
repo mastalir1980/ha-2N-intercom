@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
+import os
+from pathlib import Path
 import sys
+import tempfile
 import types
 import unittest
 from contextlib import asynccontextmanager
@@ -121,6 +125,19 @@ def _install_homeassistant_stubs() -> None:
     entity_registry = types.ModuleType("homeassistant.helpers.entity_registry")
     entity_registry.async_get = lambda hass: hass.entity_registry
     sys.modules["homeassistant.helpers.entity_registry"] = entity_registry
+    event_helpers = types.ModuleType("homeassistant.helpers.event")
+
+    def async_track_time_interval(hass, action, interval):
+        timer = {"action": action, "interval": interval, "cancelled": False}
+        hass.picture_timers.append(timer)
+
+        def cancel():
+            timer["cancelled"] = True
+
+        return cancel
+
+    event_helpers.async_track_time_interval = async_track_time_interval
+    sys.modules["homeassistant.helpers.event"] = event_helpers
 
 
 def load_init_module():
@@ -217,9 +234,16 @@ class FakeHass:
         self.data: dict[str, object] = {}
         self.entity_registry = Mock()
         self.entity_registry.async_get_entity_id.return_value = None
+        self.config = types.SimpleNamespace(media_dirs={})
+        self.picture_timers = []
+        self.executor_calls = []
         self.components = types.SimpleNamespace(
             persistent_notification=types.SimpleNamespace(async_create=lambda *a, **k: None)
         )
+
+    async def async_add_executor_job(self, func, *args):
+        self.executor_calls.append((func, args))
+        return await asyncio.to_thread(func, *args)
 
 
 class FakeAPI:
@@ -488,6 +512,155 @@ class MacBackfillSetupTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.hass.config_entries.update_calls, [])
         finally:
             await self.init_module.async_unload_entry(self.hass, self.entry)
+
+
+class EventPictureSetupTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.module = load_init_module()
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.entry = FakeConfigEntry(
+            "entry-pictures",
+            {"host": "example.invalid", "port": 443,
+             "username": "test-user", "password": "test-password"},
+            {"save_event_pictures": True, "event_picture_retention_days": 30},
+        )
+        self.hass = FakeHass([self.entry])
+        self.hass.config.media_dirs = {"local": str(self.root)}
+
+    async def _setup(self, camera_present=None, existing_ring=None):
+        async def initialize(coordinator):
+            coordinator.api.camera_present = camera_present
+            if existing_ring is not None:
+                coordinator._ring_snapshot, coordinator._ring_snapshot_time = existing_ring
+
+        with (
+            patch.object(self.module, "TwoNIntercomAPI", FakeAPI),
+            patch.object(
+                self.module.TwoNIntercomCoordinator, "async_initialize_static_caches", initialize
+            ),
+            patch.object(
+                self.module.TwoNIntercomCoordinator, "async_start_log_listener", AsyncMock()
+            ),
+        ):
+            self.assertTrue(await self.module.async_setup_entry(self.hass, self.entry))
+        return self.entry.runtime_data.coordinator
+
+    async def _unload(self):
+        self.assertTrue(await self.module.async_unload_entry(self.hass, self.entry))
+        # HA invokes these entry-owned callbacks after integration unload succeeds.
+        for callback in self.entry._unload_callbacks:
+            callback()
+        await asyncio.gather(*self.entry._background_tasks)
+
+    def _saved(self, kind, data, mtime, name="120000", date="2026-11-21"):
+        path = self.root / "2n_intercom" / "front_door" / date / f"{name}-{kind}.jpg"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        os.utime(path, (mtime, mtime))
+        return path
+
+    async def test_setup_restores_newest_ring_and_image_file_time_before_forwarding(self) -> None:
+        now = datetime.now(timezone.utc)
+        self._saved("ring", b"old", now.timestamp() - 10, date="2026-11-20")
+        newest = self._saved("ring", b"newest", now.timestamp() - 5)
+        self._saved("access-granted", b"access", now.timestamp(), name="235959")
+        self._saved("access-denied", b"denied", now.timestamp(), name="235958")
+
+        async def forward(entry, platforms):
+            self.assertEqual(entry.runtime_data.coordinator.ring_snapshot, b"newest")
+            self.assertIn("image", platforms)
+
+        with patch.object(self.hass.config_entries, "async_forward_entry_setups", forward):
+            coordinator = await self._setup()
+        restored_time = datetime.fromtimestamp(newest.stat().st_mtime, timezone.utc)
+        self.assertEqual(coordinator.ring_snapshot_time, restored_time)
+        self.assertEqual(coordinator.data.ring_snapshot, b"newest")
+
+        from test_image import load_image_module
+
+        image_module = load_image_module()
+        coordinator.get_device_info = Mock(return_value={})
+        entity = image_module.TwoNIntercomLastRingImage(self.hass, coordinator, self.entry)
+        self.assertEqual(await entity.async_image(), b"newest")
+        self.assertEqual(entity.image_last_updated, restored_time)
+        await self._unload()
+
+    async def test_off_camera_off_and_no_camera_do_not_read_saved_images(self) -> None:
+        self._saved("ring", b"saved", datetime.now(timezone.utc).timestamp())
+        for options, camera_present in (
+            ({}, True),
+            ({"save_event_pictures": False, "event_picture_retention_days": 30}, True),
+            ({"save_event_pictures": True, "event_picture_retention_days": 30,
+              "enable_camera": False}, True),
+            ({"save_event_pictures": True, "event_picture_retention_days": 30}, False),
+        ):
+            with self.subTest(options=options, camera=camera_present):
+                self.entry.options = options
+                coordinator = await self._setup(camera_present=camera_present)
+                self.assertIsNone(coordinator.picture_store)
+                self.assertIsNone(coordinator.ring_snapshot)
+                self.assertIsNone(coordinator.ring_snapshot_time)
+                self.assertEqual(self.hass.executor_calls, [])
+                self.assertEqual(self.hass.picture_timers, [])
+                await self._unload()
+                self.entry._unload_callbacks.clear()
+
+    async def test_restore_never_overwrites_an_already_captured_ring(self) -> None:
+        self._saved("ring", b"saved", datetime.now(timezone.utc).timestamp())
+        captured_time = datetime.now(timezone.utc)
+        coordinator = await self._setup(existing_ring=(b"live", captured_time))
+        self.assertEqual(coordinator.ring_snapshot, b"live")
+        self.assertEqual(coordinator.ring_snapshot_time, captured_time)
+        await self._unload()
+
+    async def test_cleanup_runs_at_setup_in_executor_and_daily_timer_cancels_on_unload(self) -> None:
+        old = self._saved("ring", b"expired", datetime.now(timezone.utc).timestamp() - 31 * 86400)
+        await self._setup()
+        await asyncio.gather(*self.entry._background_tasks)
+        self.assertFalse(old.exists())
+        self.assertFalse(old.parent.exists())
+        self.assertEqual(
+            [func.__name__ for func, _ in self.hass.executor_calls],
+            ["is_writable", "newest_ring_picture", "cleanup_pictures"],
+        )
+        self.assertEqual(len(self.hass.picture_timers), 1)
+        timer = self.hass.picture_timers[0]
+        self.assertEqual(timer["interval"], timedelta(hours=24))
+        await timer["action"](datetime.now(timezone.utc))
+        self.assertEqual(self.hass.executor_calls[-1][0].__name__, "cleanup_pictures")
+        self.assertFalse(timer["cancelled"])
+        await self._unload()
+        self.assertTrue(timer["cancelled"])
+
+    async def test_invalid_hand_edited_retention_disables_store_with_one_safe_warning(self) -> None:
+        for retention in (None, 0, 366, True, 1.5, "30"):
+            with self.subTest(retention=retention):
+                self.entry.options["event_picture_retention_days"] = retention
+                with self.assertLogs(self.module._LOGGER, level="WARNING") as logs:
+                    coordinator = await self._setup()
+                self.assertEqual(len(logs.records), 1)
+                self.assertIsNone(coordinator.picture_store)
+                self.assertEqual(self.hass.executor_calls, [])
+                self.assertNotIn("test-password", "\n".join(logs.output))
+                await self._unload()
+                self.entry._unload_callbacks.clear()
+
+    async def test_unavailable_media_logs_once_per_setup_and_no_timer(self) -> None:
+        for media_dirs in ({}, {"local": str(self.root / "missing")}):
+            with self.subTest(media_dirs=media_dirs):
+                self.hass.config.media_dirs = media_dirs
+                with self.assertLogs("custom_components.2n_intercom.event_pictures", level="WARNING") as logs:
+                    coordinator = await self._setup()
+                    await coordinator.picture_store.async_initialize()
+                self.assertEqual(len(logs.records), 1)
+                self.assertFalse(coordinator.picture_store.enabled)
+                self.assertFalse(coordinator.picture_store.try_reserve())
+                self.assertEqual(self.hass.picture_timers, [])
+                self.assertNotIn(str(self.root), "\n".join(logs.output))
+                await self._unload()
+                self.entry._unload_callbacks.clear()
 
 
 class IntegrationSetupTests(unittest.IsolatedAsyncioTestCase):

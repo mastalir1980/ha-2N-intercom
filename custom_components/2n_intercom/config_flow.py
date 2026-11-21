@@ -42,6 +42,7 @@ from .const import (
     CONF_CAMERA_SOURCE,
     CONF_ENABLE_CAMERA,
     CONF_ENABLE_DOORBELL,
+    CONF_EVENT_PICTURE_RETENTION_DAYS,
     CONF_RING_ON_KEYPRESS,
     CONF_FIRMWARE_CHANNEL,
     CONF_GRANT_ACCESS_USER,
@@ -59,6 +60,7 @@ from .const import (
     CONF_RTSP_PASSWORD,
     CONF_RTSP_USERNAME,
     CONF_SCAN_INTERVAL,
+    CONF_SAVE_EVENT_PICTURES,
     CONF_SERIAL_NUMBER,
     CONF_VERIFY_SSL,
     DEFAULT_ALLOW_INSECURE,
@@ -76,10 +78,13 @@ from .const import (
     DEFAULT_PROTOCOL,
     DEFAULT_PULSE_DURATION,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SAVE_EVENT_PICTURES,
     DEFAULT_VERIFY_SSL,
     DEVICE_TYPE_DOOR,
     DEVICE_TYPE_GATE,
     DOMAIN,
+    EVENT_PICTURE_RETENTION_MAX,
+    EVENT_PICTURE_RETENTION_MIN,
     FIRMWARE_CHANNEL_TRACKS,
     LIVE_VIEW_MODES,
     PROTOCOL_HTTP,
@@ -89,6 +94,7 @@ from .const import (
     SCAN_INTERVAL_MIN,
 )
 from .coordinator import TwoNIntercomRuntimeData
+from .event_pictures import is_writable, resolve_media_root
 
 _LOGGER = logging.getLogger(__name__)
 _SSDP_WARNED_HOSTS = f"{DOMAIN}_ssdp_warned_hosts"
@@ -1039,6 +1045,8 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlowWithReload):  # type: ig
                 CONF_MJPEG_FPS,
                 CONF_RTSP_USERNAME,
                 CONF_RTSP_PASSWORD,
+                CONF_SAVE_EVENT_PICTURES,
+                CONF_EVENT_PICTURE_RETENTION_DAYS,
             ):
                 self._data.pop(camera_key, None)
 
@@ -1144,6 +1152,28 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlowWithReload):  # type: ig
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            if user_input.get(CONF_SAVE_EVENT_PICTURES, DEFAULT_SAVE_EVENT_PICTURES):
+                retention = user_input.get(CONF_EVENT_PICTURE_RETENTION_DAYS)
+                if (
+                    isinstance(retention, bool)
+                    or not isinstance(retention, (int, float))
+                    or not EVENT_PICTURE_RETENTION_MIN <= retention <= EVENT_PICTURE_RETENTION_MAX
+                    or int(retention) != retention
+                ):
+                    errors[CONF_EVENT_PICTURE_RETENTION_DAYS] = "retention_required"
+                else:
+                    root = resolve_media_root(self.hass.config.media_dirs)
+                    if root is None or not await self.hass.async_add_executor_job(
+                        is_writable, root
+                    ):
+                        errors["base"] = "media_dir_unavailable"
+                    else:
+                        user_input[CONF_EVENT_PICTURE_RETENTION_DAYS] = int(retention)
+            else:
+                user_input.pop(CONF_EVENT_PICTURE_RETENTION_DAYS, None)
+                self._data.pop(CONF_EVENT_PICTURE_RETENTION_DAYS, None)
+
+        if user_input is not None and not errors:
             # RTSP credentials: the password field is a password-type
             # selector that is never pre-filled, so an empty password means
             # "keep the stored one". Clearing the username removes the whole
@@ -1220,8 +1250,36 @@ class TwoNIntercomOptionsFlow(config_entries.OptionsFlowWithReload):  # type: ig
             )
         )
 
+        retention_field = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=EVENT_PICTURE_RETENTION_MIN,
+                max=EVENT_PICTURE_RETENTION_MAX,
+                step=1,
+                mode=selector.NumberSelectorMode.BOX,
+                unit_of_measurement="d",
+            )
+        )
+
         data_schema = vol.Schema(
             {
+                vol.Required(
+                    CONF_SAVE_EVENT_PICTURES,
+                    default=(user_input or {}).get(
+                        CONF_SAVE_EVENT_PICTURES,
+                        self._session_option(
+                            CONF_SAVE_EVENT_PICTURES, DEFAULT_SAVE_EVENT_PICTURES
+                        ),
+                    ),
+                ): cv.boolean,
+                vol.Optional(
+                    CONF_EVENT_PICTURE_RETENTION_DAYS,
+                    description={
+                        "suggested_value": (user_input or {}).get(
+                            CONF_EVENT_PICTURE_RETENTION_DAYS,
+                            self._session_option(CONF_EVENT_PICTURE_RETENTION_DAYS),
+                        ),
+                    },
+                ): retention_field,
                 vol.Required(
                     CONF_LIVE_VIEW_MODE,
                     default=self._session_option(

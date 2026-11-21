@@ -17,6 +17,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 
 from .api import (
@@ -33,6 +34,8 @@ from .const import (
     CONF_CALLED_ID,
     CONF_ENABLE_CAMERA,
     CONF_ENABLE_DOORBELL,
+    CONF_EVENT_PICTURE_RETENTION_DAYS,
+    CONF_SAVE_EVENT_PICTURES,
     CONF_RING_ON_KEYPRESS,
     CONF_GRANT_ACCESS_USER,
     CONF_MAC,
@@ -46,12 +49,16 @@ from .const import (
     DEFAULT_ALLOW_INSECURE,
     DEFAULT_ENABLE_CAMERA,
     DEFAULT_ENABLE_DOORBELL,
+    DEFAULT_SAVE_EVENT_PICTURES,
     DEFAULT_RING_ON_KEYPRESS,
     DEFAULT_PROTOCOL,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_VERIFY_SSL,
     DEVICE_TYPE_GATE,
     DOMAIN,
+    EVENT_PICTURE_CLEANUP_INTERVAL,
+    EVENT_PICTURE_RETENTION_MIN,
+    EVENT_PICTURE_RETENTION_MAX,
     SCAN_INTERVAL_MAX,
     SCAN_INTERVAL_MIN,
 )
@@ -61,6 +68,7 @@ from .coordinator import (
     async_delete_api_privilege_issues,
     async_delete_basic_auth_issue,
 )
+from .event_pictures import EventPictureStore, resolve_media_root
 
 if TYPE_CHECKING:
     from .coordinator import TwoNIntercomConfigEntry
@@ -561,6 +569,39 @@ async def async_setup_entry(
             )
 
     entry.runtime_data = TwoNIntercomRuntimeData(coordinator=coordinator, api=api)
+
+    if (
+        entry.options.get(CONF_SAVE_EVENT_PICTURES, DEFAULT_SAVE_EVENT_PICTURES)
+        and _get_option(entry, CONF_ENABLE_CAMERA, DEFAULT_ENABLE_CAMERA)
+        and coordinator.camera_present is not False
+    ):
+        retention = entry.options.get(CONF_EVENT_PICTURE_RETENTION_DAYS)
+        if (
+            isinstance(retention, bool)
+            or not isinstance(retention, (int, float))
+            or not EVENT_PICTURE_RETENTION_MIN <= retention <= EVENT_PICTURE_RETENTION_MAX
+            or int(retention) != retention
+        ):
+            _LOGGER.warning("Event pictures disabled: invalid or missing retention period")
+        else:
+            store = EventPictureStore(
+                hass, entry, resolve_media_root(hass.config.media_dirs), int(retention)
+            )
+            await store.async_initialize()
+            coordinator.picture_store = store
+            saved_ring = await store.async_load_newest_ring()
+            if saved_ring is not None and coordinator.ring_snapshot is None:
+                coordinator._ring_snapshot, coordinator._ring_snapshot_time = saved_ring
+                coordinator._publish_event_state()
+            if store.enabled:
+                entry.async_create_background_task(
+                    hass, store.async_cleanup(), "2n_intercom event picture cleanup"
+                )
+                entry.async_on_unload(
+                    async_track_time_interval(
+                        hass, store.async_cleanup, EVENT_PICTURE_CLEANUP_INTERVAL
+                    )
+                )
 
     await coordinator.async_start_log_listener()
 

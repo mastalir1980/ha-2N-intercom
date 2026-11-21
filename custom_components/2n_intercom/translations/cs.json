@@ -124,6 +124,8 @@
         "title": "Možnosti 2N Intercom - Kamera",
         "description": "Vyladění video streamu z 2N kamery v Home Assistantu. Snížením rozlišení a snímkové frekvence MJPEG výrazně ušetříte přenos dat na nástěnkách, kde je kamera trvale viditelná.",
         "data": {
+          "save_event_pictures": "Ukládat snímky událostí",
+          "event_picture_retention_days": "Uchovávat snímky po dobu (dní)",
           "live_view_mode": "Režim živého náhledu",
           "camera_source": "Zdroj kamery",
           "mjpeg_width": "Šířka MJPEG (pixely)",
@@ -133,6 +135,8 @@
           "rtsp_password": "RTSP heslo"
         },
         "data_description": {
+          "save_event_pictures": "Ukládat JPEG snímky při zazvonění a při povolení nebo zamítnutí přístupu do Média > Moje média > 2n_intercom. Ve výchozím stavu vypnuto; snímky mohou obsahovat osobní údaje.",
+          "event_picture_retention_days": "Povinné při ukládání snímků událostí: zvolte 1-365 dní. Starší snímky se automaticky mažou. Žádná doba uchování není předem zvolena.",
           "live_view_mode": "auto upřednostní RTSP, pak MJPEG, případně jen JPEG snímky",
           "camera_source": "Který senzor zařízení použít — internal je vestavěná kamera, external je sekundární modul (pokud je osazen)",
           "mjpeg_width": "Šířka MJPEG streamu vyžádaného od zařízení (např. 640)",
@@ -160,6 +164,8 @@
       }
     },
     "error": {
+      "retention_required": "Před zapnutím snímků událostí zvolte celý počet dní od 1 do 365.",
+      "media_dir_unavailable": "Místní složka médií chybí nebo do ní nelze zapisovat. Před zapnutím snímků událostí nastavte v Home Assistantu složku médií, do které lze zapisovat.",
       "directory_unavailable": "Seznam uživatelů se nepodařilo načíst z interkomu; uložený uživatel zůstává zachován."
     }
   },

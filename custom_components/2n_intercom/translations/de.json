@@ -124,6 +124,8 @@
         "title": "2N Gegensprechanlage - Kamera",
         "description": "Videostream der 2N-Kamera in Home Assistant optimieren. Niedrigere MJPEG-Auflösung und Bildrate reduzieren den Datenverkehr auf dauerhaft sichtbaren Dashboards erheblich.",
         "data": {
+          "save_event_pictures": "Ereignisbilder speichern",
+          "event_picture_retention_days": "Bilder aufbewahren (Tage)",
           "live_view_mode": "Live-Ansicht",
           "camera_source": "Kameraquelle",
           "mjpeg_width": "MJPEG-Breite (Pixel)",
@@ -133,6 +135,8 @@
           "rtsp_password": "RTSP-Passwort"
         },
         "data_description": {
+          "save_event_pictures": "JPEG-Bilder beim Klingeln sowie bei gewährtem oder verweigertem Zutritt unter Medien > Meine Medien > 2n_intercom speichern. Standardmäßig deaktiviert; Bilder können personenbezogene Daten enthalten.",
+          "event_picture_retention_days": "Beim Speichern von Ereignisbildern erforderlich: 1-365 Tage wählen. Ältere Bilder werden automatisch gelöscht. Es ist keine Aufbewahrungsdauer voreingestellt.",
           "live_view_mode": "Auto wählt RTSP wenn RTSP-Zugangsdaten konfiguriert und gültig sind, dann MJPEG, dann nur JPEG-Schnappschüsse",
           "camera_source": "Welcher Sensor am Gerät gestreamt wird — Internal ist die eingebaute Kamera, External ein sekundäres Kameramodul (falls vorhanden)",
           "mjpeg_width": "Breite des MJPEG-Streams vom Gerät (z. B. 640)",
@@ -160,6 +164,8 @@
       }
     },
     "error": {
+      "retention_required": "Wählen Sie eine ganze Anzahl von Tagen zwischen 1 und 365, bevor Sie Ereignisbilder aktivieren.",
+      "media_dir_unavailable": "Der lokale Medienordner fehlt oder ist nicht beschreibbar. Konfigurieren Sie in Home Assistant einen beschreibbaren Medienordner, bevor Sie Ereignisbilder aktivieren.",
       "directory_unavailable": "Die Benutzerliste konnte nicht von der Gegensprechanlage geladen werden; der gespeicherte Benutzer bleibt erhalten."
     }
   },
