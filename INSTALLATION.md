@@ -39,7 +39,7 @@ The wizard has two steps:
 - **Connection** — host, username, password. Protocol (HTTPS/HTTP) and port (443/80) are auto-detected
 - **Device** — display name, enable camera, enable doorbell, optional ringing account (peer)
 
-**Control4 DS2 / DS2 Mini door stations:** the accounts are set up by the Control4 installer and owners usually don't know the passwords. Ask your dealer, or look them up in Control4 **Composer Pro** → the door station's driver → **Properties** → **Advanced**. See [README → Control4 DS2 / DS2 Mini door stations](README.md#control4-ds2--ds2-mini-door-stations).
+**Control4 door stations:** the accounts are set up by the Control4 installer and owners usually don't know the passwords. Ask your dealer, or look them up in Control4 **Composer Pro** → the door station's driver → **Properties** → **Advanced**. See [README → Control4 door stations](README.md#control4-door-stations-rebranded-2n).
 
 Relays are auto-discovered from the device and configured later via the **Options** flow (Settings → Devices & Services → 2N Intercom → **Configure**).
 
