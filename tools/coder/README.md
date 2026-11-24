@@ -306,3 +306,34 @@ Před změnou `PATH` se účet ověří přes `/usr/bin/id -un` a produkčnímu 
 > Hlídej si, které run id jsi už nahlásil. Časovač sám nic
 > neohlašuje. Ty ho nespouštíš (`--next`), ale můžeš pustit `ha2n-run-task TASK-N`, když Jan výslovně požádá.
 > Jiné příkazy s `ha2n-coder` ani `ha2n-copilot` nespouštěj, tokeny nečti, sám nic nemerguj.
+
+### Úkol z Jiry (TASK-83)
+
+> Když tě Jan požádá „vezmi HA2N-N“ / „pusť kodéra na HA2N-N“ (totéž pro testovací projekt `HA2NTEST`), přečti
+> issue přes Atlassian MCP (popis ve formátu markdown, včetně odkazů mezi issues) a slož z ní snapshot:
+> - `key`, `summary`, `status` (název stavu), `labels`, `priority` (název), `updated` tak, jak je Jira vrátila.
+> - `fixVersion`: název první verze z Fix versions, jinak `null`.
+> - `description`: text sekce `## Description` z popisu (bez nadpisu); když sekce chybí, celý popis.
+> - `acceptance_criteria`: řádky `- [ ] #n text` a `- [x] #n text` ze sekce `## Acceptance Criteria`;
+>   `id` = n, `text` = zbytek řádku včetně značky `[unit]`/`[e2e]`/`[tester]`/`[jan]`, `checked` podle křížku.
+>   Jira je vrací pozměněné, např. `* \[ \] #1 text \[unit\]`: odrážka `*` je totéž co `-` a zpětná lomítka
+>   před hranatými závorkami a podtržítky odstraň.
+> - `plan`: text sekce `## Implementation Plan`, jinak `null`.
+> - `blocked_by`: issues, které tuhle blokují (odkaz typu Blocks, „is blocked by“), každá jako `key` a název stavu.
+>
+> Nic si nedomýšlej a nic neopravuj: co v issue není, do snapshotu nepatří. Snapshot ulož do dočasného souboru a spusť
+> `sudo -n -u ha2n-coder /usr/local/bin/ha2n-run-task --task-stdin HA2N-N < task.json`.
+> - Kód 2: běh nevznikl. Pošli Janovi důvod ze stderr a issue neměň.
+> - `started <run-id>`: přepni issue do `In Progress`, přidej komentář s run id a pošli run id Janovi.
+>
+> Stav sleduj stejně jako u Backlogu (`ha2n-task-status <run-id>` každých 5 minut). V konečném stavu:
+> - `merged`: přečti `ha2n-task-status --close-json <run-id>`. Issue přepni do stavu z pole `status`, v popisu
+>   zaškrtni (`- [x]`) jen kritéria se `status` `proven` a přidej komentář: `summary`, odkaz `pr` a u kritérií
+>   `manual`/`unproven`, co zbývá ověřit. Další úkol sám nevybírej, čekej na Jana.
+> - `green`: přečti `close.json` stejně, přidej komentář se `summary` a odkazem `pr` a napiš Janovi, že PR čeká
+>   na jeho merge. Issue nech v `In Progress`. Až Jan potvrdí, že PR mergnul, udělej totéž co u `merged`.
+>   Co ještě čeká, vypíše `ha2n-task-status --pending-close`.
+> - `review`, `stopped`, `failed`: `close.json` není. Přidej komentář s `message` (a `pr`, když existuje), issue nech
+>   v `In Progress` a pošli to Janovi. Zpět do `To Do` ji vrací jen Jan; tím povolí další pokus.
+>
+> Do Jiry nikdy nepiš tokeny, názvy strojů, adresy v síti ani cesty z VM. Jiné issue než tu, kterou běh řeší, neměň.
