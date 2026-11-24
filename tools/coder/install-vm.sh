@@ -87,6 +87,8 @@ systemctl daemon-reload
 systemctl enable --now ha2n-coder-next.timer >/dev/null
 
 echo "==> sudoers: $CALLER may only start/inspect tasks; ha2n-coder may only call the sandbox"
+# No argument list after the commands: every mode is allowed, including the Jira snapshot on stdin
+# (sudo -n -u ha2n-coder /usr/local/bin/ha2n-run-task --task-stdin HA2N-<n> < task.json).
 TMP="$(mktemp)"
 cat > "$TMP" <<SUDO
 $CALLER ALL=(ha2n-coder) NOPASSWD: /usr/local/bin/ha2n-run-task, /usr/local/bin/ha2n-task-status

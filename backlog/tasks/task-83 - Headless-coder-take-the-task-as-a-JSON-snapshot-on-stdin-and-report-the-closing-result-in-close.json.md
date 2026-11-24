@@ -3,11 +3,11 @@ id: TASK-83
 title: >-
   Headless coder: take the task as a JSON snapshot on stdin and report the
   closing result in close.json
-status: To Do
+status: In Progress
 assignee:
-  - '@copilot-mac'
+  - '@claude'
 created_date: '2026-11-23 10:06'
-updated_date: '2026-11-23 10:06'
+updated_date: '2026-11-24 09:26'
 labels:
   - agent
   - infra
@@ -62,3 +62,9 @@ In this mode the coder never calls the backlog CLI and never commits Backlog cha
 8. Tests in tools/coder/tests/test_run_task.py with a stub snapshot; README.
 Must not change: the PROTECTED list, the review flow, auto-merge rules, the Copilot sandbox (no token inside), the Backlog mode.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-24 (Claude, on Jan's request): implemented on branch task-83-coder-task-stdin. run-task.sh: --task-stdin <KEY> (snapshot_check validates and renders task.txt, snapshot_accept applies the 256 KB limit, the daily limit and the updated-based retry guard in the foreground), close_json/close_merged instead of the Backlog close commit, no --next after a merge in this mode. task-status.sh: --close-json, --pending-close. sandbox.sh: the branch-name check also accepts <key>-<n>-<slug> (needed for the ha2n-<n>-... branch; nothing else in the sandbox changed). The implement/review prompts are unchanged; the rendered prompt gets a note that the task is not in Backlog.md. Deviation from the plan: sudoers needed no change (the rule has no argument list), install-vm.sh only documents it. Open point for Jan: Jira bumps 'updated' on every comment or transition, so writing a failed result back to Jira re-arms the retry guard; the daily limit still holds. Local: 80 coder stub tests green (70 before), bash -n clean.
+<!-- SECTION:NOTES:END -->
