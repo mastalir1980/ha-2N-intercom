@@ -2,6 +2,8 @@
 
 ## Quick Start
 
+**Note:** Your intercom requires firmware **2.40 or newer**. See the [compatibility table](README.md#supported-devices).
+
 ### 1. Installation
 
 Copy the integration into your Home Assistant `config/custom_components/`:
