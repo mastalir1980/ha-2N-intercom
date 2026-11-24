@@ -3,9 +3,12 @@
 #   ha2n-task-status            latest run: status + last log lines
 #   ha2n-task-status <run-id>   that run
 #   ha2n-task-status --list     last 10 runs, one line each
+#   ha2n-task-status --close-json <run-id>   the closing result of a --task-stdin run (close.json), for the caller to record
+#   ha2n-task-status --pending-close         finished --task-stdin runs whose PR is not merged yet: run id, key, status, PR
 set -uo pipefail
-RUNS=/var/lib/ha2n-coder/runs
-COST=/var/lib/ha2n-coder/cost.csv   # written by run-task.sh, columns: time,run,task,label,model,effort,ai_credits,tokens_in,tokens_out,duration
+# HA2N_CODER_TEST_ROOT is for the hermetic tests only (sudo's env_reset strips it in production).
+RUNS="${HA2N_CODER_TEST_ROOT:-}/var/lib/ha2n-coder/runs"
+COST="${HA2N_CODER_TEST_ROOT:-}/var/lib/ha2n-coder/cost.csv"   # written by run-task.sh, columns: time,run,task,label,model,effort,ai_credits,tokens_in,tokens_out,duration
 credits() {  # total AI credits of one run, "-" when nothing is logged
   [ -r "$COST" ] || { printf -- "-"; return; }
   awk -F, -v r="$1" 'NR>1 && $2==r {s+=$7; n++} END {if (n) printf "%.2f", s; else printf "-"}' "$COST"
@@ -16,6 +19,26 @@ if [ "${1:-}" = "--list" ]; then
     printf '%-32s %-8s %-5s %9s cr  %s\n' "$(basename "$d")" "$(sed -n 's/^state=//p' "$d/status" 2>/dev/null)" \
       "$mark" "$(credits "$(basename "$d")")" "$(sed -n 's/^message=//p' "$d/status" 2>/dev/null | cut -c1-80)"
   done; exit 0
+fi
+if [ "${1:-}" = "--pending-close" ]; then
+  for d in $(ls -1d "$RUNS"/2* 2>/dev/null | sort); do
+    [ -f "$d/close.json" ] || continue
+    python3 - "$d/close.json" "$(basename "$d")" <<'PY' || true
+import json, sys
+try:
+    result = json.load(open(sys.argv[1], encoding="utf-8"))
+except (OSError, ValueError):
+    sys.exit(0)
+if result.get("merged") is False:
+    print(sys.argv[2], result.get("key", ""), result.get("status", ""), result.get("pr", ""), sep="\t")
+PY
+  done; exit 0
+fi
+if [ "${1:-}" = "--close-json" ]; then
+  RUN="${2:-}"
+  [[ "$RUN" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "usage: ha2n-task-status --close-json <run-id>" >&2; exit 2; }
+  [ -f "$RUNS/$RUN/close.json" ] || { echo "no close.json for run $RUN" >&2; exit 1; }
+  cat "$RUNS/$RUN/close.json"; exit 0
 fi
 RUN="${1:-latest}"
 [[ "$RUN" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "bad run id" >&2; exit 2; }

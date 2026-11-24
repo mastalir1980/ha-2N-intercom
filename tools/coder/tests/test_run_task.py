@@ -33,6 +33,8 @@ name = Path(sys.argv[0]).name
 args = sys.argv[1:]
 with (root / "calls.log").open("a") as log:
     log.write(name + " " + " ".join(args) + "\\n")
+branch_file = root / "branch-ref"   # task-stdin runs use another branch name
+BRANCH_REF = branch_file.read_text().strip() if branch_file.exists() else "refs/heads/task-34-test-clone-recovery"
 
 if name == "id" and args == ["-un"]:
     print("wrong-user" if (root / "wrong-user").exists() else "ha2n-coder")
@@ -105,7 +107,7 @@ elif name == "gh" and (root / "gh-ok").exists():
     elif args[:2] == ["pr", "view"]:
         print(subprocess.run(
             ["git", "--git-dir", str(root / "origin.git"), "rev-parse",
-             "refs/heads/task-34-test-clone-recovery"],
+             BRANCH_REF],
             check=True, capture_output=True, text=True,
         ).stdout.strip())
     elif args[:2] == ["pr", "checks"]:
@@ -120,7 +122,7 @@ elif name == "gh" and (root / "gh-ok").exists():
     elif args[:2] == ["pr", "merge"]:
         head = subprocess.run(
             ["git", "--git-dir", str(root / "origin.git"), "rev-parse",
-             "refs/heads/task-34-test-clone-recovery"],
+             BRANCH_REF],
             check=True, capture_output=True, text=True,
         ).stdout.strip()
         if (root / "head-moved").exists():
@@ -136,7 +138,7 @@ elif name == "gh" and (root / "gh-ok").exists():
             (root / "deleted-branch-head").write_text(head)
             subprocess.run(
                 ["git", "--git-dir", str(root / "origin.git"), "update-ref", "-d",
-                 "refs/heads/task-34-test-clone-recovery"],
+                 BRANCH_REF],
                 check=True, capture_output=True,
             )
     elif args[:2] == ["pr", "comment"]:
@@ -153,7 +155,7 @@ elif name == "copilot" and args in ([], ["--review"]):
     prompts = root / "prompts"
     prompts.mkdir(exist_ok=True)
     prompt = sys.stdin.read()
-    if "TASK-" not in prompt:
+    if "TASK-" not in prompt and "HA2N-" not in prompt:
         sys.exit("missing task prompt")
     kind = "review" if args else "coder"
     index = len(list(prompts.glob(f"{kind}-*.md"))) + 1
@@ -569,6 +571,218 @@ class RunTaskCloneTests(unittest.TestCase):
             self.assertIn(f"Status: {status}\n", text)
             for i in proven:
                 self.assertIn(f"- [x] #{i} ", text)
+
+    # ---- task-stdin mode (TASK-83): the task is a JSON snapshot from Jira, the result goes to close.json ----
+
+    SNAP_BRANCH = "refs/heads/ha2n-9-fixture-snapshot-task"
+
+    @staticmethod
+    def _snapshot(**changes) -> dict:
+        snapshot = {
+            "key": "HA2N-9", "summary": "Fixture snapshot task", "status": "To Do",
+            "labels": ["exec-koder", "camera"], "fixVersion": "v1.7.0", "priority": "High",
+            "updated": "2026-11-23T10:00:00.000+0000", "description": "Why: fixture.\n\nAcceptance Criteria:\nnot the real list",
+            "acceptance_criteria": [{"id": 1, "text": "Fixture criterion [unit]", "checked": False}],
+            "plan": "1. Change plain.txt.", "blocked_by": [{"key": "HA2N-4", "status": "Done"}],
+        }
+        snapshot.update(changes)
+        return snapshot
+
+    def _snap_start(self, snapshot, key: str = "HA2N-9") -> subprocess.CompletedProcess[str]:
+        """Background start, as Hermes calls it: validation happens before anything is detached."""
+        text = snapshot if isinstance(snapshot, str) else json.dumps(snapshot)
+        return subprocess.run(
+            [self.bash, str(CODER_DIR / "run-task.sh"), "--task-stdin", key],
+            cwd=self.root, env=self.env, input=text, capture_output=True, text=True, timeout=60,
+        )
+
+    def _snap_run(self, snapshot, returncode: int, number: int = 1) -> subprocess.CompletedProcess[str]:
+        self.run_id = f"20260101-{number:06d}-HA2N-9"
+        (self.root / "branch-ref").write_text(self.SNAP_BRANCH + "\n", encoding="utf-8")
+        result = subprocess.run(
+            [self.bash, str(CODER_DIR / "run-task.sh"), "--foreground", "--task-stdin", "HA2N-9", "--run", self.run_id],
+            cwd=self.root, env=self.env, input=json.dumps(snapshot), capture_output=True, text=True, timeout=60,
+        )
+        self.assertEqual(result.returncode, returncode, result.stdout + result.stderr)
+        return result
+
+    def _close_json(self) -> dict:
+        return json.loads((self.base / "runs" / self.run_id / "close.json").read_text(encoding="utf-8"))
+
+    def _status_tool(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [self.bash, str(CODER_DIR / "task-status.sh"), *args],
+            cwd=self.root, env=self.env, capture_output=True, text=True, timeout=30,
+        )
+
+    def test_snapshot_rejections_stop_before_any_run(self) -> None:
+        cases = {
+            "its key is not HA2N-9": self._snapshot(key="HA2N-8"),
+            "status is not 'To Do'": self._snapshot(status="In Progress"),
+            "label exec-koder is missing": self._snapshot(labels=["camera"]),
+            "label on-hold keeps the task off the coder": self._snapshot(labels=["exec-koder", "on-hold"]),
+            "label manual-path keeps the task off the coder": self._snapshot(labels=["exec-koder", "manual-path"]),
+            "it is blocked by HA2N-4, which is not Done": self._snapshot(blocked_by=[{"key": "HA2N-4", "status": "To Test"}]),
+            "it has no acceptance criteria": self._snapshot(acceptance_criteria=[]),
+            "every acceptance criterion needs": self._snapshot(acceptance_criteria=[{"id": "1", "text": "x"}]),
+            "updated is not an ISO 8601 time": self._snapshot(updated="yesterday"),
+            "it is not valid JSON": "{not json",
+            "it is bigger than 256 KB": self._snapshot(description="x" * (256 * 1024)),
+        }
+        for message, snapshot in cases.items():
+            with self.subTest(message=message):
+                result = self._snap_start(snapshot)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn(message, result.stderr)
+                self.assertEqual(result.stdout, "")
+                self.assertEqual(self._runs(), [])
+        self.assertEqual(list(self.base.glob("snapshot.*")), [])
+        self.assertFalse(self.clone.exists())
+
+    def test_snapshot_key_must_be_a_jira_key(self) -> None:
+        for key in ("TASK-34", "ha2n-9", "HA2N", "HA2N-9;x"):
+            with self.subTest(key=key):
+                result = self._snap_start(self._snapshot(key=key), key=key)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("usage: ha2n-run-task", result.stderr)
+
+    def test_snapshot_is_stored_and_rendered_like_backlog_plain(self) -> None:
+        (self.root / "copilot-stop").touch()
+        result = self._snap_start(self._snapshot(labels=["exec-koder", "manual-close"]))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        run = self._started(result)
+        self.assertRegex(run, r"^\d{8}-\d{6}-HA2N-9$")
+        status = self._wait_run(run)
+        self.assertEqual(status["task"], "HA2N-9")
+        self.assertEqual(status["branch"], "ha2n-9-fixture-snapshot-task")
+        self.assertIn("Copilot stopped", status["message"])
+        folder = self.base / "runs" / run
+        self.assertEqual(json.loads((folder / "task.json").read_text(encoding="utf-8"))["key"], "HA2N-9")
+        text = (folder / "task.txt").read_text(encoding="utf-8")
+        head = text.split("Description:")[0]
+        self.assertIn("Task HA2N-9 - Fixture snapshot task\n", head)
+        for line in ("Status: ○ To Do", "Priority: High", "Labels: exec-koder, manual-close",
+                     "Milestone: v1.7.0", "Dependencies: HA2N-4"):
+            self.assertIn(line + "\n", head)
+        # The same expressions the reviewer parser and close_task use on `backlog task view --plain` output.
+        section = re.search(r"^Acceptance Criteria:\n(.*?)(?=^[A-Za-z][^\n]*:\n|\Z)", text, re.M | re.S)
+        self.assertEqual(re.findall(r"^- \[[ xX]\] #([0-9]+) (.+)$", section[1], re.M),
+                         [("1", "Fixture criterion [unit]")])
+        self.assertIn("Implementation Plan:\n", text)
+        prompt = self._prompts("coder")[0]
+        self.assertIn("HA2N-9 lives in Jira, not in Backlog.md", prompt)
+        self.assertIn("- [ ] #1 Fixture criterion [unit]", prompt)
+        self.assertNotIn("\nbacklog ", "\n" + self._calls())
+
+    def test_snapshot_run_writes_close_json_without_a_close_commit(self) -> None:
+        self._pipeline(reviews=[{"verdict": "approve", "findings": []}])
+        self._snap_run(self._snapshot(), 0)
+        status = self._status()
+        self.assertEqual(status["state"], "green", status)
+        self.assertIn("is in close.json", status["message"])
+        head = self._git(self.origin, "rev-parse", self.SNAP_BRANCH).strip()
+        self.assertEqual(self._git(self.origin, "rev-list", "--count", f"main..{self.SNAP_BRANCH}").strip(), "1")
+        self.assertNotIn("backlog", self._git(self.origin, "ls-tree", "-r", "--name-only", self.SNAP_BRANCH))
+        self.assertNotIn("\nbacklog ", "\n" + self._calls())
+        close = self._close_json()
+        self.assertEqual(close["key"], "HA2N-9")
+        self.assertEqual(close["run"], self.run_id)
+        self.assertEqual(close["status"], "Done")
+        self.assertEqual(close["criteria"], [{
+            "id": 1, "text": "Fixture criterion [unit]", "status": "proven",
+            "evidence": "Fixture unit test passed in the green local gates.",
+        }])
+        self.assertIn("AC #1: Fixture unit test passed", close["summary"])
+        self.assertEqual(close["pr"], "https://github.com/mastalir1980/ha-2N-intercom/pull/99")
+        self.assertEqual(close["head"], head)
+        self.assertIs(close["merged"], False)
+        shown = self._status_tool("--close-json", self.run_id)
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        self.assertEqual(json.loads(shown.stdout), close)
+        pending = self._status_tool("--pending-close")
+        self.assertEqual(pending.stdout,
+                         f"{self.run_id}\tHA2N-9\tDone\thttps://github.com/mastalir1980/ha-2N-intercom/pull/99\n")
+        missing = self._status_tool("--close-json", "20260101-000009-HA2N-9")
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn("no close.json", missing.stderr)
+
+    def test_snapshot_close_json_follows_the_to_test_rules(self) -> None:
+        cases = (
+            ("manual-close", self._snapshot(labels=["exec-koder", "manual-close"]), "review-model-x", "proven"),
+            ("no review-model", self._snapshot(), None, "unproven"),
+        )
+        for number, (name, snapshot, model, criterion) in enumerate(cases, 1):
+            with self.subTest(name=name):
+                for leftover in ("reviews", "checks", "prompts", "comments"):
+                    shutil.rmtree(self.root / leftover, ignore_errors=True)
+                (self.root / "etc/ha2n-coder/review-model").unlink(missing_ok=True)
+                self._git(self.origin, "update-ref", "-d", self.SNAP_BRANCH)
+                self._pipeline(reviews=[{"verdict": "approve", "findings": []}], review_model=model)
+                self._snap_run({**snapshot, "updated": "2099-01-01T00:00:00Z"}, 0, number)
+                close = self._close_json()
+                self.assertEqual(close["status"], "To Test")
+                self.assertEqual(close["criteria"][0]["status"], criterion)
+                self.assertIs(close["merged"], False)
+
+    def test_snapshot_runs_keep_the_daily_limit(self) -> None:
+        (self.root / "etc/ha2n-coder/max-runs-per-day").write_text("1\n", encoding="utf-8")
+        (self.root / "copilot-stop").touch()
+        first = self._snap_start(self._snapshot())
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        run = self._started(first)
+        self._wait_run(run)
+        self.assertTrue((self.base / "runs" / run / "next.marker").exists())
+        second = self._snap_start(self._snapshot(key="HA2N-10"), key="HA2N-10")
+        self.assertEqual(second.returncode, 2)
+        self.assertIn("daily limit reached: 1 autostarted runs", second.stderr)
+        self.assertEqual(self._runs(), [run])
+
+    def test_snapshot_task_waits_for_a_newer_updated_after_a_run(self) -> None:
+        (self.root / "copilot-stop").touch()
+        self._snap_run(self._snapshot(), 1)
+        self.assertEqual(self._status()["state"], "stopped")
+        same = self._snap_start(self._snapshot())
+        self.assertEqual(same.returncode, 2)
+        self.assertIn(f"HA2N-9 was already tried in {self.run_id} and has not changed since", same.stderr)
+        self.assertEqual(self._runs(), [self.run_id])
+        changed = self._snap_start(self._snapshot(updated="2099-01-01T00:00:00Z"))
+        self.assertEqual(changed.returncode, 0, changed.stdout + changed.stderr)
+        self._wait_run(self._started(changed))
+        self.assertEqual(len(self._runs()), 2)
+
+    def test_snapshot_automerge_marks_close_json_merged(self) -> None:
+        self._pipeline(reviews=[{"verdict": "approve", "findings": []}])
+        (self.root / "etc/ha2n-coder/automerge").touch()
+        (self.root / "etc/ha2n-coder/autostart").touch()
+        self._snap_run(self._snapshot(), 0)
+        status = self._status()
+        self.assertEqual(status["state"], "merged", status)
+        self.assertIn("the caller starts the next task", status["message"])
+        self.assertTrue((self.root / "merged").exists())
+        self.assertEqual((self.root / "checks-count").read_text(), "1")   # no close commit, no second wait
+        self.assertIs(self._close_json()["merged"], True)
+        self.assertEqual(self._status_tool("--pending-close").stdout, "")
+        self.assertEqual(self._runs(), [self.run_id])   # --next (the Backlog mode) is not started
+
+    def test_snapshot_automerge_reads_release_and_manual_labels_from_the_snapshot(self) -> None:
+        self._pipeline(reviews=[{"verdict": "approve", "findings": []}])
+        (self.root / "etc/ha2n-coder/automerge").touch()
+        self._snap_run(self._snapshot(labels=["exec-koder", "release"]), 0)
+        status = self._status()
+        self.assertEqual(status["state"], "green", status)
+        self.assertIn("not merged automatically: task has the label release", status["message"])
+        self.assertFalse((self.root / "merged").exists())
+        self.assertIs(self._close_json()["merged"], False)
+
+    def test_install_and_readme_cover_the_snapshot_call(self) -> None:
+        install = (CODER_DIR / "install-vm.sh").read_text(encoding="utf-8")
+        # no argument list after the command: sudo allows every mode, --task-stdin included
+        self.assertIn("NOPASSWD: /usr/local/bin/ha2n-run-task, /usr/local/bin/ha2n-task-status\n", install)
+        self.assertIn("--task-stdin HA2N-<n> < task.json", install)
+        readme = (CODER_DIR / "README.md").read_text(encoding="utf-8")
+        self.assertIn("sudo -n -u ha2n-coder /usr/local/bin/ha2n-run-task --task-stdin HA2N-<n> < task.json", readme)
+        for field in ('"acceptance_criteria"', '"blocked_by"', '"fixVersion"', "close.json", "--pending-close", "--close-json"):
+            self.assertIn(field, readme)
 
     @staticmethod
     def _criterion(cid: int = 1, status: str = "proven",

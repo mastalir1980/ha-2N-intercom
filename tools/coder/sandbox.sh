@@ -63,7 +63,7 @@ run_copilot() {  # run_copilot <model-file> <effort-file> — headless Copilot o
 case "${1:-}" in
   prepare)
     br="${2:-}"
-    [[ "$br" =~ ^task-[0-9]+(\.[0-9]+)?-[a-z0-9-]{1,50}$ ]] || die "invalid branch name"
+    [[ "$br" =~ ^(task-[0-9]+(\.[0-9]+)?|[a-z][a-z0-9]{1,9}-[0-9]{1,9})-[a-z0-9-]{1,50}$ ]] || die "invalid branch name"
     # Nothing survives from the previous run: no leftover processes, no config, caches or Copilot state.
     pkill -9 -u "$ME" --older 5 2>/dev/null || true
     find "$HOME" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null

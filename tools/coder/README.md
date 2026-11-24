@@ -207,6 +207,57 @@ jen v self-checku vypíše, jestli je zapnutý. Bez souboru se kodér chová jak
   Výstup `--next` je v `runs/<run>/next.log`.
 - Release (štítek `release`) a tagování dělá vždy Jan, stejně jako ověření úkolů v *To Test* na zařízení.
 
+## Úkol z Jiry: snapshot na stdin (TASK-83)
+
+Úkoly se stěhují z Backlog.md do Jiry. Kodér token k Jiře nemá a mít nesmí: úkol přečte Hermes přes
+Atlassian MCP, předá ho kodéru jako JSON na stdin a výsledek zapíše do Jiry sám. Režim Backlogu (`TASK-N`, `--next`)
+funguje dál beze změny až do přepnutí.
+
+```bash
+sudo -n -u ha2n-coder /usr/local/bin/ha2n-run-task --task-stdin HA2N-<n> < task.json
+```
+
+Snapshot (nejvýš 256 KB):
+
+```json
+{"key": "HA2N-9", "summary": "…", "status": "To Do", "labels": ["exec-koder", "camera"],
+ "fixVersion": "v1.7.0", "priority": "High", "updated": "2026-11-23T10:00:00Z",
+ "description": "markdown",
+ "acceptance_criteria": [{"id": 1, "text": "… [unit]", "checked": false}],
+ "plan": "markdown",
+ "blocked_by": [{"key": "HA2N-4", "status": "Done"}]}
+```
+
+- **Kontrola proběhne hned, ještě v popředí.** Odmítnutí vypíše důvod na stderr, skončí kódem 2 a žádný běh
+  nevznikne. Podmínky: `key` se shoduje s argumentem, `status` je `To Do`, štítek `exec-koder`, žádný štítek
+  `on-hold` ani `manual-path`, všechny `blocked_by` jsou `Done`, aspoň jedno kritérium (číselné `id`, `text`),
+  `updated` je čas ISO 8601. `fixVersion`, `priority`, `description` a `plan` smí být `null`.
+- V adresáři běhu je `task.json` (snapshot) a `task.txt`: stejná podoba, jakou tiskne `backlog task view --plain`,
+  takže prompty, parser kritérií i review pracují beze změny. Prompt dostane navíc poznámku, že úkol není v Backlogu
+  a příkazy `backlog` se pro něj nepouštějí. Větev se jmenuje `ha2n-<n>-<slug>`.
+- **Platí denní limit i pojistka proti opakování** (v režimu Backlogu je hlídá jen `--next`): běh se počítá do
+  `max-runs-per-day` a v `--list` má značku `auto`. Úkol, který už běh měl, se spustí znovu, až když je `updated`
+  ve snapshotu novější než začátek toho běhu. Pozor: `updated` v Jiře posune i komentář nebo změna stavu.
+- **Zavření:** kodér nedělá žádnou úpravu Backlogu ani commit navíc. Po zelených checkách a `approve` (nebo bez
+  review-modelu) zapíše `close.json`:
+
+  | Pole | Význam |
+  |---|---|
+  | `key`, `run` | klíč úkolu a id běhu |
+  | `status` | cílový stav podle stávajících pravidel: `Done`, nebo `To Test` (neprokázané kritérium, `manual-close`, bez review) |
+  | `criteria` | každé kritérium: `id`, `text`, `status` (`proven`/`manual`/`unproven`), `evidence` |
+  | `summary` | text závěrečného shrnutí (checky, PR, řádky `AC #n`) |
+  | `pr`, `head` | odkaz na PR a commit, na kterém byly checky zelené |
+  | `merged` | `true` po auto-merge, jinak `false` (merguješ ty) |
+
+  Běh ve stavu `review`, `stopped` nebo `failed` `close.json` nemá.
+- `ha2n-task-status --close-json <run-id>` vypíše `close.json`. `ha2n-task-status --pending-close` vypíše běhy,
+  jejichž `close.json` má `merged: false` (run id, klíč, stav, PR, oddělené tabulátorem).
+- Pravidla auto-merge se nemění; štítky `release` a `manual-path` se čtou ze snapshotu. Protože chybí zavírací
+  commit, merguje se přímo commit, na kterém checky doběhly. Po mergi kodér `--next` nespouští: další úkol
+  vybírá volající z Jiry.
+- `sudoers` z `install-vm.sh` neomezuje argumenty, takže volání výše smí uživatel `hermes` bez další změny.
+
 ## Regresní testy orchestrátoru
 
 ```bash
@@ -230,6 +281,9 @@ Per-criterion evidence (TASK-36): all proven → Done with every criterion ticke
 no review-model → To Test with only proven criteria ticked; manual-close → To Test even with full proof.
 Malformed/incomplete criteria fail review without ticking anything; automated verifier tags without proof
 block review, manual tags cannot be marked proven, and Done/To Test tasks remain unchanged.
+Snapshot z Jiry (TASK-83): každé odmítnutí snapshotu, uložení a vykreslení `task.txt`, `close.json` bez
+zavíracího commitu (Done i To Test), `--close-json` a `--pending-close`, denní limit, pojistka podle `updated`
+a auto-merge se štítky ze snapshotu.
 
 Proměnná `HA2N_CODER_TEST_ROOT` přesměruje pracovní adresáře, cestu k testovací náhradě tokenu
 a přidá testovací `bin` na `PATH`; kontrola uživatele zůstává platná. Je jen pro testy:

@@ -6,6 +6,9 @@
 #   ha2n-run-task <TASK-ID>               start in the background, print the run id and exit
 #   ha2n-run-task --foreground <TASK-ID>  run attached (for debugging)
 #   ha2n-run-task --next                  start the next ready task if autostart allows it (systemd timer, see install-vm.sh)
+#   ha2n-run-task --task-stdin <KEY>      the task is a JSON snapshot on stdin (KEY like HA2N-9, see README.md): the caller
+#                                         read it from Jira; this mode never calls the backlog CLI and commits no Backlog
+#                                         change. The closing result goes to runs/<run>/close.json instead.
 #
 # Flow: ready check → sandbox clone → Copilot implements → local gates (≤2 local fix rounds) →
 # patch checked for protected paths/size → applied in our own clone → push + PR (Jan's token) →
@@ -49,13 +52,17 @@ setup_auth() {  # sets TOKEN and AUTH, defines the two wrappers every git/gh cal
   ghx() { GH_TOKEN="$TOKEN" gh "$@"; }
 }
 
-launch_bg() {  # launch_bg <TASK> [next]: start a run in the background; "next" leaves a marker for the daily limit
+launch_bg() {  # launch_bg <TASK> [next|snapshot]: start a run in the background; both leave a marker for the daily limit
   local run="$(date +%Y%m%d-%H%M%S)-$1"
   mkdir "$RUNS/$run" 2>/dev/null || { echo "a run of $1 was started this second already" >&2; exit 2; }
-  [ "${2:-}" = next ] && : > "$RUNS/$run/next.marker"
-  local -a detach=(nohup)
+  [ -n "${2:-}" ] && : > "$RUNS/$run/next.marker"
+  local -a detach=(nohup) task=("$1")
+  if [ "${2:-}" = snapshot ]; then   # the accepted snapshot (snapshot_accept) becomes the run's task
+    mv "$SNAP_TMP/task.json" "$SNAP_TMP/task.txt" "$RUNS/$run/" || { echo "cannot store the task snapshot" >&2; exit 2; }
+    task=(--task-stdin "$1")
+  fi
   command -v setsid >/dev/null 2>&1 && detach=(setsid nohup)   # setsid is Linux-only; macOS dev runs just use nohup
-  "${detach[@]}" "$0" --foreground "$1" --run "$run" > "$RUNS/$run/run.log" 2>&1 < /dev/null 8>&- 9>&- &
+  "${detach[@]}" "$0" --foreground "${task[@]}" --run "$run" > "$RUNS/$run/run.log" 2>&1 < /dev/null 8>&- 9>&- &
   echo "started $run — status: ha2n-task-status $run"
 }
 
@@ -177,18 +184,148 @@ start_next() {  # the timer's entry point: start the next ready task if autostar
   launch_bg "$task" next
 }
 
+# ---- task-stdin mode: the task is a JSON snapshot the caller read from Jira ---------------------
+SNAP_MAX=$((256*1024)); SNAP_TMP=""
+
+snapshot_check() {  # snapshot_check <KEY> <task.json> <task.txt>: validate the snapshot, render it like `backlog task view --plain`
+  python3 - "$1" "$2" "$3" <<'PY'
+import datetime, json, re, sys
+key, src, out = sys.argv[1:4]
+def bad(reason):
+    sys.exit(f"task snapshot rejected: {reason}")
+def line(value):
+    return " ".join(str(value).split())
+try:
+    snap = json.load(open(src, encoding="utf-8"))
+except (OSError, ValueError):
+    bad("it is not valid JSON")
+if not isinstance(snap, dict):
+    bad("it is not a JSON object")
+if snap.get("key") != key:
+    bad(f"its key is not {key}")
+summary = snap.get("summary")
+if not isinstance(summary, str) or not summary.strip():
+    bad("summary is missing")
+if snap.get("status") != "To Do":
+    bad("status is not 'To Do' - not ready for the coder")
+labels = snap.get("labels")
+if not isinstance(labels, list) or not all(isinstance(x, str) and re.fullmatch(r"[^\s,]+", x) for x in labels):
+    bad("labels must be a list of plain strings")
+if "exec-koder" not in labels:
+    bad("label exec-koder is missing - not a task for the coder")
+for label in ("on-hold", "manual-path"):
+    if label in labels:
+        bad(f"label {label} keeps the task off the coder")
+blocked = snap.get("blocked_by", [])
+if not isinstance(blocked, list) or not all(
+        isinstance(b, dict) and isinstance(b.get("key"), str) and re.fullmatch(r"[A-Z][A-Z0-9]*-[0-9]+", b["key"])
+        for b in blocked):
+    bad("blocked_by must be a list of {key, status}")
+for b in blocked:
+    if b.get("status") != "Done":
+        bad(f"it is blocked by {b['key']}, which is not Done")
+criteria = snap.get("acceptance_criteria")
+if not isinstance(criteria, list) or not criteria:
+    bad("it has no acceptance criteria")
+seen = set()
+for c in criteria:
+    if not (isinstance(c, dict) and isinstance(c.get("id"), int) and not isinstance(c["id"], bool) and c["id"] >= 1
+            and c["id"] not in seen and isinstance(c.get("text"), str) and c["text"].strip()
+            and isinstance(c.get("checked", False), bool)):
+        bad("every acceptance criterion needs a unique numeric id, a text and a boolean checked")
+    seen.add(c["id"])
+for field in ("description", "plan", "fixVersion", "priority"):
+    if snap.get(field) is not None and not isinstance(snap[field], str):
+        bad(f"{field} must be a string or null")
+try:   # Jira prints +0000, older Pythons want +00:00
+    stamp = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", str(snap.get("updated", "")).strip().replace("Z", "+00:00"))
+    updated = datetime.datetime.fromisoformat(stamp)
+except ValueError:
+    bad("updated is not an ISO 8601 time")
+def body(text):   # free text must not look like the two headings the parsers anchor on
+    return "\n".join("  " + l if re.match(r"(Description|Acceptance Criteria):\s*$", l) else l
+                     for l in (text or "").strip().splitlines())
+head = f"Task {key} - {line(summary).replace('Description:', 'Description :')}"
+rows = [head, "=" * 50, "", "Status: ○ To Do"]
+if snap.get("priority"):
+    rows.append("Priority: " + line(snap["priority"]))
+rows.append("Labels: " + ", ".join(labels))
+if snap.get("fixVersion"):
+    rows.append("Milestone: " + line(snap["fixVersion"]))
+if blocked:
+    rows.append("Dependencies: " + ", ".join(b["key"] for b in blocked))
+rows += ["", "Description:", "-" * 50, body(snap.get("description")), "", "Acceptance Criteria:", "-" * 50]
+rows += [f"- [{'x' if c.get('checked') else ' '}] #{c['id']} {line(c['text'])}" for c in criteria]
+if (snap.get("plan") or "").strip():
+    rows += ["", "Implementation Plan:", "-" * 50, body(snap["plan"])]
+open(out, "w", encoding="utf-8").write("\n".join(rows) + "\n")
+PY
+}
+
+snapshot_updated() {  # snapshot_updated <task.json>: epoch of the snapshot's "updated" (no timezone = UTC)
+  python3 - "$1" <<'PY' 2>/dev/null
+import datetime, json, re, sys
+stamp = str(json.load(open(sys.argv[1], encoding="utf-8"))["updated"]).strip().replace("Z", "+00:00")
+when = datetime.datetime.fromisoformat(re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", stamp))
+if when.tzinfo is None:
+    when = when.replace(tzinfo=datetime.timezone.utc)
+print(int(when.timestamp()))
+PY
+}
+
+snapshot_accept() {  # snapshot_accept <KEY>: stdin -> $SNAP_TMP/task.{json,txt}; fails with the reason on stderr
+  # Runs in the foreground, before anything goes to the background: the caller sees the refusal at once.
+  local cfg="${HA2N_CODER_TEST_ROOT:-}/etc/ha2n-coder" max=3 recent=0 run started updated
+  SNAP_TMP="$(mktemp -d "$BASE/snapshot.XXXXXX")" || { echo "cannot create a temporary directory" >&2; return 1; }
+  trap 'rm -rf "$SNAP_TMP"' EXIT
+  head -c "$((SNAP_MAX + 1))" > "$SNAP_TMP/task.json" || { echo "cannot read the task snapshot from stdin" >&2; return 1; }
+  [ "$(wc -c < "$SNAP_TMP/task.json")" -le "$SNAP_MAX" ] \
+    || { echo "task snapshot rejected: it is bigger than $((SNAP_MAX / 1024)) KB" >&2; return 1; }
+  snapshot_check "$1" "$SNAP_TMP/task.json" "$SNAP_TMP/task.txt" || return 1
+  # The same two brakes as --next: the daily limit and no second attempt at an unchanged task.
+  if [ -e "$cfg/max-runs-per-day" ]; then
+    max="$(tr -d '[:space:]' < "$cfg/max-runs-per-day")"
+    [[ "$max" =~ ^[0-9]+$ ]] || { echo "invalid /etc/ha2n-coder/max-runs-per-day" >&2; return 1; }
+  fi
+  exec 8>"$BASE/next.lock"; flock -n 8 || { echo "another start is being checked; try again" >&2; return 1; }
+  recent="$(find "$RUNS" -mindepth 2 -maxdepth 2 -name next.marker -mmin -1440 | wc -l | tr -d ' ')"
+  [ "$recent" -lt "$max" ] || { echo "daily limit reached: $recent autostarted runs in the last 24 h (max $max)" >&2; return 1; }
+  run="$(ls -1d "$RUNS"/[0-9]*-"$1" 2>/dev/null | sort | tail -1)"
+  if [ -n "$run" ] && ! { grep -qx 'state=stopped' "$run/status" 2>/dev/null && grep -qx 'branch=' "$run/status"; }; then
+    started="$(sed -n 's/^started=//p' "$run/status" 2>/dev/null | head -1)"
+    updated="$(snapshot_updated "$SNAP_TMP/task.json")"
+    [[ "$started" =~ ^[0-9]+$ ]] && [[ "$updated" =~ ^[0-9]+$ ]] && [ "$updated" -gt "$started" ] \
+      || { echo "$1 was already tried in $(basename "$run") and has not changed since (field updated)" >&2; return 1; }
+  fi
+}
+
+USAGE="usage: ha2n-run-task [--foreground] TASK-<n> | --next | [--foreground] --task-stdin <KEY> < task.json"
 FG=0; [ "${1:-}" = "--foreground" ] && { FG=1; shift; }
 if [ "${1:-}" = "--next" ]; then
   [ "$FG" = 0 ] && [ "$#" = 1 ] || { echo "usage: ha2n-run-task --next" >&2; exit 2; }
   start_next; exit $?
 fi
+SNAP=0; [ "${1:-}" = "--task-stdin" ] && { SNAP=1; shift; }
 TASK="${1:-}"
-[[ "$TASK" =~ ^TASK-[0-9]+(\.[0-9]+)?$ ]] || { echo "usage: ha2n-run-task [--foreground] TASK-<n> | --next" >&2; exit 2; }
-if [ "$FG" = 0 ]; then launch_bg "$TASK"; exit 0; fi
+if [ "$SNAP" = 1 ]; then   # a Jira key; TASK-<n> stays the Backlog mode
+  [[ "$TASK" =~ ^[A-Z][A-Z0-9]{1,9}-[0-9]{1,9}$ ]] && [[ ! "$TASK" =~ ^TASK- ]] || { echo "$USAGE" >&2; exit 2; }
+else
+  [[ "$TASK" =~ ^TASK-[0-9]+(\.[0-9]+)?$ ]] || { echo "$USAGE" >&2; exit 2; }
+fi
+if [ "$FG" = 0 ]; then
+  if [ "$SNAP" = 1 ]; then snapshot_accept "$TASK" || exit 2; launch_bg "$TASK" snapshot; else launch_bg "$TASK"; fi
+  exit 0
+fi
 shift
 RUN="${2:-}"; [ "${1:-}" = "--run" ] && [ -n "$RUN" ] || RUN="$(date +%Y%m%d-%H%M%S)-$TASK"
-[[ "$RUN" =~ ^[0-9]{8}-[0-9]{6}-TASK-[0-9]+(\.[0-9]+)?$ ]] || { echo "invalid run id" >&2; exit 2; }
-DIR="$RUNS/$RUN"; mkdir -p "$DIR"
+[[ "$RUN" =~ ^[0-9]{8}-[0-9]{6}-(TASK-[0-9]+(\.[0-9]+)?|[A-Z][A-Z0-9]{1,9}-[0-9]{1,9})$ ]] || { echo "invalid run id" >&2; exit 2; }
+DIR="$RUNS/$RUN"
+if [ "$SNAP" = 1 ] && [ ! -s "$DIR/task.json" ]; then   # attached run: the snapshot is still on stdin
+  snapshot_accept "$TASK" || exit 2
+  mkdir -p "$DIR" && mv "$SNAP_TMP/task.json" "$SNAP_TMP/task.txt" "$DIR/" || { echo "cannot store the task snapshot" >&2; exit 2; }
+  : > "$DIR/next.marker"; exec 8>&-
+fi
+mkdir -p "$DIR"
 STARTED="$(date +%s)"   # epoch of this run; last_run_blocks compares task-file commits with it
 
 status() {  # status <state> <message>  — states: running, stopped, green, merged, review, failed
@@ -229,25 +366,38 @@ git config core.hooksPath /dev/null
 gitauth fetch -q --prune origin || stop "git fetch failed"
 { git reset -q --hard && git clean -qfdx && git checkout -q --detach -f origin/main \
     && git reset -q --hard origin/main && git clean -qfdx; } || stop "cannot reset own clone"
-backlog task view "$TASK" --plain > "$DIR/task.txt" 2>&1 || stop "task $TASK not found"
+if [ "$SNAP" = 1 ]; then   # task.txt was rendered from the accepted snapshot; readiness was checked there
+  [ -s "$DIR/task.txt" ] || stop "task snapshot is missing in the run directory"
+  PREFIX="$(printf '%s' "$TASK" | tr '[:upper:]' '[:lower:]')"
+else
+  backlog task view "$TASK" --plain > "$DIR/task.txt" 2>&1 || stop "task $TASK not found"
+  PREFIX="task-${TASK#TASK-}"
+fi
 HEADER="$(sed '/^Description:/q' "$DIR/task.txt")"   # only the metadata part, not the free text
-grep -q '^Status: .*To Do' <<<"$HEADER"   || stop "task is not 'To Do' — not ready for the coder"
-grep -q '^Assignee: .*@copilot' <<<"$HEADER" || stop "task is not assigned to @copilot — not ready"
-deps_done "$TASK" || stop "task has dependencies that are not done"
+if [ "$SNAP" = 0 ]; then
+  grep -q '^Status: .*To Do' <<<"$HEADER"   || stop "task is not 'To Do' — not ready for the coder"
+  grep -q '^Assignee: .*@copilot' <<<"$HEADER" || stop "task is not assigned to @copilot — not ready"
+  deps_done "$TASK" || stop "task has dependencies that are not done"
+fi
 TITLE="$(sed -n "s/^Task $TASK - //p" "$DIR/task.txt" | head -1)"
-NUM="${TASK#TASK-}"
 SLUG="$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//' | cut -c1-40 | sed -E 's/-+$//')"
-BRANCH="task-$NUM-${SLUG:-change}"
+BRANCH="$PREFIX-${SLUG:-change}"
 gitauth ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1 && stop "branch $BRANCH already exists on GitHub"
 status running "ready: $TITLE"
 
 render() {  # render <template> <failure-file|-> <where>
-  python3 - "$LIB/prompts/$1" "$DIR/task.txt" "$2" "$3" "$TASK" "$BRANCH" <<'PY'
+  python3 - "$LIB/prompts/$1" "$DIR/task.txt" "$2" "$3" "$TASK" "$BRANCH" "$SNAP" <<'PY'
 import sys, pathlib
-tpl, task, fail, where, tid, br = sys.argv[1:7]
+tpl, task, fail, where, tid, br, snap = sys.argv[1:8]
 s = pathlib.Path(tpl).read_text()
 fail_text = pathlib.Path(fail).read_text()[-12000:] if fail != "-" else ""
-for k, v in {"TASK_ID": tid, "BRANCH": br, "TASK_TEXT": pathlib.Path(task).read_text()[:20000],
+task_text = pathlib.Path(task).read_text()[:20000]
+if snap == "1":   # the prompts were written for Backlog tasks; this one is not in the repo
+    task_text = (f"NOTE, takes precedence over every rule about the backlog CLI: {tid} lives in Jira, not in Backlog.md, "
+                 "and the text below is a snapshot of it. Do not run any `backlog` command for this task and do not "
+                 "change files under backlog/. Skip the steps that set its status, plan or notes; write what you "
+                 "would have noted there into your commit messages.\n\n") + task_text
+for k, v in {"TASK_ID": tid, "BRANCH": br, "TASK_TEXT": task_text,
              "FAILURE": fail_text, "WHERE": where}.items():
     s = s.replace("{{" + k + "}}", v)
 sys.stdout.write(s)
@@ -509,15 +659,19 @@ close_task() {  # last commit: evidence, proven criteria ticked, Done or To Test
   CLOSE_NOTE=""
   cd "$CLONE" || { CLOSE_NOTE="task not closed (no clone): close it by hand"; return 0; }
   [ "$(git rev-parse --abbrev-ref HEAD)" = "$BRANCH" ] || { CLOSE_NOTE="task not closed (unexpected branch): close it by hand"; return 0; }
-  if ! backlog task view "$TASK" --plain > "$DIR/task-close.txt" 2>&1; then
-    CLOSE_NOTE="task not closed (cannot read task): close it by hand"; return 0
-  fi
   local header before checks summary i target evidence_file="-"
-  header="$(sed '/^Description:/q' "$DIR/task-close.txt")"
-  if grep -Eq '^Status: .*(Done|To Test)$' <<<"$header"; then CLOSE_NOTE="task is already Done or To Test"; return 0; fi
+  if [ "$SNAP" = 1 ]; then   # the snapshot is the task; nothing in the repo to read or edit
+    cp "$DIR/task.txt" "$DIR/task-close.txt" || { CLOSE_NOTE="result not recorded (cannot read the snapshot): close $TASK by hand"; return 0; }
+  else
+    if ! backlog task view "$TASK" --plain > "$DIR/task-close.txt" 2>&1; then
+      CLOSE_NOTE="task not closed (cannot read task): close it by hand"; return 0
+    fi
+    header="$(sed '/^Description:/q' "$DIR/task-close.txt")"
+    if grep -Eq '^Status: .*(Done|To Test)$' <<<"$header"; then CLOSE_NOTE="task is already Done or To Test"; return 0; fi
+  fi
   local -a acs=()
   if [ "$REVIEW_ON" = 1 ] && [ "$REVIEW_VERDICT" = approve ]; then evidence_file="$DIR/review-$REVIEWS.criteria.json"; fi
-  if ! python3 - "$DIR/task-close.txt" "$evidence_file" > "$DIR/close-evidence.txt" 2> "$DIR/close.log" <<'PY'
+  if ! python3 - "$DIR/task-close.txt" "$evidence_file" "$DIR/close-criteria.json" > "$DIR/close-evidence.txt" 2> "$DIR/close.log" <<'PY'
 import json, re, sys
 task = open(sys.argv[1], encoding="utf-8").read()
 section = re.search(r"^Acceptance Criteria:\n(.*?)(?=^[A-Za-z][^\n]*:\n|\Z)", task, re.M | re.S)
@@ -537,6 +691,9 @@ print("Done" if sys.argv[2] != "-" and all(c["status"] == "proven" for c in crit
 print(" ".join(str(c["id"]) for c in criteria if c["status"] == "proven"))
 for c in criteria:
     print(f"AC #{c['id']}: {c['evidence']} ({c['status']})")
+texts = dict(expected)
+json.dump([{"id": c["id"], "text": texts[c["id"]], "status": c["status"], "evidence": c["evidence"]} for c in criteria],
+          open(sys.argv[3], "w", encoding="utf-8"))
 PY
   then
     CLOSE_NOTE="task not closed (evidence could not be applied, see close.log): close it by hand"; return 0
@@ -551,6 +708,11 @@ PY
 )"
   summary="Implemented by the headless coder. Checks green on ${before:0:9} after $ROUND fix round(s): $checks. PR: $PR_URL. $target takes effect when the PR is merged."
   summary+=$'\n'"$(tail -n +3 "$DIR/close-evidence.txt")"
+  if [ "$SNAP" = 1 ]; then   # no Backlog edit, no extra commit: the caller writes this result to Jira
+    if close_json "$target" "$summary" "$before" false; then CLOSE_NOTE="result for $TASK ($target) is in close.json, the caller records it"
+    else CLOSE_NOTE="result not recorded (close.json could not be written, see close.log): close $TASK by hand"; fi
+    return 0
+  fi
   if ! backlog task edit "$TASK" -s "$target" ${acs[@]+"${acs[@]}"} --final-summary "$summary" > "$DIR/close.log" 2>&1; then
     git reset -q --hard "$before"; git clean -qfd -- backlog
     CLOSE_NOTE="task not closed (backlog edit failed, see close.log): close it by hand"; return 0
@@ -570,6 +732,34 @@ PY
     git reset -q --hard "$before"; CLOSE_NOTE="task not closed (push failed): close it by hand"; return 0
   fi
   CLOSE_NOTE="task set to $target in the PR's last commit (takes effect when merged)"
+}
+
+close_json() {  # close_json <status> <summary> <head> <true|false>: the closing result of a task-stdin run, written atomically
+  python3 - "$DIR" "$TASK" "$1" "$2" "$PR_URL" "$3" "$4" "$RUN" 2>> "$DIR/close.log" <<'PY'
+import json, os, sys
+folder, key, status, summary, pr, head, merged, run = sys.argv[1:9]
+result = {"key": key, "run": run, "status": status,
+          "criteria": json.load(open(os.path.join(folder, "close-criteria.json"), encoding="utf-8")),
+          "summary": summary, "pr": pr, "head": head, "merged": merged == "true"}
+tmp = os.path.join(folder, "close.json.tmp")
+with open(tmp, "w", encoding="utf-8") as handle:
+    json.dump(result, handle, indent=2, ensure_ascii=False)
+    handle.write("\n")
+os.replace(tmp, os.path.join(folder, "close.json"))
+PY
+}
+
+close_merged() {  # after the auto-merge: close.json says merged
+  python3 - "$DIR/close.json" 2>> "$DIR/close.log" <<'PY' || true
+import json, os, sys
+path = sys.argv[1]
+result = json.load(open(path, encoding="utf-8"))
+result["merged"] = True
+with open(path + ".tmp", "w", encoding="utf-8") as handle:
+    json.dump(result, handle, indent=2, ensure_ascii=False)
+    handle.write("\n")
+os.replace(path + ".tmp", path)
+PY
 }
 
 auto_merge() {  # only with AUTOMERGE_FILE: merge THIS run's PR when every rule allows it -> MERGED=1, else MERGE_NOTE=<reason>
@@ -648,8 +838,13 @@ while :; do
     [ -e "$AUTOMERGE_FILE" ] && auto_merge
     if [ "$MERGED" = 1 ]; then
       ghx pr comment "$PR_URL" -R "$REPO" --body "✅ All checks green (incl. \`e2e-pi\`) after $ROUND fix round(s). ${REVIEW_NOTE:+Review: $REVIEW_NOTE.} Merged by the coder (auto-merge).${CLOSE_NOTE:+ Task: $CLOSE_NOTE.}" >/dev/null 2>&1 || true
-      status running "PR merged — checking for the next task"
-      trigger_next
+      if [ "$SNAP" = 1 ]; then   # the caller picks the next task from Jira; --next is the Backlog mode
+        [ ! -e "$DIR/close.json" ] || close_merged
+        NEXT_NOTE="the caller starts the next task"
+      else
+        status running "PR merged — checking for the next task"
+        trigger_next
+      fi
       status merged "PR merged: $PR_URL — $REVIEW_NOTE${CLOSE_NOTE:+ — $CLOSE_NOTE} — $NEXT_NOTE"; exit 0
     fi
     if [ -n "$MERGE_NOTE" ]; then
